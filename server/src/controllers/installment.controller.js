@@ -55,6 +55,7 @@ export const listInstallments = asyncHandler(async (req, res) => {
   const filter = { ...tabFilter(req.query.filter || 'all') };
   if (req.query.direction) filter.direction = req.query.direction;
   if (req.query.booking) filter.booking = req.query.booking;
+  if (req.query.query) filter.query = req.query.query;
   if (req.query.search) {
     const rx = new RegExp(req.query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ 'guest.name': rx }, { 'guest.phones.number': rx }, { tripId: rx }, { supplierName: rx }];

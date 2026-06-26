@@ -5,6 +5,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { generateForBooking } from './installment.controller.js';
+import { logActivity } from './activity.controller.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -72,6 +73,7 @@ export const createFromQuote = asyncHandler(async (req, res) => {
   // Confirming the quote + booking moves the query to converted.
   await Quote.findByIdAndUpdate(quote._id, { status: 'accepted' });
   await Query.findByIdAndUpdate(query._id, { status: 'converted', bookedAmount: booking.totalAmount });
+  await logActivity(query._id, req.user?._id, `converted to booking from quote #${quote.quoteNumber}`, 'booking');
 
   // Generate the incoming + outgoing payment schedule for this trip.
   try {

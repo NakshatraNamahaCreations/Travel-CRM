@@ -24,6 +24,7 @@ async function upsertMany(Model, field, values, extra = () => ({})) {
   }
 }
 
+
 async function run() {
   await connectDB();
 

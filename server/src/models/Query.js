@@ -63,6 +63,10 @@ const querySchema = new mongoose.Schema(
 
     lostReason: { type: String, trim: true },
     reminderOn: { type: Date }, // contact reminder for postponed / rescheduled leads
+
+    // Arrival / departure logistics (flight/train details for the trip).
+    arrival: { mode: String, reference: String, date: Date, time: String, notes: String },
+    departure: { mode: String, reference: String, date: Date, time: String, notes: String },
   },
   { timestamps: true }
 );

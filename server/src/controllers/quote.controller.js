@@ -7,6 +7,7 @@ import { quotationHtml } from '../pdf/quotationHtml.js';
 import { htmlToPdf } from '../pdf/renderPdf.js';
 import { sendMail, emailEnabled } from '../utils/mailer.js';
 import { company } from '../config/company.js';
+import { logActivity } from './activity.controller.js';
 
 const POPULATE = [
   { path: 'days.destination', select: 'name' },
@@ -56,9 +57,11 @@ export const createQuote = asyncHandler(async (req, res) => {
     currency: req.body.currency || query.currency || 'INR',
   });
   await syncQuery(query._id);
+  await logActivity(query._id, req.user._id, `gave quote with ${quote.currency} ${(quote.pricing?.total || 0).toLocaleString('en-IN')}`, 'quote');
   // Building the first quotation moves a brand-new lead into the In Progress stage.
   if (query.status === 'new_query') {
     await Query.findByIdAndUpdate(query._id, { status: 'in_progress' });
+    await logActivity(query._id, req.user._id, 'updated stage from New Query to In Progress', 'stage');
   }
   return created(res, quote);
 });

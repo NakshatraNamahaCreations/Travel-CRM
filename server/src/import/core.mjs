@@ -210,8 +210,90 @@ export function detectType(wb) {
   return 'unknown';
 }
 
+/* ===================== HOTELS MASTER (flat, no prices) ===================== */
+const normHdr = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Parse a flat hotels sheet: Group Name, Location, Name, Star, Address Line 1,
+// Landmark, Pin Code, Phone Dial Code, Contact Number(s), Email Id, Checkin/Checkout, Url.
+export function parseHotelsMasterSheet(rows) {
+  let H = -1;
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    const norm = (rows[i] || []).map(normHdr);
+    if (norm.includes('name') && (norm.includes('star') || norm.includes('groupname'))) { H = i; break; }
+  }
+  if (H < 0) return [];
+  const idx = {};
+  rows[H].forEach((c, i) => { idx[normHdr(c)] = i; });
+  const get = (row, key) => { const i = idx[key]; return i == null ? '' : String(cell(row, i) ?? '').trim(); };
+  const carry = (v, last) => (v === '...' || v === '…' || v === '' ? last : v);
+
+  const out = [];
+  let lastGroup = '', lastLocation = '';
+  for (let i = H + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const name = get(row, 'name');
+    if (!name) continue;
+    lastGroup = carry(get(row, 'groupname'), lastGroup);
+    lastLocation = carry(get(row, 'location'), lastLocation);
+    const [city, state, country] = lastLocation.split(',').map((s) => s.trim());
+    const dial = get(row, 'phonedialcode').replace(/[^0-9]/g, '') || '91';
+    const phones = [get(row, 'contactnumber'), get(row, 'contactnumber2')]
+      .filter(Boolean).map((number) => ({ countryCode: dial, number }));
+    const street = get(row, 'addressline1');
+    out.push({
+      name,
+      groupName: lastGroup || undefined,
+      stars: Number(get(row, 'star')) || 3,
+      location: {
+        label: lastLocation || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        country: country || 'India',
+        pin: get(row, 'pincode') || undefined,
+        street: street || undefined,
+        landmark: get(row, 'landmark') || undefined,
+      },
+      address: street || undefined,
+      email: get(row, 'emailid') || undefined,
+      phones,
+      checkIn: get(row, 'checkintime') || undefined,
+      checkOut: get(row, 'checkouttime') || undefined,
+      detailsLink: get(row, 'url') || undefined,
+    });
+  }
+  return out;
+}
+
+export async function importHotelsMaster(wb, opts = {}) {
+  const extraDest = (opts.destinations || []).filter(Boolean).map(String);
+  const cityCache = new Map();
+  let hotels = 0, skipped = 0;
+  for (const sheetName of wb.SheetNames) {
+    const records = parseHotelsMasterSheet(sheetRows(wb.Sheets[sheetName]));
+    for (const rec of records) {
+      try {
+        const destIds = [...extraDest];
+        if (rec.location.city) {
+          let id = cityCache.get(rec.location.city);
+          if (!id) {
+            const d = await Destination.findOneAndUpdate({ name: rec.location.city }, { name: rec.location.city }, { upsert: true, new: true, setDefaultsOnInsert: true });
+            id = d._id; cityCache.set(rec.location.city, id);
+          }
+          destIds.push(String(id));
+        }
+        const patch = { ...rec, destinations: [...new Set(destIds)] };
+        Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
+        await Hotel.findOneAndUpdate({ name: rec.name }, patch, { upsert: true, new: true, setDefaultsOnInsert: true });
+        hotels++;
+      } catch { skipped++; }
+    }
+  }
+  return { hotels, skipped };
+}
+
 export async function importWorkbook(wb, type = 'auto', opts = {}) {
   const t = !type || type === 'auto' ? detectType(wb) : type;
+  if (t === 'hotels-master') return { type: t, ...(await importHotelsMaster(wb, opts)) };
   if (t === 'hotels') return { type: t, ...(await importHotels(wb, opts)) };
   if (t === 'activities') return { type: t, ...(await importActivities(wb, opts)) };
   if (t === 'transport') return { type: t, ...(await importTransport(wb)) };

@@ -5,6 +5,9 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { QUERY_STATUSES, QUERY_STATUS_VALUES } from '../constants/queryStatus.js';
+import { logActivity } from './activity.controller.js';
+
+const LABEL = Object.fromEntries(QUERY_STATUSES.map((s) => [s.value, s.label]));
 
 const POPULATE = [
   { path: 'source', select: 'name' },
@@ -102,6 +105,7 @@ export const createQuery = asyncHandler(async (req, res) => {
     owner: req.body.owner || req.user._id,
   };
   const item = await Query.create(payload);
+  await logActivity(item._id, req.user._id, 'created the query', 'created');
   const populated = await item.populate(POPULATE);
   return created(res, populated);
 });
@@ -231,18 +235,35 @@ export const updateQuery = asyncHandler(async (req, res) => {
 });
 
 // PATCH /api/queries/:id/status
+// Lifecycle rules: a query is dropped only *before* conversion; cancelled only *after*.
+const BEFORE_CONVERT = ['new_query', 'in_progress'];
+const AFTER_CONVERT = ['converted', 'on_trip'];
+
 export const updateStatus = asyncHandler(async (req, res) => {
   const { status, lostReason, reminderOn } = req.body;
   if (!QUERY_STATUS_VALUES.includes(status)) {
     throw ApiError.badRequest(`Unknown status: ${status}`);
   }
+
+  const current = await Query.findById(req.params.id);
+  if (!current) throw ApiError.notFound('Query not found');
+
+  if (status === 'dropped' && !BEFORE_CONVERT.includes(current.status)) {
+    throw ApiError.badRequest('A query can only be dropped before it is converted.');
+  }
+  if (status === 'canceled' && !AFTER_CONVERT.includes(current.status)) {
+    throw ApiError.badRequest('A trip can only be cancelled after it is converted.');
+  }
+
   const update = { status };
   if (['canceled', 'dropped'].includes(status) && lostReason) update.lostReason = lostReason;
   if (reminderOn !== undefined) update.reminderOn = reminderOn || undefined;
   const item = await Query.findByIdAndUpdate(req.params.id, update, { new: true }).populate(
     POPULATE
   );
-  if (!item) throw ApiError.notFound('Query not found');
+  if (current.status !== status) {
+    await logActivity(item._id, req.user._id, `updated stage from ${LABEL[current.status] || current.status} to ${LABEL[status] || status}`, 'stage');
+  }
   return ok(res, item);
 });
 

@@ -36,6 +36,7 @@ import HotelDetailPage from './pages/services/HotelDetailPage.jsx';
 import HotelFormPage from './pages/services/HotelFormPage.jsx';
 import HotelPricesPage from './pages/services/HotelPricesPage.jsx';
 import UploadHotelPricesPage from './pages/services/UploadHotelPricesPage.jsx';
+import UploadHotelsPage from './pages/services/UploadHotelsPage.jsx';
 import CalculatePricePage from './pages/services/CalculatePricePage.jsx';
 import HotelOptionsPage, { HOTEL_OPTION_CONFIGS, CAB_TYPES_CONFIG } from './pages/services/HotelOptionsPage.jsx';
 import GeneralHotelNotesPage from './pages/services/GeneralHotelNotesPage.jsx';
@@ -104,6 +105,7 @@ export default function App() {
         {/* Services / supplier inventory — Module 6 */}
         <Route path="/services/hotels" element={<HotelsListPage />} />
         <Route path="/services/hotels/new" element={<HotelFormPage />} />
+        <Route path="/services/hotels/upload" element={<UploadHotelsPage />} />
         <Route path="/services/hotels/groups" element={<HotelOptionsPage config={HOTEL_OPTION_CONFIGS.groups} />} />
         <Route path="/services/hotels/meal-plans" element={<HotelOptionsPage config={HOTEL_OPTION_CONFIGS['meal-plans']} />} />
         <Route path="/services/hotels/room-types" element={<HotelOptionsPage config={HOTEL_OPTION_CONFIGS['room-types']} />} />

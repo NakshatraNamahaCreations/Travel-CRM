@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, X, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hotelsApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
@@ -131,6 +131,11 @@ export default function HotelFormPage() {
         <span className="font-semibold text-slate-900">{isEdit ? 'Edit Hotel' : 'New Hotel'}</span>
         <span className="text-slate-400">/</span>
         <Link to="/services/hotels" className="text-slate-500 hover:text-slate-800">Hotels</Link>
+        {!isEdit && (
+          <Link to="/services/hotels/upload" className="ml-auto flex items-center gap-1.5 font-medium text-brand-600 hover:text-brand-700">
+            <UploadCloud size={16} /> Upload via CSV
+          </Link>
+        )}
       </div>
 
       <form onSubmit={submit} className="mx-auto max-w-5xl px-6 py-6">

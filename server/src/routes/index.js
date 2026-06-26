@@ -17,6 +17,7 @@ import installmentRoutes from './installment.routes.js';
 import accountRoutes from './account.routes.js';
 import transactionRoutes from './transaction.routes.js';
 import gatewayRoutes from './gateway.routes.js';
+import activityLogRoutes from './activity.routes.js';
 import importRoutes from './import.routes.js';
 import commentRoutes from './comment.routes.js';
 import optionRoutes from './option.routes.js';
@@ -54,6 +55,7 @@ router.use('/installments', installmentRoutes);
 router.use('/accounts', accountRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/gateways', gatewayRoutes);
+router.use('/activity-log', activityLogRoutes);
 
 // Services / supplier inventory
 router.use('/hotels', hotelRoutes);
