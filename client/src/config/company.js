@@ -1,0 +1,54 @@
+// Branding + boilerplate for the PDF quotation. Edit these to match the agency.
+export const company = {
+  name: 'Andaman TravelCare',
+  shortName: 'ATC',
+  gstin: '35BTEPK8670E1ZK',
+  tagline: 'Quality Tours. Exceptional Service.',
+  address: ['M.A Road, Phoenix Bay,', 'Port Blair, A&N Islands,', 'PIN: 744101'],
+  emails: ['info@andamantravelcare.com', 'bookings@andamantravelcare.com'],
+  phones: ['+91 89009 12121', '+91 94742 07541'],
+  website: 'www.andamantravelcare.com',
+
+  // Share-package (WhatsApp / Email) booking-link settings
+  paymentBaseUrl: 'https://u.payu.in/PAYUMN',
+  firstInstalmentPercent: 30, // % shown as the "Pay just …" first instalment in share messages
+
+  // Bank accounts shown in the Log Payment modal (debit/credit account picker)
+  bankAccounts: ['IBKL - 8013 (INR)', 'HDFC - 1994 (INR)', 'Cash in Hand (INR)'],
+
+  bank: {
+    holder: 'Andaman TravelCare (Current Account)',
+    bank: 'HDFC',
+    address: 'Junglighat, Port Blair, South Andaman, 744103',
+    accNo: '50200066269962',
+    ifsc: 'HDFC0001994',
+    swift: '-',
+    paymentLink: 'www.andamantravelcare.com/pay',
+  },
+
+  advancePercent: 50, // % payable to confirm booking
+
+  defaultInclusions: [
+    'Sightseeing in private A/C vehicles.',
+    'Accommodation at all islands as given, including meal plan as mentioned.',
+    'Complete all day tours with all transfers including airport pickup and drop.',
+    'Complete boat charges, cruise charges, permits and entry tickets.',
+    'Complete assistance by our team during your visit.',
+    'Cruise tickets as per disposal: Makruzz, Green Ocean, ITT Majestic, Sea Link, Nautika, or Govt. Ferry.',
+  ],
+  defaultExclusions: [
+    'Flight tickets (we recommend booking these yourself for the best fares).',
+    'Additional camera charges at certain places during sightseeing.',
+    'Personal expenses: incidentals, extra meals, telephone charges, minibar, etc.',
+    'Extra room services: food orders, snack orders, etc.',
+    'Additional sightseeing or extra use of vehicles other than what is mentioned.',
+    'Other meals which are not included in the itinerary.',
+  ],
+  notes: [
+    'This is a private tour.',
+    'All packages, hotels & cruises are subject to availability.',
+    'Execution of tour is subject to weather conditions. In bad weather the amount will be refunded.',
+    'For Ross Island, Rs. 50 entry fee is paid directly by the traveller at the island.',
+  ],
+  bookingTerms: '50% payment in advance to confirm your package. Balance 50% on day of arrival in Port Blair.',
+};

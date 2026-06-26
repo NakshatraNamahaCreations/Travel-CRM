@@ -1,0 +1,153 @@
+import { Quote } from '../models/Quote.js';
+import { Query } from '../models/Query.js';
+import { ApiError } from '../utils/ApiError.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { ok, created } from '../utils/apiResponse.js';
+import { quotationHtml } from '../pdf/quotationHtml.js';
+import { htmlToPdf } from '../pdf/renderPdf.js';
+import { sendMail, emailEnabled } from '../utils/mailer.js';
+import { company } from '../config/company.js';
+
+const POPULATE = [
+  { path: 'days.destination', select: 'name' },
+  { path: 'createdBy', select: 'name' },
+];
+
+// Reflect a quote's value onto its parent query for the pipeline/reports.
+async function syncQuery(queryId) {
+  const latest = await Quote.findOne({ query: queryId }).sort('-createdAt');
+  const accepted = await Quote.findOne({ query: queryId, status: 'accepted' }).sort('-updatedAt');
+  await Query.findByIdAndUpdate(queryId, {
+    quotedAmount: latest?.pricing?.total || 0,
+    ...(accepted
+      ? { bookedAmount: accepted.pricing.total, profit: accepted.pricing.markup || 0 }
+      : { bookedAmount: 0, profit: 0 }),
+  });
+}
+
+// GET /api/quotes?query=<id>
+export const listQuotes = asyncHandler(async (req, res) => {
+  if (!req.query.query) throw ApiError.badRequest('query id is required');
+  const quotes = await Quote.find({ query: req.query.query }).sort('-createdAt');
+  return ok(res, quotes);
+});
+
+// GET /api/quotes/:id
+export const getQuote = asyncHandler(async (req, res) => {
+  const quote = await Quote.findById(req.params.id)
+    .populate(POPULATE)
+    .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } });
+  if (!quote) throw ApiError.notFound('Quote not found');
+  return ok(res, quote);
+});
+
+// POST /api/quotes
+export const createQuote = asyncHandler(async (req, res) => {
+  const query = await Query.findById(req.body.query);
+  if (!query) throw ApiError.badRequest('Parent query not found');
+
+  const quote = await Quote.create({
+    ...req.body,
+    createdBy: req.user._id,
+    // Snapshot trip basics from the query if not supplied
+    startDate: req.body.startDate || query.startDate,
+    nights: req.body.nights ?? query.nights,
+    pax: req.body.pax || query.pax,
+    currency: req.body.currency || query.currency || 'INR',
+  });
+  await syncQuery(query._id);
+  // Building the first quotation moves a brand-new lead into the In Progress stage.
+  if (query.status === 'new_query') {
+    await Query.findByIdAndUpdate(query._id, { status: 'in_progress' });
+  }
+  return created(res, quote);
+});
+
+// PUT /api/quotes/:id
+export const updateQuote = asyncHandler(async (req, res) => {
+  const quote = await Quote.findById(req.params.id);
+  if (!quote) throw ApiError.notFound('Quote not found');
+
+  // Assign fields then save() so pre-validate pricing hook runs.
+  const fields = [
+    'title', 'currency', 'startDate', 'nights', 'pax', 'days', 'costItems',
+    'markupType', 'markupValue', 'taxPercent', 'inclusions', 'exclusions', 'terms', 'status',
+    'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex',
+  ];
+  for (const f of fields) if (req.body[f] !== undefined) quote[f] = req.body[f];
+  await quote.save();
+  await syncQuery(quote.query);
+  return ok(res, quote);
+});
+
+// PATCH /api/quotes/:id/status
+export const updateQuoteStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  if (!['draft', 'sent', 'accepted', 'rejected'].includes(status)) {
+    throw ApiError.badRequest('Invalid status');
+  }
+  const quote = await Quote.findById(req.params.id);
+  if (!quote) throw ApiError.notFound('Quote not found');
+  quote.status = status;
+  await quote.save();
+
+  // Accepting a quote converts the query.
+  if (status === 'accepted') {
+    await Query.findByIdAndUpdate(quote.query, { status: 'converted' });
+  }
+  await syncQuery(quote.query);
+  return ok(res, quote);
+});
+
+// Load a quote fully populated for the PDF / email.
+async function loadFullQuote(id) {
+  const quote = await Quote.findById(id)
+    .populate(POPULATE)
+    .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } });
+  if (!quote) throw ApiError.notFound('Quote not found');
+  return quote;
+}
+
+// GET /api/quotes/:id/pdf — server-rendered PDF (inline download)
+export const quotePdf = asyncHandler(async (req, res) => {
+  const quote = await loadFullQuote(req.params.id);
+  const pdf = await htmlToPdf(quotationHtml(quote.toObject()));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="Quotation-${quote.quoteNumber}.pdf"`);
+  return res.send(pdf);
+});
+
+// GET /api/quotes/email-status — whether SMTP is configured
+export const emailStatus = asyncHandler(async (req, res) => ok(res, { enabled: emailEnabled() }));
+
+// POST /api/quotes/:id/email — email the quotation PDF to the guest
+export const emailQuote = asyncHandler(async (req, res) => {
+  const quote = await loadFullQuote(req.params.id);
+  const obj = quote.toObject();
+  const to = req.body.email || obj.query?.guest?.email;
+  if (!to) throw ApiError.badRequest('No recipient — guest has no email on file and none was provided');
+
+  const pdf = await htmlToPdf(quotationHtml(obj));
+  const guestName = [obj.query?.guest?.salutation, obj.query?.guest?.name].filter(Boolean).join(' ') || 'Guest';
+  await sendMail({
+    to,
+    subject: `Your Andaman Tour Quotation #${quote.quoteNumber} — ${company.name}`,
+    html: `<p>Dear ${guestName},</p>
+      <p>Thank you for your interest! Please find attached your tour quotation <b>#${quote.quoteNumber}</b>${obj.title ? ` (${obj.title})` : ''} totalling <b>₹${(obj.pricing?.total || 0).toLocaleString('en-IN')}</b>.</p>
+      <p>To confirm your booking, a ${company.advancePercent}% advance is payable. We'd love to host you in the Andamans!</p>
+      <p>Warm regards,<br/>${company.name}<br/>${company.phones[0]} · ${company.emails[0]}</p>`,
+    attachments: [{ filename: `Quotation-${quote.quoteNumber}.pdf`, content: pdf }],
+  });
+
+  quote.status = 'sent';
+  await quote.save();
+  return ok(res, { sent: true, to, quoteNumber: quote.quoteNumber });
+});
+
+// DELETE /api/quotes/:id
+export const deleteQuote = asyncHandler(async (req, res) => {
+  const quote = await Quote.findByIdAndDelete(req.params.id);
+  if (!quote) throw ApiError.notFound('Quote not found');
+  await syncQuery(quote.query);
+  return ok(res, { id: req.params.id });
+});
