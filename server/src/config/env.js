@@ -9,13 +9,23 @@ if (missing.length) {
   console.warn(`[env] Missing variables: ${missing.join(', ')} — check server/.env`);
 }
 
+// CLIENT_URL may hold one or many comma-separated origins. Entries without a
+// scheme are assumed https (so "site.netlify.app" → "https://site.netlify.app").
+const clientUrls = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((s) => (/^https?:\/\//i.test(s) ? s : `https://${s}`))
+  .map((s) => s.replace(/\/+$/, ''));
+
 export const env = {
   port: Number(process.env.PORT) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/travel_crm',
   jwtSecret: process.env.JWT_SECRET || 'insecure-dev-secret',
   jwtExpires: process.env.JWT_EXPIRES || '7d',
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  clientUrls,
+  clientUrl: clientUrls[0],
   isProd: (process.env.NODE_ENV || 'development') === 'production',
   chromePath: process.env.CHROME_PATH || '',
   email: {

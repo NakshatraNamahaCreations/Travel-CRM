@@ -2,8 +2,10 @@ import axios from 'axios';
 
 export const TOKEN_KEY = 'tcrm_token';
 
+// In dev, '/api' is proxied to the local server (see vite.config.js).
+// In production (Netlify), VITE_API_URL points at the deployed backend.
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   withCredentials: true,
 });
 

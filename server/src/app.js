@@ -16,7 +16,11 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.clientUrl,
+    // Allow whitelisted origins; permit requests with no Origin (curl, server-to-server).
+    // Disallowed origins simply get no CORS headers (browser blocks) rather than a 500.
+    origin(origin, cb) {
+      cb(null, !origin || env.clientUrls.includes(origin));
+    },
     credentials: true,
   })
 );
