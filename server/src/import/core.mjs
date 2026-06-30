@@ -213,18 +213,45 @@ export function detectType(wb) {
 /* ===================== HOTELS MASTER (flat, no prices) ===================== */
 const normHdr = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// Aliases for flexible column matching regardless of exact header wording.
+const COL_ALIASES = {
+  name:          ['name', 'hotelname', 'propertyname', 'hotel'],
+  groupname:     ['groupname', 'group', 'chain', 'chainname', 'grouphotelname'],
+  location:      ['location', 'place', 'area'],
+  star:          ['star', 'stars', 'starrating', 'rating', 'category'],
+  phonedialcode: ['phonedialcode', 'dialcode', 'countrycode', 'isd', 'isdcode'],
+  contactnumber: ['contactnumber', 'phone', 'mobile', 'contact', 'phone1', 'mobile1'],
+  contactnumber2:['contactnumber2', 'phone2', 'mobile2', 'alternateno', 'alternatephone'],
+  emailid:       ['emailid', 'email', 'emailaddress'],
+  addressline1:  ['addressline1', 'address', 'street', 'addressline'],
+  landmark:      ['landmark', 'nearbylandmark'],
+  pincode:       ['pincode', 'pin', 'zipcode', 'zip', 'postal'],
+  checkintime:   ['checkintime', 'checkin', 'checkinat', 'checkinhr'],
+  checkouttime:  ['checkouttime', 'checkout', 'checkoutat', 'checkouthr'],
+  url:           ['url', 'website', 'link', 'hotelurl'],
+};
+
 // Parse a flat hotels sheet: Group Name, Location, Name, Star, Address Line 1,
 // Landmark, Pin Code, Phone Dial Code, Contact Number(s), Email Id, Checkin/Checkout, Url.
 export function parseHotelsMasterSheet(rows) {
   let H = -1;
-  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+  // Search up to 15 rows to handle files with title/info rows before the header.
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const norm = (rows[i] || []).map(normHdr);
-    if (norm.includes('name') && (norm.includes('star') || norm.includes('groupname'))) { H = i; break; }
+    const hasName  = norm.some((n) => COL_ALIASES.name.includes(n));
+    const hasStar  = norm.some((n) => COL_ALIASES.star.includes(n));
+    const hasGroup = norm.some((n) => COL_ALIASES.groupname.includes(n));
+    if (hasName && (hasStar || hasGroup)) { H = i; break; }
   }
   if (H < 0) return [];
   const idx = {};
   rows[H].forEach((c, i) => { idx[normHdr(c)] = i; });
-  const get = (row, key) => { const i = idx[key]; return i == null ? '' : String(cell(row, i) ?? '').trim(); };
+  // Flexible getter: tries all known aliases for each logical field.
+  const getIdx = (key) => {
+    for (const alias of (COL_ALIASES[key] || [key])) { if (idx[alias] != null) return idx[alias]; }
+    return null;
+  };
+  const get = (row, key) => { const i = getIdx(key); return i == null ? '' : String(cell(row, i) ?? '').trim(); };
   const carry = (v, last) => (v === '...' || v === '…' || v === '' ? last : v);
 
   const out = [];
@@ -268,8 +295,10 @@ export async function importHotelsMaster(wb, opts = {}) {
   const extraDest = (opts.destinations || []).filter(Boolean).map(String);
   const cityCache = new Map();
   let hotels = 0, skipped = 0;
+  let totalRecordsParsed = 0;
   for (const sheetName of wb.SheetNames) {
     const records = parseHotelsMasterSheet(sheetRows(wb.Sheets[sheetName]));
+    totalRecordsParsed += records.length;
     for (const rec of records) {
       try {
         const destIds = [...extraDest];
@@ -287,6 +316,13 @@ export async function importHotelsMaster(wb, opts = {}) {
         hotels++;
       } catch { skipped++; }
     }
+  }
+  if (totalRecordsParsed === 0) {
+    throw new Error(
+      'No hotel rows found. Make sure your file has these column headers (row 1): ' +
+      'Group Name, Location, Name, Star, Address Line 1, Contact Number, Email Id. ' +
+      'The "Name" and ("Star" or "Group Name") columns are required.'
+    );
   }
   return { hotels, skipped };
 }

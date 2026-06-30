@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   ChevronDown, ChevronRight, LogOut, Palmtree, Plane, CalendarCheck, Wallet, Briefcase,
-  User as UserIcon, Users, Settings, LayoutDashboard, MapPin,
+  User as UserIcon, Settings, LayoutDashboard,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { cn } from '../lib/cn.js';
@@ -62,124 +62,193 @@ export default function Sidebar({ open: drawerOpen = false, onClose = () => {} }
   const activeGroup = visible.find(matchGroup)?.label;
   const [open, setOpen] = useState(activeGroup ? { [activeGroup]: true } : {});
   const toggle = (label) => setOpen((o) => ({ ...o, [label]: !o[label] }));
-
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <aside
-      className={cn(
-        'fixed inset-y-0 left-0 z-50 flex h-screen w-60 shrink-0 flex-col bg-gradient-to-b from-[#11367a] via-[#0e2c63] to-[#0a224d] text-white shadow-[4px_0_24px_-12px_rgba(8,20,48,.7)] transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0',
-        drawerOpen ? 'translate-x-0' : '-translate-x-full'
-      )}
-    >
-      {/* Brand */}
-      <Link to="/" onClick={onClose} className="flex items-center gap-2.5 px-4 py-4">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand-600 shadow-glow"><Palmtree size={18} /></span>
-        <span className="leading-tight">
-          <span className="block text-[13px] font-bold tracking-tight text-white">Andaman TravelCare</span>
-          <span className="block text-[10px] font-medium uppercase tracking-[.12em] text-brand-100/70">Trip CRM</span>
-        </span>
-      </Link>
+    <>
+      <style>{`
+        @keyframes sidebarGlow {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50%       { opacity: 0.7; transform: scale(1.08); }
+        }
+        .orb { animation: sidebarGlow var(--dur,8s) ease-in-out var(--delay,0s) infinite; }
+        .nav-item-active {
+          background: linear-gradient(135deg, rgba(99,160,255,0.18) 0%, rgba(59,130,246,0.10) 100%);
+          box-shadow: inset 0 0 0 1px rgba(147,197,253,0.15);
+        }
+        .nav-icon-active {
+          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+          box-shadow: 0 4px 12px rgba(59,130,246,0.45);
+        }
+        .brand-glow {
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.2), 0 4px 16px rgba(59,130,246,0.5);
+        }
+        .profile-card {
+          background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%);
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+        .profile-card:hover {
+          background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.06) 100%);
+        }
+        .sidebar-divider {
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+        }
+      `}</style>
 
-      <div className="mx-4 mb-1 h-px bg-white/10" />
-      <p className="px-5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[.14em] text-brand-100/50">Menu</p>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex h-screen w-[220px] shrink-0 flex-col overflow-hidden text-white shadow-2xl transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0',
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+        style={{ background: 'linear-gradient(180deg, #0d1f4e 0%, #0a1a42 40%, #071430 100%)' }}
+      >
+        {/* Background orbs */}
+        <div className="orb pointer-events-none absolute -left-8 -top-8 h-40 w-40 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, #3b6fd4 0%, transparent 70%)', '--dur': '9s', '--delay': '0s' }} />
+        <div className="orb pointer-events-none absolute -right-6 top-1/3 h-32 w-32 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, #1e40af 0%, transparent 70%)', '--dur': '12s', '--delay': '2s' }} />
+        <div className="orb pointer-events-none absolute bottom-16 left-4 h-24 w-24 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, #2563eb 0%, transparent 70%)', '--dur': '7s', '--delay': '4s' }} />
 
-      {/* Nav groups */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
-        <NavLink
-          to="/"
-          end
-          onClick={onClose}
-          className={({ isActive }) => cn(
-            'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-semibold transition-colors',
-            isActive ? 'bg-white/10 text-white' : 'text-brand-50 hover:bg-white/10'
-          )}
-        >
-          {({ isActive }) => (
-            <>
-              <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg transition-colors', isActive ? 'bg-white/15 text-white' : 'bg-white/5 text-brand-100 group-hover:bg-white/10')}>
-                <LayoutDashboard size={15} />
-              </span>
-              <span className="flex-1 text-left">Dashboard</span>
-            </>
-          )}
-        </NavLink>
-        {visible.map((g) => {
-          const isOpen = !!open[g.label];
-          const isActiveGroup = matchGroup(g);
-          return (
-            <div key={g.label}>
-              <button
-                onClick={() => toggle(g.label)}
-                className={cn(
-                  'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-semibold transition-colors',
-                  isActiveGroup && !isOpen ? 'bg-white/10 text-white' : 'text-brand-50 hover:bg-white/10'
-                )}
-              >
-                <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg transition-colors', isActiveGroup ? 'bg-white/15 text-white' : 'bg-white/5 text-brand-100 group-hover:bg-white/10')}>
-                  <g.icon size={15} />
+        {/* Brand */}
+        <Link to="/" onClick={onClose} className="relative flex items-center gap-3 px-4 py-4">
+          <span className="brand-glow flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-400 to-blue-600">
+            <Palmtree size={18} className="text-white" />
+          </span>
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-[13px] font-bold tracking-tight text-white">Andaman TravelCare</span>
+            <span className="block text-[9.5px] font-semibold uppercase tracking-[.15em] text-blue-300/60">Trip CRM</span>
+          </span>
+        </Link>
+
+        <div className="sidebar-divider mx-3 mb-2 h-px" />
+
+        <p className="px-4 pb-1.5 pt-1 text-[9.5px] font-bold uppercase tracking-[.18em] text-blue-300/40">Navigation</p>
+
+        {/* Nav */}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-2">
+          {/* Dashboard */}
+          <NavLink
+            to="/"
+            end
+            onClick={onClose}
+            className={({ isActive }) => cn(
+              'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[12.5px] font-semibold transition-all duration-150',
+              isActive ? 'nav-item-active text-white' : 'text-blue-100/70 hover:bg-white/6 hover:text-white'
+            )}
+          >
+            {({ isActive }) => (
+              <>
+                <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-150', isActive ? 'nav-icon-active' : 'bg-white/6 group-hover:bg-white/10')}>
+                  <LayoutDashboard size={14} />
                 </span>
-                <span className="flex-1 text-left">{g.label}</span>
-                {isOpen ? <ChevronDown size={14} className="text-brand-100/70" /> : <ChevronRight size={14} className="text-brand-100/50" />}
-              </button>
-              {isOpen && (
-                <div className="mb-1 mt-0.5 space-y-0.5 pl-[42px] pr-1">
-                  {g.items.map((it) => (
-                    <NavLink
-                      key={it.to}
-                      to={it.to}
-                      end={it.to === '/trips'}
-                      onClick={onClose}
-                      className={({ isActive }) => cn(
-                        'relative block rounded-lg px-3 py-1.5 text-[12.5px] transition-colors',
-                        isActive
-                          ? 'bg-white/15 font-semibold text-white before:absolute before:left-0 before:top-1/2 before:h-4 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-white'
-                          : 'text-brand-100/75 hover:bg-white/8 hover:text-white'
-                      )}
-                    >
-                      {it.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
+                <span className="flex-1 text-left">Dashboard</span>
+                {isActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
+              </>
+            )}
+          </NavLink>
 
-      {/* Profile */}
-      <div className="p-3">
-        <Menu user={user} onLogout={handleLogout} />
-      </div>
-    </aside>
+          {/* Groups */}
+          {visible.map((g) => {
+            const isOpen = !!open[g.label];
+            const isActiveGroup = matchGroup(g);
+            return (
+              <div key={g.label}>
+                <button
+                  onClick={() => toggle(g.label)}
+                  className={cn(
+                    'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[12.5px] font-semibold transition-all duration-150',
+                    isActiveGroup && !isOpen
+                      ? 'nav-item-active text-white'
+                      : isOpen
+                      ? 'text-white'
+                      : 'text-blue-100/70 hover:bg-white/6 hover:text-white'
+                  )}
+                >
+                  <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-150', isActiveGroup || isOpen ? 'nav-icon-active' : 'bg-white/6 group-hover:bg-white/10')}>
+                    <g.icon size={14} />
+                  </span>
+                  <span className="flex-1 text-left">{g.label}</span>
+                  <span className={cn('transition-transform duration-200', isOpen ? 'rotate-180' : '')}>
+                    <ChevronDown size={13} className="text-blue-300/50" />
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="mb-1 mt-0.5 space-y-0.5 pl-[38px] pr-1.5">
+                    {g.items.map((it) => (
+                      <NavLink
+                        key={it.to}
+                        to={it.to}
+                        end={it.to === '/trips'}
+                        onClick={onClose}
+                        className={({ isActive }) => cn(
+                          'relative block rounded-lg px-3 py-[6px] text-[12px] transition-all duration-150',
+                          isActive
+                            ? 'bg-gradient-to-r from-blue-500/20 to-blue-400/10 font-semibold text-white before:absolute before:left-0 before:top-1/2 before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-blue-400'
+                            : 'text-blue-100/55 hover:bg-white/6 hover:text-blue-100'
+                        )}
+                      >
+                        {it.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className="sidebar-divider mx-3 mb-2 h-px" />
+
+        {/* Profile */}
+        <div className="px-2.5 pb-3">
+          <ProfileMenu user={user} onLogout={handleLogout} />
+        </div>
+      </aside>
+    </>
   );
 }
 
-function Menu({ user, onLogout }) {
+function ProfileMenu({ user, onLogout }) {
   const [open, setOpen] = useState(false);
-  const items = [
-    { label: 'My Profile', to: '/settings/profile', icon: Settings },
-  ];
+  const initials = (user?.name || 'U').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+
   return (
     <div className="relative">
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-xl border border-slate-100 bg-white py-1 text-slate-700 shadow-2xl">
-          {items.map((it) => (
-            <Link key={it.to} to={it.to} onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
-              <it.icon size={15} className="text-slate-400" /> {it.label}
-            </Link>
-          ))}
-          <div className="my-1 border-t border-slate-100" />
-          <button onClick={onLogout} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"><LogOut size={15} /> Logout</button>
+        <div className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-xl border border-slate-100/80 bg-white py-1 text-slate-700 shadow-2xl">
+          <div className="border-b border-slate-100 px-3 pb-2 pt-2">
+            <p className="text-[12px] font-semibold text-slate-800">{user?.name}</p>
+            <p className="text-[10.5px] capitalize text-slate-400">{user?.role}</p>
+          </div>
+          <Link
+            to="/settings/profile"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50"
+          >
+            <Settings size={13} className="text-slate-400" /> My Profile
+          </Link>
+          <div className="my-1 mx-2 border-t border-slate-100" />
+          <button
+            onClick={onLogout}
+            className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-red-600 hover:bg-red-50"
+          >
+            <LogOut size={13} /> Sign Out
+          </button>
         </div>
       )}
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 transition-colors hover:bg-white/10">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-brand-600"><UserIcon size={16} /></span>
-        <span className="min-w-0 flex-1 text-left leading-tight">
-          <span className="block truncate text-[13px] font-semibold text-white">{user?.name}</span>
-          <span className="block text-[10px] uppercase tracking-[.1em] text-brand-100/70">{user?.role}</span>
+
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="profile-card flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 transition-all duration-150"
+      >
+        {/* Avatar with gradient */}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 text-[12px] font-bold text-white shadow-md">
+          {initials}
         </span>
-        <ChevronDown size={14} className={cn('text-brand-100/70 transition-transform', open && 'rotate-180')} />
+        <span className="min-w-0 flex-1 text-left leading-tight">
+          <span className="block truncate text-[12.5px] font-semibold text-white">{user?.name}</span>
+          <span className="block text-[9.5px] capitalize tracking-wide text-blue-300/60">{user?.role}</span>
+        </span>
+        <ChevronDown size={13} className={cn('shrink-0 text-blue-300/50 transition-transform duration-200', open && 'rotate-180')} />
       </button>
     </div>
   );
