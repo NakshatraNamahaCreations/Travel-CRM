@@ -13,7 +13,8 @@ import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import { cn } from '../../lib/cn.js';
 
 const newPackage = (name) => ({
-  name, hotels: [], inclusions: [], transports: [], extras: [], flights: [],
+  name, hotels: [], inclusions: [], transports: [], extras: [],
+  sameCabType: false, sharedCabItems: [{ type: '', qty: 1 }],
   markupType: 'percent', markupValue: 0, taxName: 'GST', taxApplied: false, taxPercent: 5, taxOn: 'cost_markup', rounding: 1,
   internalComments: '', customerRemarks: '',
 });

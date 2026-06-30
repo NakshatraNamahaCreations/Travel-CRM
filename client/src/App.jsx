@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import Placeholder from './components/Placeholder.jsx';
 import TripsListPage from './pages/trips/TripsListPage.jsx';
+import TripPlanRequestsPage from './pages/trips/TripPlanRequestsPage.jsx';
 import NewQueryPage from './pages/trips/NewQueryPage.jsx';
 import UploadQueriesPage from './pages/trips/UploadQueriesPage.jsx';
 import QueryDetailPage from './pages/trips/QueryDetailPage.jsx';
@@ -30,7 +31,6 @@ import TripCheckInOutReportPage from './pages/accounting/TripCheckInOutReportPag
 import UsersPage from './pages/settings/UsersPage.jsx';
 import OrganizationPage from './pages/settings/OrganizationPage.jsx';
 import ProfilePage from './pages/settings/ProfilePage.jsx';
-import AdminPage from './pages/admin/AdminPage.jsx';
 import HotelsListPage from './pages/services/HotelsListPage.jsx';
 import HotelDetailPage from './pages/services/HotelDetailPage.jsx';
 import HotelFormPage from './pages/services/HotelFormPage.jsx';
@@ -39,6 +39,8 @@ import UploadHotelPricesPage from './pages/services/UploadHotelPricesPage.jsx';
 import UploadHotelsPage from './pages/services/UploadHotelsPage.jsx';
 import CalculatePricePage from './pages/services/CalculatePricePage.jsx';
 import HotelOptionsPage, { HOTEL_OPTION_CONFIGS, CAB_TYPES_CONFIG } from './pages/services/HotelOptionsPage.jsx';
+import CitiesPage from './pages/services/CitiesPage.jsx';
+import StatesPage from './pages/services/StatesPage.jsx';
 import GeneralHotelNotesPage from './pages/services/GeneralHotelNotesPage.jsx';
 import MergeHotelsPage from './pages/services/MergeHotelsPage.jsx';
 import TransportListPage from './pages/services/TransportListPage.jsx';
@@ -54,6 +56,7 @@ import ActivityPricesPage from './pages/services/ActivityPricesPage.jsx';
 import UploadActivityPricesPage from './pages/services/UploadActivityPricesPage.jsx';
 import ActivityCalculatePricePage from './pages/services/ActivityCalculatePricePage.jsx';
 import ImportPage from './pages/services/ImportPage.jsx';
+import DestinationsPage from './pages/services/DestinationsPage.jsx';
 
 export default function App() {
   return (
@@ -89,8 +92,7 @@ export default function App() {
         <Route path="/bookings/operational" element={<OperationalBookingsPage />} />
         <Route path="/bookings/quote-diff" element={<QuoteBookingsDiffPage />} />
         <Route path="/bookings/:id" element={<BookingDetailPage />} />
-        <Route path="/trip-plan-requests" element={<Placeholder title="Trip Plan Requests" />} />
-        <Route path="/quote-bookings-diff" element={<Placeholder title="Quote Bookings Diff" />} />
+        <Route path="/trip-plan-requests" element={<TripPlanRequestsPage />} />
 
         {/* Accounting menu — Module 7 */}
         <Route path="/accounting/payments" element={<PaymentsLedgerPage direction="incoming" />} />
@@ -121,11 +123,13 @@ export default function App() {
         <Route path="/services/transport/new" element={<TransportFormPage />} />
         <Route path="/services/transport/cab-types" element={<HotelOptionsPage config={CAB_TYPES_CONFIG} />} />
         <Route path="/services/transport/:id" element={<TransportDetailPage />} />
+        <Route path="/services/transport/:id/edit" element={<TransportFormPage />} />
         <Route path="/services/transport-prices" element={<TransportPricesPage />} />
         <Route path="/services/transport-prices/upload" element={<UploadTransportPricesPage />} />
         <Route path="/services/transport-prices/calculator" element={<TransportCalculatePricePage />} />
         <Route path="/services/activities" element={<ActivitiesListPage />} />
         <Route path="/services/activities/new" element={<ActivityFormPage />} />
+        <Route path="/services/activities/:id/edit" element={<ActivityFormPage />} />
         <Route path="/services/activities/:id" element={<ActivityDetailPage />} />
         <Route path="/services/activity-prices" element={<ActivityPricesPage />} />
         <Route path="/services/activity-prices/upload" element={<UploadActivityPricesPage />} />
@@ -133,9 +137,11 @@ export default function App() {
         <Route path="/services/import" element={<ImportPage />} />
 
         {/* Settings / admin */}
-        <Route path="/admin" element={<ProtectedRoute roles={['admin', 'manager']}><AdminPage /></ProtectedRoute>} />
         <Route path="/settings/users" element={<ProtectedRoute roles={['admin', 'manager']}><UsersPage /></ProtectedRoute>} />
         <Route path="/settings/organization" element={<ProtectedRoute roles={['admin', 'manager']}><OrganizationPage /></ProtectedRoute>} />
+        <Route path="/settings/destinations" element={<ProtectedRoute roles={['admin', 'manager']}><DestinationsPage /></ProtectedRoute>} />
+        <Route path="/settings/cities" element={<ProtectedRoute roles={['admin', 'manager']}><CitiesPage /></ProtectedRoute>} />
+        <Route path="/settings/states" element={<ProtectedRoute roles={['admin', 'manager']}><StatesPage /></ProtectedRoute>} />
         <Route path="/settings/profile" element={<ProfilePage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/notifications" element={<Placeholder title="Notifications" />} />

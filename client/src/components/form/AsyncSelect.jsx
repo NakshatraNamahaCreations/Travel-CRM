@@ -86,7 +86,9 @@ export default function AsyncSelect({
     if (created) pick(created);
   };
 
-  const available = options.filter((o) => !selectedIds.includes(getId(o)));
+  const available = options
+    .filter((o) => !selectedIds.includes(getId(o)))
+    .sort((a, b) => getLabel(a).localeCompare(getLabel(b), undefined, { sensitivity: 'base', numeric: true }));
 
   return (
     <div className="relative" ref={ref}>

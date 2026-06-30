@@ -1,14 +1,31 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Bus, MoreVertical, Receipt, Car, Download, Ban } from 'lucide-react';
+import { Plus, Bus, MoreVertical, Receipt, Car, Download, Ban, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { transportApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
+import { useAuth } from '../../store/AuthContext.jsx';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
+import TransportFilterDrawer, { EMPTY_TRANSPORT_FILTERS, countTransportFilters } from '../../components/services/TransportFilterDrawer.jsx';
+
+const PAGE_SIZE = 20;
+
+// Translate the filter-drawer state into API query params.
+function filterParams(f) {
+  const p = {};
+  if (f.destinations?.length) p.destinations = f.destinations.map((d) => d._id).join(',');
+  if (f.from?.trim()) p.from = f.from.trim();
+  if (f.to?.trim()) p.to = f.to.trim();
+  if (f.updatedFrom) p.updatedFrom = f.updatedFrom;
+  if (f.updatedTo) p.updatedTo = f.updatedTo;
+  if (f.disabledOnly) p.isActive = 'false';
+  return p;
+}
 
 function ToolsMenu({ onDownload, onBulkDisable }) {
   const [open, setOpen] = useState(false);
@@ -45,20 +62,55 @@ export default function TransportListPage() {
   const debounced = useDebounced(search);
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { can } = useAuth();
+  const canDelete = can('transport.delete');
+  const [selected, setSelected] = useState([]);
+  const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_TRANSPORT_FILTERS);
+  const filterCount = countTransportFilters(filters);
+
+  useEffect(() => { setPage(1); }, [debounced, filters]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['transport', debounced],
-    queryFn: () => transportApi.list({ search: debounced, limit: 50 }),
+    queryKey: ['transport', debounced, page, filters],
+    queryFn: () => transportApi.list({ search: debounced, page, limit: PAGE_SIZE, ...filterParams(filters) }),
+    keepPreviousData: true,
   });
   const rows = data?.data || [];
+  const meta = data?.meta;
+  const total = meta?.total ?? 0;
+  const rangeStart = total === 0 ? 0 : (meta?.page - 1) * meta?.limit + 1;
+  const rangeEnd = Math.min(meta?.page * meta?.limit, total);
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['transport'] });
+  const toggleRow = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const toggleAll = (ids, allSelected) => setSelected(allSelected ? [] : ids);
 
   const bulkMut = useMutation({
     mutationFn: () => transportApi.bulkDisable(),
-    onSuccess: (r) => { toast.success(`Disabled ${r.disabled} service${r.disabled === 1 ? '' : 's'}`); qc.invalidateQueries({ queryKey: ['transport'] }); },
+    onSuccess: (r) => { toast.success(`Disabled ${r.disabled} service${r.disabled === 1 ? '' : 's'}`); refresh(); },
     onError: (e) => toast.error(e.message),
   });
   const askBulkDisable = async () => {
-    if (await confirm({ title: 'Bulk disable transport services?', message: 'Every active transport service will be marked inactive (hidden from lists). You can re-enable them later.', confirmLabel: 'Disable All' })) bulkMut.mutate();
+    if (await confirm({ title: 'Bulk disable transport services?', message: 'Every active transport service will be marked inactive (hidden from lists). You can re-enable them later.', confirmLabel: 'Disable All', danger: false })) bulkMut.mutate();
+  };
+
+  const delMut = useMutation({
+    mutationFn: (id) => transportApi.remove(id),
+    onSuccess: () => { toast.success('Transport service deleted'); setSelected([]); refresh(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const bulkDelMut = useMutation({
+    mutationFn: (ids) => transportApi.bulkRemove(ids),
+    onSuccess: (r) => { toast.success(`Deleted ${r.deleted} service${r.deleted === 1 ? '' : 's'}`); setSelected([]); refresh(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const askDeleteOne = async (t) => {
+    if (await confirm({ title: 'Delete transport service?', message: `“${t.from || t.name}${t.to ? ' → ' + t.to : ''}” will be permanently removed. This cannot be undone.`, confirmLabel: 'Delete', danger: true })) delMut.mutate(t._id);
+  };
+  const askDeleteSelected = async () => {
+    if (await confirm({ title: `Delete ${selected.length} service${selected.length === 1 ? '' : 's'}?`, message: 'The selected transport services will be permanently removed. This cannot be undone.', confirmLabel: 'Delete All', danger: true })) bulkDelMut.mutate(selected);
   };
 
   const downloadCsv = () => {
@@ -71,6 +123,13 @@ export default function TransportListPage() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const [expanded, setExpanded] = useState(new Set());
+  const toggleExpand = (id) => setExpanded((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const columns = [
     {
@@ -87,17 +146,41 @@ export default function TransportListPage() {
     {
       key: 'items',
       header: 'Services',
-      render: (t) => (
-        <div className="space-y-1">
-          {(t.items || []).slice(0, 2).map((it) => (
-            <div key={it._id || it.name} className="rounded border border-gray-100 bg-gray-50 px-2 py-1 text-gray-700">{it.name}</div>
-          ))}
-          {t.items?.length > 2 && <span className="text-xs text-brand-600">View More ({t.items.length - 2})</span>}
-          {!t.items?.length && <span className="text-gray-400">—</span>}
-        </div>
-      ),
+      render: (t) => {
+        const isExpanded = expanded.has(t._id);
+        const visible = isExpanded ? (t.items || []) : (t.items || []).slice(0, 2);
+        const extra = (t.items?.length || 0) - 2;
+        return (
+          <div className="space-y-1">
+            {visible.map((it) => (
+              <div key={it._id || it.name} className="text-gray-700">{it.name}</div>
+            ))}
+            {!t.items?.length && <span className="text-gray-400">—</span>}
+            {extra > 0 && !isExpanded && (
+              <button onClick={() => toggleExpand(t._id)} className="text-xs text-brand-600 hover:underline">
+                View More ({extra})
+              </button>
+            )}
+            {isExpanded && extra > 0 && (
+              <button onClick={() => toggleExpand(t._id)} className="text-xs text-brand-600 hover:underline">
+                View Less
+              </button>
+            )}
+          </div>
+        );
+      },
     },
     { key: 'updated', header: 'Last Updated', render: (t) => <span className="text-gray-500">{format(new Date(t.updatedAt), 'd MMM, yyyy')}</span> },
+    ...(canDelete ? [{
+      key: 'act',
+      header: '',
+      thClassName: 'w-12',
+      render: (t) => (
+        <button onClick={() => askDeleteOne(t)} className="text-slate-300 transition-colors hover:text-red-600" title="Delete service">
+          <Trash2 size={16} />
+        </button>
+      ),
+    }] : []),
   ];
 
   return (
@@ -105,16 +188,42 @@ export default function TransportListPage() {
       title="Transport Services"
       search={search}
       onSearch={setSearch}
-      total={data?.meta?.total}
-      onRefresh={() => qc.invalidateQueries({ queryKey: ['transport'] })}
+      total={total}
+      rangeStart={rangeStart}
+      rangeEnd={rangeEnd}
+      onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)}
+      filterCount={filterCount}
       actions={
         <>
+          {canDelete && selected.length > 0 && (
+            <button onClick={askDeleteSelected} disabled={bulkDelMut.isPending} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
+              <Trash2 size={16} /> Delete ({selected.length})
+            </button>
+          )}
           <Link to="/services/transport/new" className="btn-primary"><Plus size={16} /> New Service</Link>
           <ToolsMenu onDownload={downloadCsv} onBulkDisable={askBulkDisable} />
         </>
       }
     >
-      <DataTable columns={columns} rows={rows} loading={isLoading} emptyLabel="No transport services yet." />
+      <DataTable
+        columns={columns}
+        rows={rows}
+        loading={isLoading}
+        emptyLabel="No transport services yet."
+        selectable={canDelete}
+        selectedIds={selected}
+        onToggleRow={toggleRow}
+        onToggleAll={toggleAll}
+      />
+      <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
+
+      <TransportFilterDrawer
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        initial={filters}
+        onApply={setFilters}
+      />
     </ServiceShell>
   );
 }

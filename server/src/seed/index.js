@@ -70,19 +70,14 @@ async function run() {
 
   // Master data
   // Andaman Travel Care is an Andaman Islands operator — islands & spots first.
-  const andamanSpots = [
-    'Andaman and Nicobar Islands', 'Port Blair', 'Havelock', 'Swaraj Dweep', 'Neil Island',
-    'Shaheed Dweep', 'Baratang', 'Diglipur', 'Rangat', 'Mayabunder', 'Long Island',
-    'Little Andaman', 'Ross Island', 'North Bay Island', 'Chidiya Tapu', 'Cinque Island', 'Jolly Buoy Island',
-  ].map((name) => ({ name, country: 'India', region: 'Andaman' }));
+  // Only these two destinations are offered.
+  const DESTINATION_NAMES = ['Andaman', 'Andaman and Nicobar Islands'];
   await upsertMany(Destination, 'name', [
     { name: 'Andaman', country: 'India', region: 'Islands' },
-    ...andamanSpots,
-    { name: 'Goa', country: 'India', region: 'West' },
-    { name: 'Kerala', country: 'India', region: 'South' },
-    { name: 'Dubai', country: 'UAE', region: 'Middle East' },
-    { name: 'Thailand', country: 'Thailand', region: 'Southeast Asia' },
+    { name: 'Andaman and Nicobar Islands', country: 'India', region: 'Andaman' },
   ]);
+  // Remove any other destinations seeded previously.
+  await Destination.deleteMany({ name: { $nin: DESTINATION_NAMES } });
   await upsertMany(QuerySource, 'name', [
     'Website',
     'B2B',
@@ -102,7 +97,7 @@ async function run() {
     paymentMode: ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque'],
     vehicleType: ['Sedan (Dzire/Etios)', 'SUV (Xylo/Ertiga)', '17 Seater Tempo Traveller', '26 Seater Tempo Traveller'],
     paxConfig: ['Adult', 'Child (2-12)', 'Child (6-12)', 'Child (1-2)', 'Infant'],
-    city: ['Port Blair', 'Havelock', 'Neil Island', 'Baratang', 'Diglipur', 'Rangat', 'Mayabunder', 'Long Island'],
+    city: ['Port Blair', 'Havelock Island', 'Neil Island', 'Baratang Island', 'Diglipur', 'Rangat', 'Mayabunder', 'Long Island', 'Little Andaman', 'Jolly Buoy Island', 'Ross Island', 'North Bay Island', 'Radhanagar Beach'],
     state: ['Andaman and Nicobar Islands'],
     country: ['India'],
     hotelGroup: ['Taj', 'Lemon Tree', 'Symphony', 'Silver Sand', 'TSG', 'NK', 'Aquays', 'Ocean Tree'],
@@ -250,12 +245,10 @@ async function run() {
   // ---- A sample lead so the pipeline isn't empty ----
   if (!(await Query.findOne({ referenceId: 'SEED-ANI-001' }))) {
     const website = await QuerySource.findOne({ name: 'Website' });
-    const portBlair = await Destination.findOne({ name: 'Port Blair' });
-    const havelock = await Destination.findOne({ name: 'Havelock' });
     await Query.create({
       referenceId: 'SEED-ANI-001',
       source: website?._id,
-      destinations: [portBlair?._id, havelock?._id].filter(Boolean),
+      destinations: andaman ? [andaman._id] : [],
       startDate: new Date('2026-06-26'),
       nights: 3,
       pax: { adults: 2, children: [{ age: 8 }] },
@@ -280,6 +273,7 @@ async function run() {
   await mongoose.disconnect();
   process.exit(0);
 }
+
 
 run().catch((err) => {
   // eslint-disable-next-line no-console

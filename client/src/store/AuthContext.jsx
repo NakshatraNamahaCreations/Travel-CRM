@@ -46,6 +46,9 @@ export function AuthProvider({ children }) {
     logout,
     isAuthenticated: !!user,
     hasRole: (...roles) => (user ? roles.includes(user.role) : false),
+    // Fine-grained permission check, e.g. can('payments.cancel').
+    // Falls back to true when the server didn't send a permission list (older sessions).
+    can: (key) => (user?.permissions ? user.permissions.includes(key) : true),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

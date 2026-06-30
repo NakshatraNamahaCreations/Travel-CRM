@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { User } from '../models/User.js';
+import { userCan } from '../config/permissions.js';
 
 // Verifies the Bearer token (or auth cookie) and attaches req.user.
 export const protect = asyncHandler(async (req, res, next) => {
@@ -37,6 +38,18 @@ export const authorize =
     if (!req.user) return next(ApiError.unauthorized());
     if (!roles.includes(req.user.role)) {
       return next(ApiError.forbidden(`Requires role: ${roles.join(' or ')}`));
+    }
+    next();
+  };
+
+// Restricts a route to users holding a fine-grained permission key.
+// Usage: can('payments.cancel'). Resolves role defaults + per-user overrides.
+export const can =
+  (key) =>
+  (req, res, next) => {
+    if (!req.user) return next(ApiError.unauthorized());
+    if (!userCan(req.user, key)) {
+      return next(ApiError.forbidden(`You don't have permission to perform this action (${key})`));
     }
     next();
   };

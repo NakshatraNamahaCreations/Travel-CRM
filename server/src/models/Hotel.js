@@ -39,8 +39,10 @@ const hotelSchema = new mongoose.Schema(
     groupName: { type: String, trim: true },
     location: {
       label: { type: String, trim: true }, // "city location" used for matching/filters
-      city: { type: String, trim: true },
-      state: { type: String, trim: true },
+      city: { type: String, trim: true },   // plain string (kept for search/display)
+      cityRef: { type: mongoose.Schema.Types.ObjectId, ref: 'City' },
+      state: { type: String, trim: true },  // plain string (kept for search/display)
+      stateRef: { type: mongoose.Schema.Types.ObjectId, ref: 'State' },
       country: { type: String, trim: true, default: 'India' },
       pin: { type: String, trim: true },
       street: { type: String, trim: true },

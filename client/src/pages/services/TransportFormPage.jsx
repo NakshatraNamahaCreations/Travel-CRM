@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2, MapPin, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { transportApi } from '../../api/services.js';
@@ -7,12 +8,15 @@ import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import FormSection from '../../components/form/FormSection.jsx';
+import RichTextEditor from '../../components/form/RichTextEditor.jsx';
 import { LocationList, DayPicker, IntervalList } from '../../components/form/Repeaters.jsx';
 
 const emptyService = () => ({ name: '', serviceCode: '', distanceKms: 0, startTime: '', durationMins: 60, closedDays: [], closedDates: [], description: '' });
 
 export default function TransportFormPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = !!id;
   const [saving, setSaving] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
   const [form, setForm] = useState({
@@ -21,6 +25,31 @@ export default function TransportFormPage() {
     useCheckinAsPickup: false, useCheckinAsDrop: false,
     services: [emptyService()],
   });
+
+  // Edit mode: load the existing service and prefill the form.
+  const { data: existing } = useQuery({
+    queryKey: ['transport', id],
+    queryFn: () => transportApi.get(id),
+    enabled: isEdit,
+  });
+  useEffect(() => {
+    if (!existing) return;
+    setForm({
+      from: existing.from || '', to: existing.to || '', shortCode: existing.shortCode || '',
+      destinations: existing.destinations || [],
+      useSamePickDrop: existing.useSamePickDrop ?? true,
+      pickupLocations: existing.pickupLocations?.length ? existing.pickupLocations : [''],
+      dropLocations: existing.dropLocations?.length ? existing.dropLocations : [''],
+      useCheckinAsPickup: !!existing.useCheckinAsPickup,
+      useCheckinAsDrop: !!existing.useCheckinAsDrop,
+      services: (existing.items?.length ? existing.items : [emptyService()]).map((it) => ({
+        _id: it._id, name: it.name || '', serviceCode: it.serviceCode || '',
+        distanceKms: it.distanceKms || 0, startTime: it.startTime || '', durationMins: it.durationMins || 60,
+        closedDays: it.closedDays || [], closedDates: it.closedDates || [], description: it.description || '',
+        imageUrl: it.imageUrl, isActive: it.isActive,
+      })),
+    });
+  }, [existing]);
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const setEvt = (k) => (e) => set(k)(e.target.value);
@@ -36,16 +65,17 @@ export default function TransportFormPage() {
     setSaving(true);
     try {
       const name = form.from.trim() || services[0]?.name?.trim() || 'Transport Service';
-      const saved = await transportApi.create({
+      const payload = {
         name,
         from: form.from, to: form.to, shortCode: form.shortCode || undefined,
-        destinations: form.destinations.map((d) => d._id),
+        destinations: form.destinations.map((d) => d._id || d),
         useSamePickDrop: form.useSamePickDrop,
         pickupLocations: form.pickupLocations.filter((x) => x.trim()),
         dropLocations: form.dropLocations.filter((x) => x.trim()),
         useCheckinAsPickup: form.useCheckinAsPickup,
         useCheckinAsDrop: form.useCheckinAsDrop,
         items: services.map((s) => ({
+          ...(s._id ? { _id: s._id } : {}),
           name: s.name,
           serviceCode: s.serviceCode || undefined,
           distanceKms: Number(s.distanceKms) || 0,
@@ -54,9 +84,12 @@ export default function TransportFormPage() {
           closedDays: s.closedDays,
           closedDates: s.closedDates.filter((d) => d.start && d.end),
           description: s.description || undefined,
+          ...(s.imageUrl !== undefined ? { imageUrl: s.imageUrl } : {}),
+          ...(s.isActive !== undefined ? { isActive: s.isActive } : {}),
         })),
-      });
-      toast.success('Transport service created');
+      };
+      const saved = isEdit ? await transportApi.update(id, payload) : await transportApi.create(payload);
+      toast.success(isEdit ? 'Transport service updated' : 'Transport service created');
       navigate(`/services/transport/${saved._id}`);
     } catch (err) {
       toast.error(err.message || 'Failed to save');
@@ -69,7 +102,7 @@ export default function TransportFormPage() {
     <div>
       <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 text-sm">
         <button onClick={() => navigate(-1)} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>
-        <span className="font-semibold text-slate-900">New Transport Service</span>
+        <span className="font-semibold text-slate-900">{isEdit ? 'Edit Transport Service' : 'New Transport Service'}</span>
         <span className="text-slate-400">/</span>
         <Link to="/services/transport" className="text-slate-500 hover:text-slate-800">Transport Services</Link>
       </div>
@@ -145,7 +178,14 @@ export default function TransportFormPage() {
                         </div>
                       </>
                     )}
-                    <div><label className="label">Description</label><textarea rows={3} className="input" value={s.description} onChange={(e) => setService(i, { description: e.target.value })} placeholder="Upon your arrival at Railway Station, your driver will escort you to your hotel..." /></div>
+                    <div>
+                      <label className="label">Description</label>
+                      <RichTextEditor
+                        value={s.description}
+                        onChange={(html) => setService(i, { description: html })}
+                        placeholder="Upon your arrival at Railway Station, your driver will escort you to your hotel..."
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -157,7 +197,16 @@ export default function TransportFormPage() {
           <div className="border-t border-slate-100 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Summary</p>
             <p className="mt-1 font-bold text-slate-900">{form.from ? `${form.from}${form.to ? ` → ${form.to}` : ''}` : '[Title]'}</p>
-            <p className="text-sm text-slate-500">{services.length ? services.map((s) => s.name).join(' · ') : '[Itinerary]'}</p>
+            {services.length ? services.map((s, i) => (
+              <div key={i} className="mt-1">
+                <p className="text-sm font-semibold text-slate-700">{s.name || '[Service Name]'}</p>
+                {s.description ? (
+                  <div className="rich-content text-sm text-slate-500" dangerouslySetInnerHTML={{ __html: s.description }} />
+                ) : (
+                  <p className="text-sm text-slate-400">[Itinerary]</p>
+                )}
+              </div>
+            )) : <p className="text-sm text-slate-400">[Itinerary]</p>}
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import { Booking } from '../models/Booking.js';
+import { ServiceBooking } from '../models/ServiceBooking.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, paginate } from '../utils/apiResponse.js';
 
@@ -60,17 +61,6 @@ function cabSchedules(b) {
   }));
 }
 
-// Derive flight rows from the quote package.
-function flightRows(b) {
-  const pkg = selectedPackage(b);
-  if (!pkg) return [];
-  return (pkg.flights || []).map((f) => ({
-    label: f.label || 'Flight',
-    cost: f.cost || 0,
-    amount: f.given || f.cost || 0,
-  }));
-}
-
 const tabFilter = (tab) => {
   switch (tab) {
     case 'new': return { status: 'confirmed' };
@@ -87,6 +77,7 @@ const baseRow = (b) => ({
   title: b.title,
   guest: b.guest,
   query: b.query,
+  quoteId: b.quote?._id || null,
   destinations: b.destinations,
   owner: b.owner,
   startDate: b.startDate,
@@ -109,27 +100,34 @@ export const hotelBookings = asyncHandler(async (req, res) => {
   const total = await Booking.countDocuments(filter);
   const meta = paginate(req.query, total);
   const rows = await Booking.find(filter).populate(POPULATE).sort('-createdAt').skip(meta.skip).limit(meta.limit);
-  const items = rows.map((b) => {
-    const stays = hotelStays(b);
-    return { ...baseRow(b), hotels: stays, bookedCount: 0, voucherCount: 0 };
-  });
-  return ok(res, items, meta);
-});
 
-// GET /api/bookings/views/flights?tab=&search=
-export const flightBookings = asyncHandler(async (req, res) => {
-  const filter = tabFilter(req.query.tab);
-  if (req.query.search) {
-    const rx = new RegExp(String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.$or = [{ 'guest.name': rx }, { 'guest.phones.number': rx }];
+  // Fetch ServiceBooking hotel rows for all these queries in one query.
+  const queryIds = rows.map((b) => b.query?._id || b.query).filter(Boolean);
+  const svcRows = queryIds.length
+    ? await ServiceBooking.find({ query: { $in: queryIds }, kind: 'hotel' })
+        .populate({ path: 'bookedBy', select: 'name' })
+        .sort({ order: 1, checkIn: 1 })
+    : [];
+
+  // Group by query ID string.
+  const svcByQuery = {};
+  for (const s of svcRows) {
+    const qid = String(s.query);
+    (svcByQuery[qid] = svcByQuery[qid] || []).push(s);
   }
-  const total = await Booking.countDocuments(filter);
-  const meta = paginate(req.query, total);
-  const rows = await Booking.find(filter).populate(POPULATE).sort('-createdAt').skip(meta.skip).limit(meta.limit);
-  // Only bookings that actually have flights in their package.
-  const items = rows
-    .map((b) => ({ ...baseRow(b), flights: flightRows(b) }))
-    .filter((b) => b.flights.length);
+
+  const items = rows.map((b) => {
+    const qid = String(b.query?._id || b.query);
+    const svc = svcByQuery[qid] || [];
+    const hasSvc = svc.length > 0;
+    return {
+      ...baseRow(b),
+      hotels: hasSvc ? svc : hotelStays(b),
+      hasServiceBookings: hasSvc,
+      bookedCount: hasSvc ? svc.filter((s) => ['booked', 'confirmed'].includes(s.status)).length : 0,
+      voucherCount: hasSvc ? svc.filter((s) => s.status === 'confirmed').length : 0,
+    };
+  });
   return ok(res, items, meta);
 });
 

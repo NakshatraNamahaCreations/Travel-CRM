@@ -33,11 +33,11 @@ export async function htmlToPdf(html) {
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
+      margin: { top: '12mm', bottom: '12mm', left: '12mm', right: '12mm' },
     });
     return Buffer.from(pdf);
   } finally {

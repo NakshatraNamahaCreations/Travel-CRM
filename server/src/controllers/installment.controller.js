@@ -109,6 +109,18 @@ export const createInstallment = asyncHandler(async (req, res) => {
   return created(res, item);
 });
 
+// Retry Payment.create on E11000 duplicate paymentNumber.
+async function createPaymentWithRetry(data, retries = 4) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await Payment.create({ ...data });
+    } catch (err) {
+      if (err.code === 11000 && i < retries - 1) continue;
+      throw err;
+    }
+  }
+}
+
 // POST /api/installments/:id/log-payment
 export const logPayment = asyncHandler(async (req, res) => {
   const inst = await Installment.findById(req.params.id);
@@ -124,7 +136,7 @@ export const logPayment = asyncHandler(async (req, res) => {
   inst.creditAccount = req.body.creditAccount || inst.creditAccount;
 
   // Mirror into the Payment ledger so accounting totals stay in sync.
-  const payment = await Payment.create({
+  const payment = await createPaymentWithRetry({
     party: inst.direction === 'incoming' ? 'customer' : 'supplier',
     booking: inst.booking,
     query: inst.query,

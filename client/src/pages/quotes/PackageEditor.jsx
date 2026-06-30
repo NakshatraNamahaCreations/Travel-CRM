@@ -7,12 +7,16 @@ import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import { hotelsApi } from '../../api/services.js';
 import { lookupApi } from '../../api/quotes.js';
+import { citiesApi } from '../../api/locations.js';
+import { optionsApi } from '../../api/options.js';
 import { hotelRowCost, hotelPerNight, computePackage, money } from '../../lib/pricing.js';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
+import { cn } from '../../lib/cn.js';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const emptyHotel = () => ({ nights: [1], hotel: null, hotelName: '', city: '', mealPlan: '', roomType: '', paxPerRoom: 2, rooms: 1, aweb: 0, cweb: 0, cnb: 0, ratePerNight: 0, awebRate: 0, cwebRate: 0, cnbRate: 0, cardRate: 0 });
-const emptyTransport = (day = 1) => ({ day, serviceLocation: '', serviceType: '', startTime: '', durationMins: 60, items: [{ type: '', qty: 1, rate: 0 }] });
+const emptyTransport = (days = [1]) => ({ days, serviceLocation: '', serviceType: '', startTime: '', durationMins: 60, items: [{ type: '', qty: 1, rate: 0, given: 0 }] });
+const emptySharedItem = () => ({ type: '', qty: 1 });
 
 export default function PackageEditor({ pkg, onChange, nights, startDate, currency }) {
   const update = (patch) => onChange({ ...pkg, ...patch });
@@ -47,12 +51,27 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const rmInc = (i) => update({ inclusions: pkg.inclusions.filter((_, idx) => idx !== i) });
 
   /* ----- Transports ----- */
+  const [collapsedTr, setCollapsedTr] = useState({});
+  const toggleTrOpen = (i) => setCollapsedTr((s) => ({ ...s, [i]: !s[i] }));
   const setTr = (i, patch) => update({ transports: pkg.transports.map((t, idx) => (idx === i ? { ...t, ...patch } : t)) });
-  const addTr = () => update({ transports: [...(pkg.transports || []), emptyTransport((pkg.transports?.length || 0) + 1)] });
+  const addTr = () => { update({ transports: [...(pkg.transports || []), emptyTransport([(pkg.transports?.length || 0) + 1])] }); };
   const rmTr = async (i) => { if (await confirm({ title: 'Remove this day?', message: 'This transport day and its services will be removed from the package.', confirmLabel: 'Remove' })) update({ transports: pkg.transports.filter((_, idx) => idx !== i) }); };
-  const setTrItem = (ti, ii, patch) => setTr(ti, { items: pkg.transports[ti].items.map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
-  const addTrItem = (ti) => setTr(ti, { items: [...pkg.transports[ti].items, { type: '', qty: 1, rate: 0 }] });
+  // Ensures t.items array is long enough, then patches index ii
+  const setTrItem = (ti, ii, patch) => {
+    const existing = pkg.transports[ti].items || [];
+    const items = [...existing];
+    while (items.length <= ii) items.push({ type: '', qty: 1, rate: 0, given: 0 });
+    setTr(ti, { items: items.map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
+  };
+  const addTrItem = (ti) => setTr(ti, { items: [...pkg.transports[ti].items, { type: '', qty: 1, rate: 0, given: 0 }] });
   const rmTrItem = (ti, ii) => setTr(ti, { items: pkg.transports[ti].items.filter((_, idx) => idx !== ii) });
+
+  /* ----- Shared Cab Types ----- */
+  const sharedItems = pkg.sharedCabItems || [emptySharedItem()];
+  const setSharedItem = (ii, patch) => update({ sharedCabItems: sharedItems.map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
+  const addSharedItem = () => update({ sharedCabItems: [...sharedItems, emptySharedItem()] });
+  const rmSharedItem = (ii) => update({ sharedCabItems: sharedItems.filter((_, idx) => idx !== ii) });
+  const setSameCab = (v) => update({ sameCabType: v });
 
   /* ----- Extras ----- */
   const setExtra = (i, patch) => update({ extras: pkg.extras.map((e, idx) => (idx === i ? { ...e, ...patch } : e)) });
@@ -190,42 +209,231 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
       {/* Transport & Activities */}
       <Section icon={Bus} title="Transports & Activities" hint="Add transfers and activities per day with selling price.">
-        <div className="space-y-4">
-          {(pkg.transports || []).map((t, ti) => (
-            <div key={ti} className="rounded-lg border border-gray-200 p-3">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <Num label="Day" value={t.day} onChange={(v) => setTr(ti, { day: v })} />
-                <div className="sm:col-span-2"><label className="label">Service Location</label><input className="input" placeholder="Port Blair to Havelock" value={t.serviceLocation} onChange={(e) => setTr(ti, { serviceLocation: e.target.value })} /></div>
-                <div><label className="label">Start Time</label><input className="input" placeholder="13:00" value={t.startTime} onChange={(e) => setTr(ti, { startTime: e.target.value })} /></div>
+        {/* Same Cab Type for All */}
+        <div className={cn('mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3', pkg.sameCabType ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-slate-50')}>
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+            <input type="checkbox" checked={!!pkg.sameCabType} onChange={(e) => setSameCab(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+            Same Cab Type for All
+          </label>
+          {pkg.sameCabType && (
+            <div className="flex flex-wrap items-center gap-2">
+              {sharedItems.filter((si) => si.type).map((si, ii) => (
+                <span key={ii} className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1 text-sm font-medium text-brand-700">
+                  {si.qty} - {si.type}
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = sharedItems.length ? [...sharedItems] : [emptySharedItem()];
+                  update({ sharedCabItems: next, _editShared: true });
+                }}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-500 hover:bg-slate-50"
+              >
+                ✏️ Edit
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Shared cab editor (inline, shown when editing) */}
+        {pkg.sameCabType && pkg._editShared && (
+          <div className="mb-4 rounded-xl border border-brand-100 bg-brand-50 p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase text-brand-600 mb-2">Set Cab Types</p>
+            {sharedItems.map((si, ii) => (
+              <div key={ii} className="flex items-center gap-2">
+                <div className="flex-1">
+                  <AsyncSelect
+                    loadOptions={(q) => optionsApi.search('vehicleType', q).then((r) => r.map((o) => ({ _id: o.value, name: o.value })))}
+                    value={si.type ? { _id: si.type, name: si.type } : null}
+                    onChange={(v) => setSharedItem(ii, { type: v ? v.name : '' })}
+                    creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                    placeholder="17 Seater Tempo Traveller"
+                  />
+                </div>
+                <input type="number" className="input w-20" placeholder="Qty" value={si.qty} onChange={(e) => setSharedItem(ii, { qty: Number(e.target.value) })} />
+                {sharedItems.length > 1 && <button type="button" onClick={() => rmSharedItem(ii)} className="text-slate-400 hover:text-red-500"><Trash2 size={14} /></button>}
               </div>
-              <div className="mt-2"><label className="label">Service Type</label><input className="input" placeholder="Transfer and Radhanagar Beach" value={t.serviceType} onChange={(e) => setTr(ti, { serviceType: e.target.value })} /></div>
-              <p className="mt-3 mb-1 text-xs font-semibold uppercase text-gray-400">Transport / Tickets</p>
-              <div className="space-y-2">
-                {(t.items || []).map((it, ii) => (
-                  <div key={ii} className="grid grid-cols-12 items-center gap-2">
-                    <input className="input col-span-7" placeholder="17 Seater Tempo Traveller" value={it.type} onChange={(e) => setTrItem(ti, ii, { type: e.target.value })} />
-                    <input type="number" className="input col-span-2" placeholder="Qty" value={it.qty} onChange={(e) => setTrItem(ti, ii, { qty: Number(e.target.value) })} />
-                    <input type="number" className="input col-span-2" placeholder="Rate" value={it.rate} onChange={(e) => setTrItem(ti, ii, { rate: Number(e.target.value) })} />
-                    <button type="button" onClick={() => rmTrItem(ti, ii)} className="col-span-1 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={addSharedItem} className="btn-secondary text-xs"><Plus size={12} /> Add More</button>
+              <button type="button" onClick={() => update({ _editShared: false })} className="btn-primary text-xs">Set Cab Types</button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {(pkg.transports || []).map((t, ti) => {
+            const tDays = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : [1]);
+            const dayOptions = Array.from({ length: nights || 1 }, (_, i) => ({
+              n: i + 1,
+              label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
+            }));
+            const cabItems = pkg.sameCabType ? sharedItems : (t.items || []);
+            const firstDay = tDays[0] || 1;
+            const firstDate = startDate ? format(addDays(new Date(startDate), firstDay - 1), 'EEEE, d MMM') : `Day ${firstDay}`;
+
+            return (
+              <div key={ti} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                {/* Card label */}
+                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+                  <Bus size={14} className="text-brand-500" />
+                  <span className="text-xs font-semibold text-brand-600">Transport Service</span>
+                </div>
+
+                <div className="flex gap-0 divide-x divide-gray-100">
+                  {/* LEFT: Days */}
+                  <div className="w-44 shrink-0 p-4">
+                    <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
+                    {dayOptions.length ? (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {dayOptions.map(({ n, label }) => (
+                          <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', tDays.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
+                              checked={tDays.includes(n)}
+                              onChange={() => {
+                                const next = tDays.includes(n) ? tDays.filter((d) => d !== n) : [...tDays, n].sort((a, b) => a - b);
+                                setTr(ti, { days: next.length ? next : [n] });
+                              }}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">Select day(s)…</p>
+                    )}
                   </div>
-                ))}
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => addTrItem(ti)} className="btn-secondary text-xs"><Plus size={12} /> Add Item</button>
-                  <button type="button" onClick={() => rmTr(ti)} className="btn-secondary text-xs text-red-600"><Trash2 size={12} /> Remove Day</button>
+
+                  {/* MIDDLE: Service details */}
+                  <div className="flex-1 p-4 space-y-3">
+                    <div>
+                      <label className="label">Service Locations</label>
+                      <AsyncSelect
+                        loadOptions={(q) => citiesApi.search(q)}
+                        value={t.serviceLocation ? { _id: t.serviceLocation, name: t.serviceLocation } : null}
+                        onChange={(v) => setTr(ti, { serviceLocation: v ? v.name : '' })}
+                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                        placeholder="Port Blair to Havelock"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Service Type</label>
+                      <input className="input" placeholder="Transfer and Radhanagar Beach" value={t.serviceType} onChange={(e) => setTr(ti, { serviceType: e.target.value })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Start Time</label>
+                        <input className="input" placeholder="14:00" value={t.startTime} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="label">Duration (Mins)</label>
+                        <input type="number" className="input" placeholder="60 Mins" value={t.durationMins} onChange={(e) => setTr(ti, { durationMins: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                    {/* sub-actions */}
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={addTr} className="btn-secondary text-xs"><Plus size={12} /> Transport Service</button>
+                    </div>
+                  </div>
+
+                  {/* RIGHT: Transportation and Prices */}
+                  <div className="w-80 shrink-0 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700">Transportation and Prices{firstDate ? ` — ${firstDate}` : ''}</p>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500">
+                          <th className="pb-1 text-left font-semibold">Transportation</th>
+                          <th className="pb-1 text-left font-semibold w-16">Rate</th>
+                          <th className="pb-1 text-left font-semibold w-16">Given</th>
+                          <th className="w-5" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cabItems.map((cabIt, ii) => {
+                          // Per-transport rate/given (always from t.items)
+                          const priceIt = (t.items || [])[ii] || {};
+                          return (
+                            <tr key={ii}>
+                              <td className="py-1.5 pr-2">
+                                {pkg.sameCabType ? (
+                                  <span className="text-slate-700">{cabIt.qty > 1 ? `${cabIt.qty} - ` : ''}{cabIt.type || '—'}</span>
+                                ) : (
+                                  <AsyncSelect
+                                    loadOptions={(q) => optionsApi.search('vehicleType', q).then((r) => r.map((o) => ({ _id: o.value, name: o.value })))}
+                                    value={cabIt.type ? { _id: cabIt.type, name: cabIt.type } : null}
+                                    onChange={(v) => setTrItem(ti, ii, { type: v ? v.name : '' })}
+                                    creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                                    placeholder="Cab type…"
+                                  />
+                                )}
+                              </td>
+                              <td className="py-1.5 pr-1">
+                                <input
+                                  type="number"
+                                  className="input w-16 text-xs"
+                                  placeholder="0"
+                                  value={priceIt.rate ?? ''}
+                                  onChange={(e) => setTrItem(ti, ii, { rate: Number(e.target.value) })}
+                                />
+                              </td>
+                              <td className="py-1.5">
+                                <input
+                                  type="number"
+                                  className="input w-16 text-xs"
+                                  placeholder="0"
+                                  value={priceIt.given ?? ''}
+                                  onChange={(e) => setTrItem(ti, ii, { given: Number(e.target.value) })}
+                                />
+                              </td>
+                              <td className="py-1.5 pl-1 text-center">
+                                {!pkg.sameCabType && (t.items || []).length > 1 && (
+                                  <button type="button" onClick={() => rmTrItem(ti, ii)} className="text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {!pkg.sameCabType && (
+                      <button type="button" onClick={() => addTrItem(ti)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card footer */}
+                <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const usedDays = new Set((pkg.transports || []).flatMap((tr) => Array.isArray(tr.days) ? tr.days : [tr.day || 1]));
+                      const nextDay = Array.from({ length: nights || 1 }, (_, i) => i + 1).find((d) => !usedDays.has(d)) || ((pkg.transports?.length || 0) + 1);
+                      update({ transports: [...(pkg.transports || []), emptyTransport([nextDay])] });
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    <Plus size={12} /> Next Day
+                  </button>
+                  <button type="button" onClick={() => rmTr(ti)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <button type="button" onClick={addTr} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
         </div>
       </Section>
 
       {/* Extras */}
-      <Section icon={Star} title="Other Services & Flights" hint="Any other services or flight costs for this package.">
+      <Section icon={Star} title="Other Services" hint="Any other services or add-ons for this package.">
         <div className="space-y-2">
           {(pkg.extras || []).map((e, i) => (
             <div key={i} className="grid grid-cols-12 items-center gap-2">
-              <input className="input col-span-8" placeholder="Service / Flight label" value={e.label} onChange={(ev) => setExtra(i, { label: ev.target.value })} />
+              <input className="input col-span-8" placeholder="Service label" value={e.label} onChange={(ev) => setExtra(i, { label: ev.target.value })} />
               <input type="number" className="input col-span-3" placeholder="Price" value={e.price} onChange={(ev) => setExtra(i, { price: Number(ev.target.value) })} />
               <button type="button" onClick={() => rmExtra(i)} className="col-span-1 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
             </div>

@@ -8,6 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed/index.js",
+    "seed:options": "node src/seed/seed-options.js",
+    "seed:locations": "node src/seed/seed-locations.js",
     "import:hotels": "node src/import/run-hotels.mjs",
     "import:activities": "node src/import/run-activities.mjs",
     "import:transport": "node src/import/run-transport.mjs",

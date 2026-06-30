@@ -7,7 +7,10 @@ import { hotelPricesApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import RowDisableMenu from '../../components/services/RowDisableMenu.jsx';
+
+const PAGE_SIZE = 20;
 
 function PricesKebab() {
   const [open, setOpen] = useState(false);
@@ -36,13 +39,23 @@ export default function HotelPricesPage() {
   const hotelFilter = params.get('hotel') || undefined;
   const [search, setSearch] = useState('');
   const [disabledOnly, setDisabledOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
+  // Reset to the first page whenever search/filters change.
+  useEffect(() => { setPage(1); }, [debounced, hotelFilter, disabledOnly]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['hotel-prices', debounced, hotelFilter, disabledOnly],
-    queryFn: () => hotelPricesApi.list({ search: debounced, hotel: hotelFilter, isActive: !disabledOnly, limit: 50 }),
+    queryKey: ['hotel-prices', debounced, hotelFilter, disabledOnly, page],
+    queryFn: () => hotelPricesApi.list({ search: debounced, hotel: hotelFilter, isActive: !disabledOnly, page, limit: PAGE_SIZE }),
+    keepPreviousData: true,
   });
+
+  const meta = data?.meta;
+  const total = meta?.total ?? 0;
+  const rangeStart = total === 0 ? 0 : (meta?.page - 1) * meta?.limit + 1;
+  const rangeEnd = Math.min(meta?.page * meta?.limit, total);
 
   const fmt = (n) => new Intl.NumberFormat('en-IN').format(n);
   const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : '—');
@@ -70,7 +83,9 @@ export default function HotelPricesPage() {
       title="Hotel Prices"
       search={search}
       onSearch={setSearch}
-      total={data?.meta?.total}
+      total={total}
+      rangeStart={rangeStart}
+      rangeEnd={rangeEnd}
       onRefresh={refresh}
       actions={
         <>
@@ -83,6 +98,7 @@ export default function HotelPricesPage() {
       }
     >
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No prices yet." />
+      <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
     </ServiceShell>
   );
 }

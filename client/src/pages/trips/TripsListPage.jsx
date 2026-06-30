@@ -5,6 +5,7 @@ import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X } from 'luci
 import { format } from 'date-fns';
 import { queriesApi } from '../../api/queries.js';
 import { destinationsApi, querySourcesApi, tagsApi, teamsApi, usersApi } from '../../api/masterData.js';
+import { useAuth } from '../../store/AuthContext.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
@@ -40,6 +41,7 @@ const STATUS_BADGE = {
 };
 
 export default function TripsListPage() {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') || 'new_query';
   const urlQ = params.get('q') || '';
@@ -144,10 +146,12 @@ export default function TripsListPage() {
               )}
             </button>
           </div>
-          <Link to="/trips/upload" className="btn-secondary whitespace-nowrap">Upload CSV</Link>
-          <Link to="/trips/new" className="btn-primary whitespace-nowrap">
-            <Plus size={16} /> Add New Query
-          </Link>
+          {can('trips.create') && <Link to="/trips/upload" className="btn-secondary whitespace-nowrap">Upload CSV</Link>}
+          {can('trips.create') && (
+            <Link to="/trips/new" className="btn-primary whitespace-nowrap">
+              <Plus size={16} /> Add New Query
+            </Link>
+          )}
         </div>
 
         <div className="p-6">

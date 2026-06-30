@@ -5,6 +5,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { RefreshCw, Download, Phone, FileText, MessageSquarePlus, Check, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { installmentsApi } from '../../api/installments.js';
+import { useAuth } from '../../store/AuthContext.jsx';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import { company } from '../../config/company.js';
 import { money } from '../../lib/pricing.js';
@@ -174,6 +175,7 @@ function CommentModal({ inst, onClose, onSaved }) {
 }
 
 export default function PaymentsLedgerPage({ direction }) {
+  const { can } = useAuth();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [logFor, setLogFor] = useState(null);
@@ -286,7 +288,7 @@ export default function PaymentsLedgerPage({ direction }) {
                         <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Paid</span>
                       ) : i.status === 'unverified' ? (
                         <button onClick={() => verifyMut.mutate(i._id)} className="btn-secondary text-xs">Verify</button>
-                      ) : direction === 'outgoing' ? (
+                      ) : direction === 'outgoing' && can('payments.create') ? (
                         <button onClick={() => setLogFor(i)} className="btn-secondary text-xs text-brand-700"><FileText size={13} /> Log Payment</button>
                       ) : (
                         <span className="text-xs text-slate-400">Awaiting payment</span>

@@ -12,6 +12,8 @@ import { ok, created, paginate } from './apiResponse.js';
  * @param {function} [opts.beforeWrite]   (body, req) => body  — mutate/augment payload
  * @param {Array}    [opts.populate]      populate spec(s) applied to list/get/create/update
  * @param {string[]} [opts.filterFields]  query params copied verbatim into the filter (exact match)
+ * @param {function} [opts.advancedFilter] (query) => mongoFilter — extra filter merged into list/count
+ * @param {function} [opts.onChange]      (req, doc, action) => void — called after create/update/remove (action: 'created'|'updated'|'deleted')
  */
 export function crudFactory(Model, opts = {}) {
   const {
@@ -21,8 +23,14 @@ export function crudFactory(Model, opts = {}) {
     populate,
     filterFields = [],
     injectOnCreate,
+    advancedFilter,
+    onChange,
   } = opts;
   const withPopulate = (q) => (populate ? q.populate(populate) : q);
+  const fireChange = async (req, doc, action) => {
+    if (!onChange || !doc) return;
+    try { await onChange(req, doc, action); } catch { /* audit is non-fatal */ }
+  };
 
   const buildFilter = (query) => {
     const filter = {};
@@ -36,6 +44,7 @@ export function crudFactory(Model, opts = {}) {
     for (const f of filterFields) {
       if (query[f] !== undefined && query[f] !== '') filter[f] = query[f];
     }
+    if (advancedFilter) Object.assign(filter, advancedFilter(query));
     return filter;
   };
 
@@ -61,6 +70,7 @@ export function crudFactory(Model, opts = {}) {
       if (injectOnCreate) payload = { ...payload, ...injectOnCreate(req) };
       let item = await Model.create(payload);
       if (populate) item = await item.populate(populate);
+      await fireChange(req, item, 'created');
       return created(res, item);
     }),
 
@@ -70,12 +80,14 @@ export function crudFactory(Model, opts = {}) {
         Model.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
       );
       if (!item) throw ApiError.notFound(`${Model.modelName} not found`);
+      await fireChange(req, item, 'updated');
       return ok(res, item);
     }),
 
     remove: asyncHandler(async (req, res) => {
       const item = await Model.findByIdAndDelete(req.params.id);
       if (!item) throw ApiError.notFound(`${Model.modelName} not found`);
+      await fireChange(req, item, 'deleted');
       return ok(res, { id: req.params.id });
     }),
   };

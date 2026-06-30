@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Trash2, X, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hotelsApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
+import { citiesApi, statesApi } from '../../api/locations.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import FormSection from '../../components/form/FormSection.jsx';
@@ -18,7 +19,7 @@ const emptyInterval = () => ({ start: '', end: '' });
 
 const initial = {
   name: '', groupName: '', stars: 3, locationLabel: '', destinations: [],
-  city: '', state: '', country: 'India', pin: '', street: '', locality: '', landmark: '',
+  cityObj: null, stateObj: null, country: 'India', pin: '', street: '', locality: '', landmark: '',
   phones: [{ countryCode: '91', number: '' }], email: '',
   mealPlans: [], roomGroups: [emptyGroup()],
   applyRestrictionsToAll: true, restrictionRoomTypes: [], soldoutDates: [], blackoutDates: [],
@@ -71,7 +72,9 @@ export default function HotelFormPage() {
     setForm({
       name: existing.name || '', groupName: existing.groupName || '', stars: existing.stars || 3,
       locationLabel: loc.label || existing.locationLabel || '', destinations: existing.destinations || [],
-      city: loc.city || '', state: loc.state || '', country: loc.country || 'India', pin: loc.pin || '',
+      cityObj: existing.location?.cityRef ? { _id: String(existing.location.cityRef), name: loc.city || '' } : (loc.city ? { _id: loc.city, name: loc.city } : null),
+      stateObj: existing.location?.stateRef ? { _id: String(existing.location.stateRef), name: loc.state || '' } : (loc.state ? { _id: loc.state, name: loc.state } : null),
+      country: loc.country || 'India', pin: loc.pin || '',
       street: loc.street || existing.address || '', locality: loc.locality || '', landmark: loc.landmark || '',
       phones: existing.phones?.length ? existing.phones : [{ countryCode: '91', number: '' }], email: existing.email || '',
       mealPlans: existing.mealPlans || [], roomGroups,
@@ -99,7 +102,15 @@ export default function HotelFormPage() {
     try {
       const payload = {
         name: form.name, groupName: form.groupName || undefined, stars: Number(form.stars),
-        location: { label: form.locationLabel, city: form.city, state: form.state, country: form.country, pin: form.pin, street: form.street, locality: form.locality, landmark: form.landmark },
+        location: {
+          label: form.locationLabel,
+          city: form.cityObj?.name || '',
+          cityRef: form.cityObj?._id || undefined,
+          state: form.stateObj?.name || '',
+          stateRef: form.stateObj?._id || undefined,
+          country: form.country, pin: form.pin,
+          street: form.street, locality: form.locality, landmark: form.landmark,
+        },
         address: form.street || undefined,
         destinations: form.destinations.map((d) => d._id),
         mealPlans: form.mealPlans,
@@ -175,8 +186,31 @@ export default function HotelFormPage() {
               <>
                 <p className="text-sm font-medium text-slate-700">Please provide the full address details of the hotel which will be used in vouchers.</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div><label className="label">City / Town / District</label><CreatableSelect category="city" value={form.city} onChange={set('city')} placeholder="Type to search..." /></div>
-                  <div><label className="label">State / Province / Region</label><CreatableSelect category="state" value={form.state} onChange={set('state')} placeholder="Type to search..." /></div>
+                  <div>
+                    <label className="label">City / Town / Island</label>
+                    <AsyncSelect
+                      loadOptions={(q) => citiesApi.search(q)}
+                      value={form.cityObj}
+                      onChange={(v) => {
+                        set('cityObj')(v || null);
+                        if (v?.state && !form.stateObj) set('stateObj')(v.state);
+                      }}
+                      creatable
+                      onCreate={async (name) => { const c = await citiesApi.create({ name }); return { _id: c._id, name: c.name }; }}
+                      placeholder="Type to search or add…"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">State / Province / Region</label>
+                    <AsyncSelect
+                      loadOptions={(q) => statesApi.search(q)}
+                      value={form.stateObj}
+                      onChange={(v) => set('stateObj')(v || null)}
+                      creatable
+                      onCreate={async (name) => { const s = await statesApi.create({ name }); return { _id: s._id, name: s.name }; }}
+                      placeholder="Type to search or add…"
+                    />
+                  </div>
                   <div><label className="label">Country</label><CreatableSelect category="country" value={form.country} onChange={set('country')} placeholder="Type to search..." /></div>
                   <div><label className="label">Pin Code</label><input className="input" placeholder="e.g. Area Code" value={form.pin} onChange={setEvt('pin')} /></div>
                   <div><label className="label">Street Address</label><input className="input" placeholder="Flat / House No. / Floor / Building" value={form.street} onChange={setEvt('street')} /></div>

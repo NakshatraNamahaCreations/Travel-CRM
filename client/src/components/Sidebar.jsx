@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ChevronDown, ChevronRight, LogOut, Palmtree, Plane, CalendarCheck, Wallet, Briefcase, User as UserIcon, Settings, ShieldCheck, Building2,
+  ChevronDown, ChevronRight, LogOut, Palmtree, Plane, CalendarCheck, Wallet, Briefcase,
+  User as UserIcon, Users, Settings, LayoutDashboard, MapPin,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { cn } from '../lib/cn.js';
@@ -41,9 +42,17 @@ const GROUPS = [
       { label: 'Travel Activity Prices', to: '/services/activity-prices' },
     ],
   },
+  {
+    label: 'Settings', icon: Settings, roles: ['admin', 'manager'], items: [
+      { label: 'Users & Roles', to: '/settings/users' },
+      { label: 'Destinations', to: '/settings/destinations' },
+      { label: 'Cities / Towns', to: '/settings/cities' },
+      { label: 'States / Regions', to: '/settings/states' },
+    ],
+  },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open: drawerOpen = false, onClose = () => {} }) {
   const { user, hasRole, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -57,9 +66,14 @@ export default function Sidebar() {
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-gradient-to-b from-[#11367a] via-[#0e2c63] to-[#0a224d] text-white shadow-[4px_0_24px_-12px_rgba(8,20,48,.7)]">
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 z-50 flex h-screen w-60 shrink-0 flex-col bg-gradient-to-b from-[#11367a] via-[#0e2c63] to-[#0a224d] text-white shadow-[4px_0_24px_-12px_rgba(8,20,48,.7)] transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0',
+        drawerOpen ? 'translate-x-0' : '-translate-x-full'
+      )}
+    >
       {/* Brand */}
-      <Link to="/" className="flex items-center gap-2.5 px-4 py-4">
+      <Link to="/" onClick={onClose} className="flex items-center gap-2.5 px-4 py-4">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand-600 shadow-glow"><Palmtree size={18} /></span>
         <span className="leading-tight">
           <span className="block text-[13px] font-bold tracking-tight text-white">Andaman TravelCare</span>
@@ -72,6 +86,24 @@ export default function Sidebar() {
 
       {/* Nav groups */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
+        <NavLink
+          to="/"
+          end
+          onClick={onClose}
+          className={({ isActive }) => cn(
+            'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-semibold transition-colors',
+            isActive ? 'bg-white/10 text-white' : 'text-brand-50 hover:bg-white/10'
+          )}
+        >
+          {({ isActive }) => (
+            <>
+              <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg transition-colors', isActive ? 'bg-white/15 text-white' : 'bg-white/5 text-brand-100 group-hover:bg-white/10')}>
+                <LayoutDashboard size={15} />
+              </span>
+              <span className="flex-1 text-left">Dashboard</span>
+            </>
+          )}
+        </NavLink>
         {visible.map((g) => {
           const isOpen = !!open[g.label];
           const isActiveGroup = matchGroup(g);
@@ -97,6 +129,7 @@ export default function Sidebar() {
                       key={it.to}
                       to={it.to}
                       end={it.to === '/trips'}
+                      onClick={onClose}
                       className={({ isActive }) => cn(
                         'relative block rounded-lg px-3 py-1.5 text-[12.5px] transition-colors',
                         isActive
@@ -116,18 +149,16 @@ export default function Sidebar() {
 
       {/* Profile */}
       <div className="p-3">
-        <Menu user={user} hasRole={hasRole} onLogout={handleLogout} />
+        <Menu user={user} onLogout={handleLogout} />
       </div>
     </aside>
   );
 }
 
-function Menu({ user, hasRole, onLogout }) {
+function Menu({ user, onLogout }) {
   const [open, setOpen] = useState(false);
   const items = [
     { label: 'My Profile', to: '/settings/profile', icon: Settings },
-    ...(hasRole('admin', 'manager') ? [{ label: 'Admin Panel', to: '/admin', icon: ShieldCheck }] : []),
-    { label: 'Organization', to: '/settings/organization', icon: Building2 },
   ];
   return (
     <div className="relative">

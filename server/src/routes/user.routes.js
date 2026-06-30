@@ -6,15 +6,15 @@ import {
   updateUser,
   setUserStatus,
 } from '../controllers/user.controller.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, authorize, can } from '../middleware/auth.js';
 
 const router = Router();
 router.use(protect);
 
 router.get('/', listUsers);
 router.get('/:id', getUser);
-router.post('/', authorize('admin', 'manager'), createUser);
-router.put('/:id', authorize('admin', 'manager'), updateUser);
+router.post('/', can('users.create'), createUser);
+router.put('/:id', can('users.edit'), updateUser);
 router.patch('/:id/status', authorize('admin'), setUserStatus);
 
 export default router;

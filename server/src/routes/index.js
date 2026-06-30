@@ -12,6 +12,7 @@ import quoteRoutes from './quote.routes.js';
 import lookupRoutes from './lookup.routes.js';
 import reportRoutes from './report.routes.js';
 import bookingRoutes from './booking.routes.js';
+import serviceBookingRoutes from './serviceBooking.routes.js';
 import paymentRoutes from './payment.routes.js';
 import installmentRoutes from './installment.routes.js';
 import accountRoutes from './account.routes.js';
@@ -22,6 +23,7 @@ import importRoutes from './import.routes.js';
 import commentRoutes from './comment.routes.js';
 import optionRoutes from './option.routes.js';
 import hotelNoteRoutes from './hotelNote.routes.js';
+import { cityRoutes, stateRoutes } from './location.routes.js';
 import {
   hotelRoutes,
   hotelPriceRoutes,
@@ -50,12 +52,17 @@ router.use('/options', optionRoutes);
 router.use('/lookups', lookupRoutes);
 router.use('/reports', reportRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/service-bookings', serviceBookingRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/installments', installmentRoutes);
 router.use('/accounts', accountRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/gateways', gatewayRoutes);
 router.use('/activity-log', activityLogRoutes);
+
+// Location master data
+router.use('/states', stateRoutes);
+router.use('/cities', cityRoutes);
 
 // Services / supplier inventory
 router.use('/hotels', hotelRoutes);

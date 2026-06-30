@@ -39,7 +39,7 @@ function Bucket({ label, to, value, empty }) {
 }
 
 function GroupHeading({ children }) {
-  return <h2 className="mb-2 mt-7 text-sm font-semibold text-slate-500">{children}</h2>;
+  return <h2 className="col-span-full mb-0 mt-3 text-sm font-semibold text-slate-500">{children}</h2>;
 }
 
 const PERIODS = [['today', 'Today'], ['week', 'Week'], ['month', 'Month']];
@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const dueVal = (b) => (b?.count ? `${money(b.amount)}` : null);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       {/* Slim hero */}
       <div className="relative mb-6 overflow-hidden rounded-2xl bg-ocean p-6 text-white shadow-soft">
         <Waves className="pointer-events-none absolute -bottom-8 right-6 text-white/10" size={140} />
@@ -74,7 +74,7 @@ export default function DashboardPage() {
       {isLoading ? (
         <div className="py-20 text-center text-slate-400">Loading dashboard…</div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
           {/* Trip Sales Stats */}
           <SectionCard
             title="Trip Sales Stats"
@@ -121,22 +121,20 @@ export default function DashboardPage() {
 
           {/* Trip Starting and Endings */}
           <GroupHeading>Trip Starting and Endings</GroupHeading>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SectionCard title="Trips Starting" to="/reports/starting">
-              <div className="flex flex-wrap gap-y-3">
-                <Bucket label="Today" to="/reports/starting?bucket=today" value={ts.today ?? 0} />
-                <Bucket label="Yesterday" to="/reports/starting?bucket=yesterday" value={ts.yesterday ?? 0} />
-                <Bucket label="Next 7 Days" to="/reports/starting?bucket=next7" value={ts.next7 ?? 0} />
-              </div>
-            </SectionCard>
-            <SectionCard title="Trips Ending" to="/reports/ending">
-              <div className="flex flex-wrap gap-y-3">
-                <Bucket label="Today" to="/reports/ending?bucket=today" value={te.today ?? 0} />
-                <Bucket label="Tomorrow" to="/reports/ending?bucket=tomorrow" value={te.tomorrow ?? 0} />
-                <Bucket label="Prev 7 Days" to="/reports/ending?bucket=prev7" value={te.prev7 ?? 0} />
-              </div>
-            </SectionCard>
-          </div>
+          <SectionCard title="Trips Starting" to="/reports/starting">
+            <div className="flex flex-wrap gap-y-3">
+              <Bucket label="Today" to="/reports/starting?bucket=today" value={ts.today ?? 0} />
+              <Bucket label="Yesterday" to="/reports/starting?bucket=yesterday" value={ts.yesterday ?? 0} />
+              <Bucket label="Next 7 Days" to="/reports/starting?bucket=next7" value={ts.next7 ?? 0} />
+            </div>
+          </SectionCard>
+          <SectionCard title="Trips Ending" to="/reports/ending">
+            <div className="flex flex-wrap gap-y-3">
+              <Bucket label="Today" to="/reports/ending?bucket=today" value={te.today ?? 0} />
+              <Bucket label="Tomorrow" to="/reports/ending?bucket=tomorrow" value={te.tomorrow ?? 0} />
+              <Bucket label="Prev 7 Days" to="/reports/ending?bucket=prev7" value={te.prev7 ?? 0} />
+            </div>
+          </SectionCard>
 
           {/* Live Trips with Due Payments */}
           <GroupHeading>Live Trips with Due Payments</GroupHeading>

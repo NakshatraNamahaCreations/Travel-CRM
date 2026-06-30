@@ -6,7 +6,7 @@ import {
   deletePayment,
   supplierLedger,
 } from '../controllers/payment.controller.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 
 const router = Router();
 router.use(protect);
@@ -14,7 +14,7 @@ router.use(protect);
 router.get('/summary', paymentsSummary);
 router.get('/supplier-ledger', supplierLedger);
 router.get('/', listPayments);
-router.post('/', authorize('admin', 'manager', 'accounts'), createPayment);
-router.delete('/:id', authorize('admin', 'manager', 'accounts'), deletePayment);
+router.post('/', can('payments.create'), createPayment);
+router.delete('/:id', can('payments.cancel'), deletePayment);
 
 export default router;

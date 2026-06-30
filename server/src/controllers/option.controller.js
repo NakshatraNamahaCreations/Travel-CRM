@@ -20,7 +20,11 @@ export const listOptions = asyncHandler(async (req, res) => {
   if (!category) throw ApiError.badRequest('category is required');
   const filter = { category, isActive: true };
   if (search) filter.value = new RegExp(escapeRx(search.trim()), 'i');
-  const items = await Option.find(filter).sort({ order: 1, value: 1 }).limit(100);
+  // Alphabetical (case-insensitive) so dropdowns read A, B, C…
+  const items = await Option.find(filter)
+    .collation({ locale: 'en', strength: 1 })
+    .sort({ value: 1 })
+    .limit(100);
   return ok(res, items);
 });
 

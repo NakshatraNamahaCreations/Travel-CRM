@@ -13,7 +13,6 @@ import {
   ListChecks,
   Sparkles,
   Palmtree,
-  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { cn } from '../lib/cn.js';
@@ -125,9 +124,6 @@ function ProfileMenu() {
 
   const items = [
     { label: 'My Profile', to: '/settings/profile', icon: Settings },
-    ...(user && ['admin', 'manager'].includes(user.role)
-      ? [{ label: 'Admin Panel', to: '/admin', icon: ShieldCheck }]
-      : []),
     { label: 'Organization', to: '/settings/organization', icon: Building2 },
     { divider: true },
     { label: 'Dashboard', to: '/', icon: LayoutDashboard },

@@ -7,7 +7,10 @@ import { transportPricesApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import RowDisableMenu from '../../components/services/RowDisableMenu.jsx';
+
+const PAGE_SIZE = 20;
 
 function PricesKebab() {
   const [open, setOpen] = useState(false);
@@ -36,13 +39,22 @@ export default function TransportPricesPage() {
   const service = params.get('service') || undefined;
   const [search, setSearch] = useState('');
   const [disabledOnly, setDisabledOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
+  useEffect(() => { setPage(1); }, [debounced, service, disabledOnly]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['transport-prices', debounced, service, disabledOnly],
-    queryFn: () => transportPricesApi.list({ search: debounced, service, isActive: !disabledOnly, limit: 50 }),
+    queryKey: ['transport-prices', debounced, service, disabledOnly, page],
+    queryFn: () => transportPricesApi.list({ search: debounced, service, isActive: !disabledOnly, page, limit: PAGE_SIZE }),
+    keepPreviousData: true,
   });
+
+  const meta = data?.meta;
+  const total = meta?.total ?? 0;
+  const rangeStart = total === 0 ? 0 : (meta?.page - 1) * meta?.limit + 1;
+  const rangeEnd = Math.min(meta?.page * meta?.limit, total);
   const fmt = (n) => new Intl.NumberFormat('en-IN').format(n);
   const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : '—');
   const columns = [
@@ -57,7 +69,7 @@ export default function TransportPricesPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['transport-prices'] });
 
   return (
-    <ServiceShell title="Transport Service Prices" search={search} onSearch={setSearch} total={data?.meta?.total} onRefresh={refresh}
+    <ServiceShell title="Transport Service Prices" search={search} onSearch={setSearch} total={total} rangeStart={rangeStart} rangeEnd={rangeEnd} onRefresh={refresh}
       actions={
         <>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
@@ -68,6 +80,7 @@ export default function TransportPricesPage() {
         </>
       }>
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No transport prices yet." />
+      <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
     </ServiceShell>
   );
 }

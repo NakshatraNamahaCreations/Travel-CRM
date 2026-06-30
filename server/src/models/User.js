@@ -17,6 +17,9 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 6, select: false },
     role: { type: String, enum: ROLES, default: 'sales', index: true },
     team: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', index: true },
+    // Per-user permission overrides: { 'payments.cancel': false, 'trips.create': true }.
+    // Unset keys fall back to the role default. See config/permissions.js.
+    permissionOverrides: { type: Map, of: Boolean, default: undefined },
     avatarUrl: { type: String },
     isActive: { type: Boolean, default: true, select: false },
     lastLoginAt: { type: Date },

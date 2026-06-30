@@ -6,17 +6,15 @@ const counterSchema = new mongoose.Schema({
   seq: { type: Number, default: 0 },
 });
 
-counterSchema.statics.next = async function next(key, start = 0) {
-  const doc = await this.findByIdAndUpdate(
-    key,
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+counterSchema.statics.next = async function next(key, start = 1) {
+  // Single atomic operation: increment by 1, but never go below `start`.
+  // Uses MongoDB 4.2+ aggregation pipeline update — no race window.
+  const floor = Math.max(start - 1, 0);
+  const doc = await this.findOneAndUpdate(
+    { _id: key },
+    [{ $set: { seq: { $add: [{ $max: [{ $ifNull: ['$seq', floor] }, floor] }, 1] } } }],
+    { new: true, upsert: true }
   );
-  // If a brand-new counter and a start floor is given, jump to it.
-  if (doc.seq === 1 && start) {
-    const bumped = await this.findByIdAndUpdate(key, { seq: start }, { new: true });
-    return bumped.seq;
-  }
   return doc.seq;
 };
 

@@ -10,7 +10,7 @@ import {
   deleteQuery,
   uploadQueriesCsv,
 } from '../controllers/query.controller.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { createQuerySchema, updateQuerySchema } from '../validators/query.validator.js';
 
@@ -23,9 +23,9 @@ router.get('/stats', queryStats);
 router.get('/', listQueries);
 router.post('/upload-csv', upload.single('file'), uploadQueriesCsv);
 router.get('/:id', getQuery);
-router.post('/', validate(createQuerySchema), createQuery);
-router.put('/:id', validate(updateQuerySchema), updateQuery);
+router.post('/', can('trips.create'), validate(createQuerySchema), createQuery);
+router.put('/:id', can('trips.edit'), validate(updateQuerySchema), updateQuery);
 router.patch('/:id/status', updateStatus);
-router.delete('/:id', authorize('admin', 'manager'), deleteQuery);
+router.delete('/:id', can('trips.delete'), deleteQuery);
 
 export default router;

@@ -8,6 +8,10 @@ const resource = (path) => ({
 });
 
 export const destinationsApi = resource('destinations');
+// Full management (used by the Destinations admin page).
+destinationsApi.list = (params) => api.get('/destinations', { params }).then((r) => r.data);
+destinationsApi.update = (id, payload) => api.put(`/destinations/${id}`, payload).then((r) => r.data.data);
+destinationsApi.remove = (id) => api.delete(`/destinations/${id}`).then((r) => r.data.data);
 export const querySourcesApi = resource('query-sources');
 export const tagsApi = resource('tags');
 export const teamsApi = resource('teams');

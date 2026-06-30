@@ -6,9 +6,10 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Calendar, Users, Phone, Mail, Tag as TagIcon, MessageSquare,
   User as UserIcon, MoreVertical, Pencil, Ban, Plus, FileText, CheckCircle2, Clock, Circle, Trash2, ListChecks, Share2,
-  Bed, Bus, Hotel, Plane, CreditCard, History, ChevronRight,
+  Bed, Bus, CreditCard, History, ChevronRight,
 } from 'lucide-react';
 import { queriesApi } from '../../api/queries.js';
+import { bookingsApi } from '../../api/bookings.js';
 import { quotesApi } from '../../api/quotes.js';
 import { commentsApi } from '../../api/comments.js';
 import { installmentsApi } from '../../api/installments.js';
@@ -20,6 +21,7 @@ import { tripNo } from '../../lib/format.js';
 import Modal from '../../components/ui/Modal.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
+import ServiceBookingsTab from '../../components/trips/ServiceBookingsTab.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 
 const QUOTE_BADGE = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-50 text-blue-700', accepted: 'bg-green-50 text-green-700', rejected: 'bg-red-50 text-red-700' };
@@ -134,6 +136,8 @@ const TABS = [
   { key: 'docs', label: 'Docs' },
   { key: 'activities', label: 'Activities' },
 ];
+// Tabs that only make sense once the trip is booked (hidden for enquiry-stage trips).
+const BOOKING_TABS = ['services', 'accounting', 'docs'];
 
 const STATUS_BADGE = {
   new_query: 'bg-blue-50 text-blue-700', in_progress: 'bg-amber-50 text-amber-700',
@@ -142,7 +146,6 @@ const STATUS_BADGE = {
 };
 const ALL_LABEL = { ...TERMINAL_LABEL, ...Object.fromEntries(PIPELINE.map((p) => [p.value, p.label])) };
 
-const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
 const pkgOf = (quote) => quote?.packages?.[quote.selectedPackageIndex || 0] || quote?.packages?.[0] || null;
 const paxLabel = (pax) => pax ? `${pax.adults || 0}A${pax.children?.length ? `, ${pax.children.length}C` : ''}` : '';
 
@@ -199,6 +202,12 @@ export default function QueryDetailPage() {
   const dests = (q.destinations || []).map((d) => d.name).join(', ');
   const pkgTotal = quotes.find((x) => x.status === 'accepted')?.pricing?.total ?? quotes[0]?.pricing?.total ?? 0;
 
+  // Booking-only tabs are hidden while the trip is still an enquiry (new query / in progress);
+  // they appear once it's converted/booked.
+  const isBooked = ['converted', 'on_trip', 'past'].includes(q.status);
+  const visibleTabs = TABS.filter((t) => isBooked || !BOOKING_TABS.includes(t.key));
+  const activeTab = visibleTabs.some((t) => t.key === tab) ? tab : 'basic';
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -245,15 +254,15 @@ export default function QueryDetailPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-6 overflow-x-auto border-b border-gray-200 bg-white px-6">
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-800')}>
+        {visibleTabs.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', activeTab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-800')}>
             {t.label}{t.key === 'quotes' && quotes.length ? <span className="rounded-full bg-gray-100 px-1.5 text-xs">{quotes.length}</span> : null}
           </button>
         ))}
       </div>
 
       <div className="px-6 py-5">
-        {tab === 'basic' && (
+        {activeTab === 'basic' && (
           <BasicDetailsTab
             q={q} quote={fullQuote} comments={comments}
             onAddComment={() => setCommentOpen(true)}
@@ -262,11 +271,11 @@ export default function QueryDetailPage() {
             onSaved={refresh}
           />
         )}
-        {tab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} />}
-        {tab === 'services' && <ServicesBookingsTab quote={fullQuote} startDate={q.startDate} />}
-        {tab === 'accounting' && <AccountingTab id={id} />}
-        {tab === 'docs' && <DocsTab quotes={quotes} />}
-        {tab === 'activities' && <ActivitiesTab id={id} />}
+        {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} />}
+        {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} />}
+        {activeTab === 'accounting' && <AccountingTab id={id} />}
+        {activeTab === 'docs' && <DocsTab quotes={quotes} />}
+        {activeTab === 'activities' && <ActivitiesTab id={id} />}
       </div>
 
       <LostModal mode={lostMode} onClose={() => setLostMode(null)} onConfirm={(d) => lostMut.mutate(d)} pending={lostMut.isPending} />
@@ -456,7 +465,7 @@ function ArrivalDeparture({ q, onSaved }) {
 }
 
 /* ------------------------------- All Quotes ------------------------------ */
-function QuotesTab({ id, quotes, onShare }) {
+export function QuotesTab({ id, quotes, onShare }) {
   return (
     <div className="card p-5">
       <div className="mb-3 flex items-center justify-between">
@@ -486,81 +495,248 @@ function QuotesTab({ id, quotes, onShare }) {
   );
 }
 
-/* --------------------------- Services Bookings --------------------------- */
-function ServicesBookingsTab({ quote, startDate }) {
-  const [sub, setSub] = useState('hotels');
-  const pkg = pkgOf(quote);
-  if (!quote || !pkg) return <div className="card p-8 text-center text-sm text-gray-400">No confirmed quote/booking yet.</div>;
+/* ------------------------------- Accounting ------------------------------ */
 
-  const stays = (pkg.hotels || []).map((h) => {
-    const nights = (h.nights || []).slice().sort((a, b) => a - b);
-    const checkIn = startDate ? addDays(startDate, (nights[0] || 1) - 1) : null;
-    return { ...h, count: Math.max(1, nights.length), checkIn, checkOut: checkIn ? addDays(checkIn, Math.max(1, nights.length)) : null };
+function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRows, onSaved }) {
+  const qc = useQueryClient();
+  const [rows, setRows] = useState([]);
+  const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setComment('');
+    if (existingRows.length) {
+      setRows(existingRows.map((r) => ({
+        _id: r.paid ? r._id : undefined,
+        amount: r.amount,
+        dueDate: r.dueDate ? format(new Date(r.dueDate), 'yyyy-MM-dd') : '',
+        paid: r.paid,
+        percent: totalAmount ? +(r.amount / totalAmount * 100).toFixed(1) : 0,
+      })));
+    } else {
+      // Default 2-instalment schedule: 50% now, 50% on trip start
+      const half = Math.round(totalAmount / 2);
+      setRows([
+        { amount: half, dueDate: '', percent: 50, paid: false },
+        { amount: totalAmount - half, dueDate: '', percent: 50, paid: false },
+      ]);
+    }
+  }, [open, existingRows, totalAmount]);
+
+  const ordLabel = (i, len) => {
+    if (i === 0) return 'First';
+    if (i === len - 1) return 'Last';
+    return null;
+  };
+
+  const updateRow = (i, field, value) => {
+    setRows((prev) => prev.map((r, idx) => {
+      if (idx !== i) return r;
+      const next = { ...r, [field]: value };
+      if (field === 'amount') next.percent = totalAmount ? +(Number(value) / totalAmount * 100).toFixed(1) : 0;
+      if (field === 'percent') next.amount = Math.round(totalAmount * Number(value) / 100);
+      return next;
+    }));
+  };
+
+  const addRow = () => setRows((prev) => [...prev, { amount: 0, dueDate: '', percent: 0, paid: false }]);
+  const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));
+
+  const saveMut = useMutation({
+    mutationFn: () => bookingsApi.updateInstalmentSchedule(bookingId, { instalments: rows, comment }),
+    onSuccess: () => {
+      toast.success('Instalment schedule updated');
+      qc.invalidateQueries({ queryKey: ['inst'] });
+      onSaved?.();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message || 'Could not save schedule'),
   });
-  const fmtD = (d) => (d ? format(new Date(d), 'd MMM') : '—');
+
+  const rowsSum = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const diff = totalAmount - rowsSum;
 
   return (
-    <div className="flex gap-6">
-      <aside className="w-36 shrink-0 space-y-1">
-        {[{ k: 'hotels', l: 'Hotels', icon: Hotel }, { k: 'operational', l: 'Operational', icon: Bus }, { k: 'flights', l: 'Flights', icon: Plane }].map((s) => (
-          <button key={s.k} onClick={() => setSub(s.k)} className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm', sub === s.k ? 'bg-brand-50 font-semibold text-brand-700' : 'text-gray-600 hover:bg-gray-50')}><s.icon size={14} /> {s.l}</button>
-        ))}
-      </aside>
-      <div className="min-w-0 flex-1">
-        {sub === 'hotels' && (
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600"><tr><th className="px-4 py-3">Hotel</th><th className="px-4 py-3">Stay</th><th className="px-4 py-3">Room / Meal</th><th className="px-4 py-3">Status</th></tr></thead>
+    <Modal open={open} onClose={onClose} title="Update Instalments Amount" width="max-w-2xl">
+      <div className="space-y-4">
+        {/* Total */}
+        <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+          <p className="text-xs font-semibold text-slate-500 mb-1">Total Payment Amount (INR)</p>
+          <p className="text-lg font-bold text-slate-900">{Number(totalAmount).toFixed(2)}</p>
+        </div>
+
+        {/* Instalment rows */}
+        <div>
+          <p className="text-sm font-semibold text-gray-800 mb-2">Instalments</p>
+          <div className="rounded-lg border border-gray-200">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '160px' }} />
+                <col style={{ width: '100px' }} />
+                <col />
+                <col style={{ width: '28px' }} />
+              </colgroup>
+              <thead className="bg-slate-100 text-xs font-semibold text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Amount (INR)</th>
+                  <th className="px-3 py-2 text-left">%</th>
+                  <th className="px-3 py-2 text-left">Due Date</th>
+                  <th className="py-2" />
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-100">
-                {stays.map((h, i) => (
-                  <tr key={i}>
-                    <td className="px-4 py-3"><span className="font-medium text-brand-700">{h.hotelName}</span>{h.city ? <div className="text-xs text-gray-400">{h.city}</div> : null}</td>
-                    <td className="px-4 py-3 text-gray-600">{fmtD(h.checkIn)} – {fmtD(h.checkOut)} · {h.count}N</td>
-                    <td className="px-4 py-3 text-gray-600">{h.rooms} {h.roomType || 'Room'}{h.mealPlan ? ` · ${h.mealPlan}` : ''}</td>
-                    <td className="px-4 py-3"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">Initialized</span></td>
-                  </tr>
-                ))}
-                {!stays.length && <tr><td colSpan={4} className="py-8 text-center text-gray-400">No hotels.</td></tr>}
+                {rows.map((r, i) => {
+                  const lbl = ordLabel(i, rows.length);
+                  return (
+                    <tr key={i} className={r.paid ? 'bg-green-50/40' : ''}>
+                      <td className="px-3 py-2.5 text-xs font-medium text-gray-500 align-middle">
+                        <div>{i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`}</div>
+                        {lbl && <div className="mt-0.5 text-[10px] rounded bg-slate-200 text-slate-600 px-1 inline-block">{lbl}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
+                        <input
+                          type="number"
+                          className="input w-full text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                          value={r.amount}
+                          disabled={r.paid}
+                          onChange={(e) => updateRow(i, 'amount', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="input w-full text-sm disabled:bg-slate-100"
+                          value={r.percent}
+                          disabled={r.paid}
+                          onChange={(e) => updateRow(i, 'percent', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
+                        {r.paid ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs text-gray-600">{r.dueDate ? format(new Date(r.dueDate), 'd MMM, yyyy') : '—'}</span>
+                            <span className="rounded bg-green-100 text-green-700 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap">Already Paid</span>
+                          </div>
+                        ) : (
+                          <input
+                            type="date"
+                            className="input w-full text-sm"
+                            value={r.dueDate}
+                            onChange={(e) => updateRow(i, 'dueDate', e.target.value)}
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {!r.paid && rows.filter((x) => !x.paid).length > 1 && (
+                          <button onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600 text-xs">✕</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        )}
-        {sub === 'operational' && (
-          <div className="space-y-2">
-            {(pkg.transports || []).map((t, i) => (
-              <div key={i} className="card flex items-center justify-between p-4">
-                <div>
-                  <span className="text-xs font-semibold text-brand-600">Day {t.day || i + 1}{startDate ? ` · ${fmtD(addDays(startDate, (t.day || 1) - 1))}` : ''}</span>
-                  <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
-                  {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
-                </div>
-                <div className="text-right text-sm text-gray-600">{(t.items || []).map((it) => `${it.qty}× ${it.type}`).join(', ')}</div>
-              </div>
-            ))}
-            {!(pkg.transports || []).length && <div className="card p-8 text-center text-sm text-gray-400">No operational services.</div>}
+          <div className="mt-2 flex items-center justify-between">
+            <button onClick={addRow} className="text-xs text-brand-600 hover:underline">+ Add instalment</button>
+            {Math.abs(diff) > 0 && (
+              <span className={cn('text-xs font-medium', diff > 0 ? 'text-amber-600' : 'text-rose-600')}>
+                {diff > 0 ? `Under by ₹${diff.toLocaleString('en-IN')}` : `Over by ₹${Math.abs(diff).toLocaleString('en-IN')}`}
+              </span>
+            )}
           </div>
-        )}
-        {sub === 'flights' && (
-          <div className="space-y-2">
-            {(pkg.flights || []).map((f, i) => (
-              <div key={i} className="card flex items-center justify-between p-4"><span className="font-medium text-gray-900">{f.label || 'Flight'}</span><span className="font-semibold text-gray-700">{money(f.given || f.cost, quote.currency)}</span></div>
-            ))}
-            {!(pkg.flights || []).length && <div className="card p-8 text-center text-sm text-gray-400">No flights added.</div>}
-          </div>
-        )}
+        </div>
+
+        {/* Comment */}
+        <div>
+          <label className="label">Comments</label>
+          <textarea
+            className="input min-h-[70px] resize-y"
+            placeholder="Regarding payment or instalment changes..."
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="btn-primary">
+            {saveMut.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
-/* ------------------------------- Accounting ------------------------------ */
-function AccountingTab({ id }) {
+function LogPaymentModal({ inst, onClose, onSaved }) {
+  const qc = useQueryClient();
+  const [f, setF] = useState({
+    paidAmount: inst?.amount || 0,
+    paidOn: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    reference: '',
+  });
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  const mut = useMutation({
+    mutationFn: () => installmentsApi.logPayment(inst._id, { ...f, paidAmount: Number(f.paidAmount) }),
+    onSuccess: () => {
+      toast.success('Payment logged successfully');
+      qc.invalidateQueries({ queryKey: ['inst'] });
+      onSaved?.();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message || 'Could not log payment'),
+  });
+
+  if (!inst) return null;
+  return (
+    <Modal open onClose={onClose} title="Log Payment" width="max-w-md">
+      <div className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs text-slate-500">Due Amount (INR)</p>
+          <p className="text-xl font-bold text-slate-900">{(inst.amount || 0).toLocaleString('en-IN')}</p>
+          {inst.dueDate && (
+            <p className="mt-0.5 text-xs text-slate-400">Due: {format(new Date(inst.dueDate), 'd MMM, yyyy')}</p>
+          )}
+        </div>
+        <div>
+          <label className="label">Paid Amount (INR)</label>
+          <input type="number" className="input" value={f.paidAmount} onChange={set('paidAmount')} />
+        </div>
+        <div>
+          <label className="label">Paid On</label>
+          <input type="datetime-local" className="input" value={f.paidOn} onChange={set('paidOn')} />
+        </div>
+        <div>
+          <label className="label">Reference ID <span className="text-slate-400 text-xs">(optional)</span></label>
+          <input className="input" placeholder="UTR / cheque / reference number" value={f.reference} onChange={set('reference')} />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending || !f.paidAmount} className="btn-primary">
+            {mut.isPending ? 'Saving…' : 'Log Payment'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export function AccountingTab({ id, bookingId, totalAmount }) {
+  const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inst', id], queryFn: () => installmentsApi.list({ query: id, direction: 'incoming' }) });
   const rows = data?.data || [];
-  const total = rows.reduce((s, r) => s + (r.amount || 0), 0);
-  const paid = rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
+  const paidTotal = rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
+  const scheduleTotal = rows.reduce((s, r) => s + (r.amount || 0), 0);
+  const effectiveTotal = totalAmount || scheduleTotal;
   const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : '—');
   const STATUS = { paid: 'text-green-700 bg-green-50', overdue: 'text-rose-700 bg-rose-50', unverified: 'text-amber-700 bg-amber-50', upcoming: 'text-slate-600 bg-slate-100' };
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [payInst, setPayInst] = useState(null); // instalment being paid
 
   return (
     <div className="flex gap-6">
@@ -571,33 +747,88 @@ function AccountingTab({ id }) {
         <h3 className="mb-3 font-semibold text-gray-900">Payments from customer</h3>
         <div className="mb-4 rounded-xl border border-gray-200 bg-white px-5 py-3">
           <p className="text-xs uppercase tracking-wide text-gray-400">INR</p>
-          <p className="text-xl font-bold text-gray-900"><span className="text-green-600">+ {paid.toLocaleString('en-IN')}</span> <span className="text-gray-300">/</span> {total.toLocaleString('en-IN')}</p>
+          <p className="text-xl font-bold text-gray-900">
+            <span className="text-green-600">+ {paidTotal.toLocaleString('en-IN')}</span>
+            {' '}<span className="text-gray-300">/</span>{' '}
+            {effectiveTotal.toLocaleString('en-IN')}
+          </p>
         </div>
         {isLoading ? <div className="py-10 text-center text-gray-400">Loading…</div> : !rows.length ? (
           <div className="card p-8 text-center text-sm text-gray-400">No instalment schedule yet. It is generated when the booking is created.</div>
         ) : (
           <div className="card card-flush overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600"><tr><th className="px-4 py-3">Amount (INR)</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Due Date</th></tr></thead>
+              <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
+                <tr>
+                  <th className="px-4 py-3">Amount (INR)</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Due Date</th>
+                  <th className="px-4 py-3">Comments</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((r) => (
                   <tr key={r._id}>
                     <td className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-3"><span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS[r.status] || 'bg-slate-100')}>{r.status}</span></td>
+                    <td className="px-4 py-3">
+                      <span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS[r.status] || 'bg-slate-100')}>{r.status}</span>
+                      {r.paid && r.paidAmount && (
+                        <p className="mt-0.5 text-xs text-green-600">Paid: ₹{r.paidAmount.toLocaleString('en-IN')}</p>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{dt(r.dueDate)}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">
+                      {r.comments?.length ? r.comments[r.comments.length - 1].body : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {!r.paid && (
+                        <button
+                          onClick={() => setPayInst(r)}
+                          className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                        >
+                          + Add Payment
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {bookingId && (
+          <div className="mt-3">
+            <button onClick={() => setScheduleOpen(true)} className="btn-secondary text-sm">
+              Update Payment / Instalments
+            </button>
+          </div>
+        )}
       </div>
+
+      {bookingId && (
+        <UpdateScheduleModal
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          bookingId={bookingId}
+          totalAmount={effectiveTotal}
+          existingRows={rows}
+        />
+      )}
+      {payInst && (
+        <LogPaymentModal
+          inst={payInst}
+          onClose={() => setPayInst(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['inst', id] })}
+        />
+      )}
     </div>
   );
 }
 
 /* ---------------------------------- Docs --------------------------------- */
-function DocsTab({ quotes }) {
+export function DocsTab({ quotes }) {
   const accepted = quotes.find((x) => x.status === 'accepted') || quotes[0];
   if (!accepted) return <div className="card p-8 text-center text-sm text-gray-400">No quote to generate documents from yet.</div>;
   return (
@@ -610,7 +841,7 @@ function DocsTab({ quotes }) {
 }
 
 /* -------------------------------- Activities ------------------------------ */
-function ActivitiesTab({ id }) {
+export function ActivitiesTab({ id }) {
   const { data: items = [], isLoading } = useQuery({ queryKey: ['activity-log', id], queryFn: () => activityLogApi.list(id) });
   if (isLoading) return <div className="py-10 text-center text-gray-400">Loading…</div>;
   if (!items.length) return <div className="card p-8 text-center text-sm text-gray-400">No activity recorded yet.</div>;

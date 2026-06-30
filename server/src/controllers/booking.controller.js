@@ -1,11 +1,13 @@
 import { Booking } from '../models/Booking.js';
 import { Quote } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
+import { Installment } from '../models/Installment.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { generateForBooking } from './installment.controller.js';
 import { logActivity } from './activity.controller.js';
+import { autoGenerateServiceBookings } from './serviceBooking.controller.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -82,6 +84,14 @@ export const createFromQuote = asyncHandler(async (req, res) => {
     /* non-fatal — booking still succeeds even if schedule generation fails */
   }
 
+  // Auto-generate service booking lines (hotel / operational / flight) so the
+  // Services Bookings tab is populated immediately after conversion.
+  try {
+    await autoGenerateServiceBookings(query._id, quote._id, req.user._id);
+  } catch {
+    /* non-fatal */
+  }
+
   const populated = await booking.populate(POPULATE);
   return created(res, populated);
 });
@@ -98,6 +108,62 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
     await Query.findByIdAndUpdate(b.query._id || b.query, { status: QUERY_STATUS_FOR[status] });
   }
   return ok(res, b);
+});
+
+// Retry instalment creation on E11000 (duplicate installmentNumber from counter race).
+async function createInstalment(data) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await Installment.create({ ...data });
+    } catch (err) {
+      if (err.code === 11000 && attempt < 3) continue;
+      throw err;
+    }
+  }
+}
+
+// PUT /api/bookings/:id/instalment-schedule
+// Replaces all unpaid incoming instalments with the new schedule.
+export const updateInstalmentSchedule = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id)
+    .populate('destinations', 'name')
+    .populate('query', 'queryNumber');
+  if (!booking) throw ApiError.notFound('Booking not found');
+
+  const { instalments = [], comment } = req.body;
+  if (!Array.isArray(instalments) || instalments.length === 0) {
+    throw ApiError.badRequest('At least one instalment is required');
+  }
+
+  // Delete all existing unpaid incoming instalments for this booking.
+  await Installment.deleteMany({ booking: booking._id, direction: 'incoming', paid: false });
+
+  const base = {
+    booking: booking._id,
+    query: booking.query?._id || booking.query,
+    tripId: booking.query?.queryNumber ? String(booking.query.queryNumber) : undefined,
+    guest: booking.guest,
+    destinations: (booking.destinations || []).map((d) => d.name).filter(Boolean),
+    startDate: booking.startDate,
+    endDate: booking.endDate,
+    currency: booking.currency || 'INR',
+    createdBy: req.user._id,
+    direction: 'incoming',
+  };
+
+  for (const inst of instalments) {
+    if (inst._id) continue; // already paid — backend kept it, skip recreation
+    // eslint-disable-next-line no-await-in-loop
+    await createInstalment({
+      ...base,
+      amount: Math.round(Number(inst.amount) || 0),
+      dueDate: inst.dueDate ? new Date(inst.dueDate) : booking.startDate,
+      ...(comment ? { comments: [{ body: comment, createdBy: req.user._id }] } : {}),
+    });
+  }
+
+  const updated = await Installment.find({ booking: booking._id, direction: 'incoming' }).sort('dueDate');
+  return ok(res, updated);
 });
 
 // DELETE /api/bookings/:id

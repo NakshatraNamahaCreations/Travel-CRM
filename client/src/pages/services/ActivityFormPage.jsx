@@ -1,17 +1,21 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, MapPin, Users, Ticket } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import { activitiesApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import FormSection from '../../components/form/FormSection.jsx';
 import { LocationList, DayPicker, IntervalList } from '../../components/form/Repeaters.jsx';
+import RichTextEditor from '../../components/form/RichTextEditor.jsx';
 
 const DURATION_UNITS = ['mins', 'hours', 'days'];
 const emptyTicket = () => ({ name: '', internalRefCode: '', slots: '', duration: '', durationUnit: 'mins', details: '', closedDays: [], closedDates: [] });
 
 export default function ActivityFormPage() {
+  const { id } = useParams();
+  const isEdit = !!id;
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
@@ -32,6 +36,46 @@ export default function ActivityFormPage() {
     ticketTypes: [emptyTicket()],
   });
 
+  const { data: existing } = useQuery({
+    queryKey: ['activity', id],
+    queryFn: () => activitiesApi.get(id),
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!existing) return;
+    setForm({
+      name: existing.name || '',
+      details: existing.details || '',
+      destinations: existing.destinations || [],
+      useSamePickDrop: existing.useSamePickDrop ?? true,
+      pickupLocations: existing.pickupLocations?.length ? existing.pickupLocations : [''],
+      dropLocations: existing.dropLocations?.length ? existing.dropLocations : [''],
+      useCheckinAsPickup: existing.useCheckinAsPickup ?? false,
+      useCheckinAsDrop: existing.useCheckinAsDrop ?? false,
+      ageConfig: existing.ageConfig || 'Adult, Child (6-12)',
+      complimentaryAge: existing.complimentaryAge ?? '',
+      useSameClosing: existing.useSameClosing ?? true,
+      closedDays: existing.closedDays || [],
+      closedDates: existing.closedDates || [],
+      ticketTypes: existing.ticketTypes?.length
+        ? existing.ticketTypes.map((t) => ({
+            _id: t._id,
+            name: t.name || '',
+            internalRefCode: t.internalRefCode || '',
+            slots: t.slots || '',
+            duration: t.duration ?? '',
+            durationUnit: t.durationUnit || 'mins',
+            details: t.details || '',
+            closedDays: t.closedDays || [],
+            closedDates: t.closedDates || [],
+            isActive: t.isActive,
+            imageUrl: t.imageUrl || '',
+          }))
+        : [emptyTicket()],
+    });
+  }, [existing]);
+
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const setEvt = (k) => (e) => set(k)(e.target.value);
   const setTicket = (i, patch) => set('ticketTypes')(form.ticketTypes.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
@@ -40,38 +84,49 @@ export default function ActivityFormPage() {
 
   const tickets = form.ticketTypes.filter((t) => t.name.trim());
 
+  const buildPayload = () => ({
+    name: form.name,
+    details: form.details || undefined,
+    destinations: form.destinations.map((d) => d._id ?? d),
+    useSamePickDrop: form.useSamePickDrop,
+    pickupLocations: form.pickupLocations.filter((x) => x.trim()),
+    dropLocations: form.dropLocations.filter((x) => x.trim()),
+    useCheckinAsPickup: form.useCheckinAsPickup,
+    useCheckinAsDrop: form.useCheckinAsDrop,
+    ageConfig: form.ageConfig,
+    complimentaryAge: form.complimentaryAge !== '' ? Number(form.complimentaryAge) : undefined,
+    useSameClosing: form.useSameClosing,
+    closedDays: form.useSameClosing ? form.closedDays : [],
+    closedDates: form.useSameClosing ? form.closedDates.filter((d) => d.start && d.end) : [],
+    ticketTypes: tickets.map((t) => ({
+      ...(t._id ? { _id: t._id } : {}),
+      name: t.name,
+      internalRefCode: t.internalRefCode || undefined,
+      slots: t.slots || undefined,
+      duration: t.duration !== '' ? Number(t.duration) : undefined,
+      durationUnit: t.durationUnit,
+      details: t.details || undefined,
+      isActive: t.isActive,
+      imageUrl: t.imageUrl || undefined,
+      closedDays: form.useSameClosing ? [] : t.closedDays,
+      closedDates: form.useSameClosing ? [] : t.closedDates.filter((d) => d.start && d.end),
+    })),
+  });
+
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error('Activity name is required');
     setSaving(true);
     try {
-      const saved = await activitiesApi.create({
-        name: form.name,
-        details: form.details || undefined,
-        destinations: form.destinations.map((d) => d._id),
-        useSamePickDrop: form.useSamePickDrop,
-        pickupLocations: form.pickupLocations.filter((x) => x.trim()),
-        dropLocations: form.dropLocations.filter((x) => x.trim()),
-        useCheckinAsPickup: form.useCheckinAsPickup,
-        useCheckinAsDrop: form.useCheckinAsDrop,
-        ageConfig: form.ageConfig,
-        complimentaryAge: form.complimentaryAge !== '' ? Number(form.complimentaryAge) : undefined,
-        useSameClosing: form.useSameClosing,
-        closedDays: form.useSameClosing ? form.closedDays : [],
-        closedDates: form.useSameClosing ? form.closedDates.filter((d) => d.start && d.end) : [],
-        ticketTypes: tickets.map((t) => ({
-          name: t.name,
-          internalRefCode: t.internalRefCode || undefined,
-          slots: t.slots || undefined,
-          duration: t.duration !== '' ? Number(t.duration) : undefined,
-          durationUnit: t.durationUnit,
-          details: t.details || undefined,
-          closedDays: form.useSameClosing ? [] : t.closedDays,
-          closedDates: form.useSameClosing ? [] : t.closedDates.filter((d) => d.start && d.end),
-        })),
-      });
-      toast.success('Activity created');
-      navigate(`/services/activities/${saved._id}`);
+      if (isEdit) {
+        await activitiesApi.update(id, buildPayload());
+        toast.success('Activity updated');
+        navigate(`/services/activities/${id}`);
+      } else {
+        const saved = await activitiesApi.create(buildPayload());
+        toast.success('Activity created');
+        navigate(`/services/activities/${saved._id}`);
+      }
     } catch (err) {
       toast.error(err.message || 'Failed to save');
     } finally {
@@ -83,7 +138,7 @@ export default function ActivityFormPage() {
     <div>
       <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 text-sm">
         <button onClick={() => navigate(-1)} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>
-        <span className="font-semibold text-slate-900">New Travel Activity</span>
+        <span className="font-semibold text-slate-900">{isEdit ? 'Edit Travel Activity' : 'New Travel Activity'}</span>
         <span className="text-slate-400">/</span>
         <Link to="/services/activities" className="text-slate-500 hover:text-slate-800">Travel Activities</Link>
       </div>
@@ -100,7 +155,10 @@ export default function ActivityFormPage() {
           <FormSection icon={MapPin} title="Activity Details" description="Please provide basic details regarding the activity.">
             <div><label className="label">Name</label><input className="input" value={form.name} onChange={setEvt('name')} placeholder="e.g. Port Blair To Havelock : Private Catamaran Ferry" /></div>
             {!quickAdd && (
-              <div><label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label><textarea rows={3} className="input" value={form.details} onChange={setEvt('details')} placeholder="Some details regarding the activity" /></div>
+              <div>
+                <label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label>
+                <RichTextEditor value={form.details} onChange={(html) => setForm((f) => ({ ...f, details: html }))} placeholder="Some details regarding the activity" />
+              </div>
             )}
 
             {!quickAdd && (
@@ -180,7 +238,10 @@ export default function ActivityFormPage() {
                     </div>
                   )}
 
-                  <div className="mt-3"><label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label><textarea rows={2} className="input" value={t.details} onChange={(e) => setTicket(i, { details: e.target.value })} placeholder="Some details regarding this ticket type" /></div>
+                  <div className="mt-3">
+                    <label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label>
+                    <RichTextEditor value={t.details} onChange={(html) => setTicket(i, { details: html })} placeholder="Some details regarding this ticket type" minHeight="90px" />
+                  </div>
 
                   {!quickAdd && !form.useSameClosing && (
                     <div className="mt-3 grid gap-3">
@@ -204,12 +265,27 @@ export default function ActivityFormPage() {
           <div className="border-t border-slate-100 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Summary</p>
             <p className="mt-1 font-bold text-slate-900">{form.name.trim() || '[Title]'}</p>
-            <p className="text-sm text-slate-500">{tickets.length ? tickets.map((t) => t.name).join(' · ') : '[Ticket itinerary]'}</p>
+            {tickets.length ? (
+              <div className="mt-2 space-y-2">
+                {tickets.map((t, i) => (
+                  <div key={i}>
+                    <p className="text-sm font-semibold text-slate-800">{form.name.trim() ? `${form.name.trim()} - ${t.name || '[Ticket Name]'}` : t.name || '[Ticket Name]'}</p>
+                    {t.details ? (
+                      <div className="rich-content text-xs text-slate-500" dangerouslySetInnerHTML={{ __html: t.details }} />
+                    ) : (
+                      <p className="text-xs text-slate-400">[Ticket Itinerary]</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-slate-400">[Ticket itinerary]</p>
+            )}
           </div>
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-4">
-          <button type="submit" className="btn-primary px-8" disabled={saving}>{saving ? 'Saving…' : 'Save Details'}</button>
+          <button type="submit" className="btn-primary px-8" disabled={saving}>{saving ? 'Saving…' : isEdit ? 'Update Details' : 'Save Details'}</button>
           <button type="button" onClick={() => navigate('/services/activities')} className="text-sm font-medium text-slate-600 hover:text-slate-900">Cancel</button>
         </div>
       </form>
