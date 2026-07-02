@@ -63,8 +63,36 @@ function buildFilter(query, user) {
   return filter;
 }
 
+/* ---- Automatic date-based stage rolling ----
+   converted → on_trip once the start date arrives, and
+   converted/on_trip → past once the trip has ended (start + nights).
+   Runs lazily (throttled) whenever the trips list / stats are viewed. */
+let lastRollAt = 0;
+async function rollTripStatuses() {
+  const now = Date.now();
+  if (now - lastRollAt < 5 * 60 * 1000) return; // at most every 5 minutes
+  lastRollAt = now;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Trip end = startDate + nights days (checkout day counts as still on trip).
+  const endExpr = { $add: ['$startDate', { $multiply: [{ $ifNull: ['$nights', 0] }, 86400000] }] };
+  try {
+    await Query.updateMany(
+      { status: { $in: ['converted', 'on_trip'] }, startDate: { $ne: null }, $expr: { $lt: [endExpr, today] } },
+      { status: 'past' }
+    );
+    await Query.updateMany(
+      { status: 'converted', startDate: { $ne: null, $lte: new Date() }, $expr: { $gte: [endExpr, today] } },
+      { status: 'on_trip' }
+    );
+  } catch {
+    /* non-fatal — the list still renders with current statuses */
+  }
+}
+
 // GET /api/queries
 export const listQueries = asyncHandler(async (req, res) => {
+  await rollTripStatuses();
   const filter = buildFilter(req.query, req.user);
   const total = await Query.countDocuments(filter);
   const meta = paginate(req.query, total);
@@ -78,6 +106,7 @@ export const listQueries = asyncHandler(async (req, res) => {
 
 // GET /api/queries/stats  — counts per pipeline status (for the sidebar tabs)
 export const queryStats = asyncHandler(async (req, res) => {
+  await rollTripStatuses();
   const rows = await Query.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]);
   const byStatus = Object.fromEntries(rows.map((r) => [r._id, r.count]));
   const counts = QUERY_STATUSES.map((s) => ({

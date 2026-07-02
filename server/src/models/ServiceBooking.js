@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 // A single bookable service line within a trip (one hotel stay or one operational
 // service). Created from the accepted quote, then worked through a status workflow
 // with its own price, tag and comments.
-export const SERVICE_BOOKING_KINDS = ['hotel', 'operational'];
+export const SERVICE_BOOKING_KINDS = ['hotel', 'operational', 'flight'];
 export const SERVICE_BOOKING_STATUSES = ['initialized', 'booked', 'confirmed', 'cancelled'];
 
 const serviceBookingSchema = new mongoose.Schema(
@@ -22,6 +22,7 @@ const serviceBookingSchema = new mongoose.Schema(
     aweb: { type: Number, default: 0 },
     cweb: { type: Number, default: 0 },
     nights: [{ type: Number }],
+    day: { type: Number }, // trip day number (operational services)
     checkIn: { type: Date },
     checkOut: { type: Date },
     detail: { type: String, trim: true }, // free-text "Stay and Services" breakdown

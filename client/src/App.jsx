@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import Placeholder from './components/Placeholder.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
 import TripsListPage from './pages/trips/TripsListPage.jsx';
 import TripPlanRequestsPage from './pages/trips/TripPlanRequestsPage.jsx';
 import NewQueryPage from './pages/trips/NewQueryPage.jsx';
@@ -12,6 +13,7 @@ import UploadQueriesPage from './pages/trips/UploadQueriesPage.jsx';
 import QueryDetailPage from './pages/trips/QueryDetailPage.jsx';
 import QuoteBuilderPage from './pages/quotes/QuoteBuilderPage.jsx';
 import QuoteViewPage from './pages/quotes/QuoteViewPage.jsx';
+import ConversionPage from './pages/quotes/ConversionPage.jsx';
 import QuotationDocument from './pages/quotes/QuotationDocument.jsx';
 import SalesReportPage from './pages/reports/SalesReportPage.jsx';
 import OperationsReportPage from './pages/reports/OperationsReportPage.jsx';
@@ -82,6 +84,7 @@ export default function App() {
         <Route path="/trips/:id/edit" element={<NewQueryPage />} />
         <Route path="/trips/:id" element={<QueryDetailPage />} />
         <Route path="/trips/:queryId/quote/new" element={<QuoteBuilderPage mode="new" />} />
+        <Route path="/trips/:queryId/convert/:quoteId" element={<ConversionPage />} />
         <Route path="/quotes/:id" element={<QuoteViewPage />} />
         <Route path="/quotes/:id/edit" element={<QuoteBuilderPage mode="edit" />} />
         <Route path="/sales-reports" element={<SalesReportPage />} />
@@ -144,7 +147,7 @@ export default function App() {
         <Route path="/settings/states" element={<ProtectedRoute roles={['admin', 'manager']}><StatesPage /></ProtectedRoute>} />
         <Route path="/settings/profile" element={<ProfilePage />} />
         <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/notifications" element={<Placeholder title="Notifications" />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/whats-new" element={<Placeholder title="What's New" />} />
       </Route>
 

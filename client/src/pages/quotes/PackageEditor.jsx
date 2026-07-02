@@ -5,9 +5,8 @@ import toast from 'react-hot-toast';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import Modal from '../../components/ui/Modal.jsx';
-import { hotelsApi } from '../../api/services.js';
+import { hotelsApi, transportApi } from '../../api/services.js';
 import { lookupApi } from '../../api/quotes.js';
-import { citiesApi } from '../../api/locations.js';
 import { optionsApi } from '../../api/options.js';
 import { hotelRowCost, hotelPerNight, computePackage, money } from '../../lib/pricing.js';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
@@ -47,8 +46,21 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
   /* ----- Inclusions ----- */
   const setInc = (i, patch) => update({ inclusions: pkg.inclusions.map((x, idx) => (idx === i ? { ...x, ...patch } : x)) });
-  const addInc = () => update({ inclusions: [...(pkg.inclusions || []), { service: '', hotelName: '', night: 1, price: 0, comments: '' }] });
+  const addInc = () => update({ inclusions: [...(pkg.inclusions || []), { service: '', hotelName: '', night: 0, price: 0, comments: '' }] });
   const rmInc = (i) => update({ inclusions: pkg.inclusions.filter((_, idx) => idx !== i) });
+
+  // Hotel options for inclusion rows: hotels already in this package first, then the master list.
+  const inclusionHotelOptions = (q) => {
+    const term = (q || '').toLowerCase();
+    const inPkg = [...new Set((pkg.hotels || []).map((h) => h.hotelName).filter(Boolean))]
+      .filter((n) => n.toLowerCase().includes(term))
+      .map((n) => ({ _id: n, name: n }));
+    return hotelsApi.list({ search: q }).then((r) => {
+      const seen = new Set(inPkg.map((o) => o.name));
+      const master = (r.data || []).filter((h) => h.name && !seen.has(h.name)).map((h) => ({ _id: h.name, name: h.name }));
+      return [...inPkg, ...master];
+    }).catch(() => inPkg);
+  };
 
   /* ----- Transports ----- */
   const [collapsedTr, setCollapsedTr] = useState({});
@@ -66,6 +78,31 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const addTrItem = (ti) => setTr(ti, { items: [...pkg.transports[ti].items, { type: '', qty: 1, rate: 0, given: 0 }] });
   const rmTrItem = (ti, ii) => setTr(ti, { items: pkg.transports[ti].items.filter((_, idx) => idx !== ii) });
 
+  // Auto-fill cost rates from the Transport Prices master (needs a master service picked).
+  const autoTrRate = async (ti) => {
+    const t = pkg.transports[ti];
+    const serviceId = typeof t.service === 'object' ? t.service?._id : t.service;
+    if (!serviceId) return toast.error('Pick a transport service from the master list first');
+    const dayNo = (Array.isArray(t.days) ? t.days[0] : t.day) || 1;
+    const date = startDate ? format(addDays(new Date(startDate), dayNo - 1), 'yyyy-MM-dd') : undefined;
+    const cabList = pkg.sameCabType ? sharedItems : (t.items || []);
+    const updated = [...(t.items || [])];
+    let hits = 0;
+    for (let ii = 0; ii < cabList.length; ii++) {
+      const type = cabList[ii]?.type;
+      if (!type) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const r = await lookupApi.transportRate({ service: serviceId, config: type, date });
+      if (r) {
+        while (updated.length <= ii) updated.push({ type: '', qty: 1, rate: 0, given: 0 });
+        updated[ii] = { ...updated[ii], rate: r.price };
+        hits++;
+      }
+    }
+    if (hits) { setTr(ti, { items: updated }); toast.success(`Fetched ${hits} rate(s) from price list`); }
+    else toast('No matching rate — enter manually', { icon: '✏️' });
+  };
+
   /* ----- Shared Cab Types ----- */
   const sharedItems = pkg.sharedCabItems || [emptySharedItem()];
   const setSharedItem = (ii, patch) => update({ sharedCabItems: sharedItems.map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
@@ -73,9 +110,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const rmSharedItem = (ii) => update({ sharedCabItems: sharedItems.filter((_, idx) => idx !== ii) });
   const setSameCab = (v) => update({ sameCabType: v });
 
-  /* ----- Extras ----- */
+  /* ----- Extras (special trip services) ----- */
   const setExtra = (i, patch) => update({ extras: pkg.extras.map((e, idx) => (idx === i ? { ...e, ...patch } : e)) });
-  const addExtra = () => update({ extras: [...(pkg.extras || []), { label: '', price: 0 }] });
+  const addExtra = () => update({ extras: [...(pkg.extras || []), { label: '', price: 0, date: '', comments: '' }] });
   const rmExtra = (i) => update({ extras: pkg.extras.filter((_, idx) => idx !== i) });
 
   return (
@@ -182,18 +219,50 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         </div>
 
         {/* Inclusions */}
-        <div className="mt-5 border-t border-gray-100 pt-4">
-          <p className="text-sm font-semibold text-gray-700">Any special inclusions in hotels</p>
-          <p className="mb-2 text-xs text-gray-400">Add any extra services for hotels e.g. special dinner, honeymoon cake etc.</p>
-          <div className="space-y-2">
+        <div className="mt-8 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+          <p className="text-sm font-bold text-slate-800">Any special inclusions in hotels</p>
+          <p className="mb-3 text-xs text-slate-400">Add any extra services for hotels e.g. special dinner, honeymoon cake etc.</p>
+          <div className="space-y-3">
+            {(pkg.inclusions || []).length > 0 && (
+              <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500">
+                <span className="col-span-3">Service</span>
+                <span className="col-span-3">Hotel</span>
+                <span className="col-span-2">Night</span>
+                <span className="col-span-2">Total Price ({currency})</span>
+                <span className="col-span-2">Comments</span>
+              </div>
+            )}
             {(pkg.inclusions || []).map((inc, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2">
-                <input className="input col-span-3" placeholder="Service e.g. Candle Light Dinner" value={inc.service} onChange={(e) => setInc(i, { service: e.target.value })} />
-                <input className="input col-span-3" placeholder="Hotel" value={inc.hotelName} onChange={(e) => setInc(i, { hotelName: e.target.value })} />
-                <input type="number" className="input col-span-1" placeholder="Night" value={inc.night} onChange={(e) => setInc(i, { night: Number(e.target.value) })} />
-                <input type="number" className="input col-span-2" placeholder="Price" value={inc.price} onChange={(e) => setInc(i, { price: Number(e.target.value) })} />
-                <input className="input col-span-2" placeholder="Comments" value={inc.comments} onChange={(e) => setInc(i, { comments: e.target.value })} />
-                <button type="button" onClick={() => rmInc(i)} className="col-span-1 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+              <div key={i} className="grid grid-cols-12 items-start gap-2">
+                <div className="col-span-3">
+                  <CreatableSelect category="hotelService" value={inc.service} onChange={(v) => setInc(i, { service: v })} placeholder="Select or add a service" />
+                  {!inc.service && <RequiredHint>Service field is required</RequiredHint>}
+                </div>
+                <div className="col-span-3">
+                  <AsyncSelect
+                    loadOptions={inclusionHotelOptions}
+                    value={inc.hotelName ? { _id: inc.hotelName, name: inc.hotelName } : null}
+                    onChange={(v) => setInc(i, { hotelName: v ? v.name : '' })}
+                    creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                    placeholder="Type to search…"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <select className="input" value={inc.night || ''} onChange={(e) => setInc(i, { night: Number(e.target.value) })}>
+                    <option value="">Select night…</option>
+                    {Array.from({ length: Math.max(1, nights || 1) }, (_, k) => k + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {startDate ? `${ordinal(n)} N (${format(addDays(new Date(startDate), n - 1), 'EEE d MMM')})` : `${ordinal(n)} N`}
+                      </option>
+                    ))}
+                  </select>
+                  {!inc.night && <RequiredHint>Please select a night</RequiredHint>}
+                </div>
+                <input type="number" className="input col-span-2" placeholder="e.g. 3000" value={inc.price} onChange={(e) => setInc(i, { price: Number(e.target.value) })} />
+                <div className="col-span-2 flex items-start gap-1">
+                  <input className="input flex-1" placeholder="Any comments" value={inc.comments} onChange={(e) => setInc(i, { comments: e.target.value })} />
+                  <button type="button" onClick={() => rmInc(i)} className="pt-3 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                </div>
               </div>
             ))}
             <button type="button" onClick={addInc} className="btn-secondary text-sm"><Plus size={13} /> Add Service</button>
@@ -312,12 +381,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <div>
                       <label className="label">Service Locations</label>
                       <AsyncSelect
-                        loadOptions={(q) => citiesApi.search(q)}
-                        value={t.serviceLocation ? { _id: t.serviceLocation, name: t.serviceLocation } : null}
-                        onChange={(v) => setTr(ti, { serviceLocation: v ? v.name : '' })}
+                        loadOptions={(q) => transportApi.list({ search: q }).then((r) =>
+                          (r.data || []).map((s) => ({ _id: s._id, name: [s.from, s.to].filter(Boolean).join(' to ') || s.name, raw: s })))}
+                        value={t.serviceLocation ? { _id: t.service || t.serviceLocation, name: t.serviceLocation } : null}
+                        onChange={(v) => setTr(ti, { service: v?.raw?._id || null, serviceLocation: v ? v.name : '' })}
                         creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
                         placeholder="Port Blair to Havelock"
                       />
+                      {t.service && <p className="mt-1 text-[11px] text-green-600">✓ Linked to transport master — rates can auto-fill</p>}
                     </div>
                     <div>
                       <label className="label">Service Type</label>
@@ -343,6 +414,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   <div className="w-80 shrink-0 p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-xs font-semibold text-gray-700">Transportation and Prices{firstDate ? ` — ${firstDate}` : ''}</p>
+                      <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
                     </div>
                     <table className="w-full text-xs">
                       <thead>
@@ -428,14 +500,29 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         </div>
       </Section>
 
-      {/* Extras */}
-      <Section icon={Star} title="Other Services" hint="Any other services or add-ons for this package.">
-        <div className="space-y-2">
+      {/* Extras — special trip-level services */}
+      <Section icon={Star} title="Any other special service for this trip" hint="Add any extra services like off road dinner, side treking etc that are associated with the overall trip package.">
+        <div className="space-y-3">
+          {(pkg.extras || []).length > 0 && (
+            <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500">
+              <span className="col-span-4">Service</span>
+              <span className="col-span-2">Total Price ({currency})</span>
+              <span className="col-span-2">Date</span>
+              <span className="col-span-4">Comments</span>
+            </div>
+          )}
           {(pkg.extras || []).map((e, i) => (
-            <div key={i} className="grid grid-cols-12 items-center gap-2">
-              <input className="input col-span-8" placeholder="Service label" value={e.label} onChange={(ev) => setExtra(i, { label: ev.target.value })} />
-              <input type="number" className="input col-span-3" placeholder="Price" value={e.price} onChange={(ev) => setExtra(i, { price: Number(ev.target.value) })} />
-              <button type="button" onClick={() => rmExtra(i)} className="col-span-1 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+            <div key={i} className="grid grid-cols-12 items-start gap-2">
+              <div className="col-span-4">
+                <CreatableSelect category="tripService" value={e.label} onChange={(v) => setExtra(i, { label: v })} placeholder="Select or add a service" />
+                {!e.label && <RequiredHint>Service field is required</RequiredHint>}
+              </div>
+              <input type="number" className="input col-span-2" placeholder="e.g. 3000" value={e.price} onChange={(ev) => setExtra(i, { price: Number(ev.target.value) })} />
+              <input type="date" className="input col-span-2" value={e.date ? String(e.date).slice(0, 10) : ''} onChange={(ev) => setExtra(i, { date: ev.target.value })} />
+              <div className="col-span-4 flex items-start gap-1">
+                <input className="input flex-1" placeholder="Any comments regarding service" value={e.comments || ''} onChange={(ev) => setExtra(i, { comments: ev.target.value })} />
+                <button type="button" onClick={() => rmExtra(i)} className="pt-3 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+              </div>
             </div>
           ))}
           <button type="button" onClick={addExtra} className="btn-secondary text-sm"><Plus size={13} /> Add Service</button>
@@ -514,12 +601,16 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   );
 }
 
+// Each module renders as its own card so the builder doesn't read as one long congested block.
 function Section({ icon: Icon, title, hint, children }) {
   return (
-    <div className="border-t border-gray-100 pt-5 first:border-0 first:pt-0">
-      <div className="mb-3 flex items-center gap-2">
-        {Icon && <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Icon size={15} /></span>}
-        <div><h4 className="font-semibold text-gray-900">{title}</h4>{hint && <p className="text-xs text-gray-400">{hint}</p>}</div>
+    <div className="card p-5 sm:p-6">
+      <div className="mb-5 flex items-start gap-3 border-b border-slate-100 pb-4">
+        {Icon && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"><Icon size={17} /></span>}
+        <div>
+          <h4 className="text-[15px] font-bold text-slate-900">{title}</h4>
+          {hint && <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{hint}</p>}
+        </div>
       </div>
       {children}
     </div>

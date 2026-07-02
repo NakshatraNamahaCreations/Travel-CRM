@@ -33,6 +33,68 @@ export const listQuotes = asyncHandler(async (req, res) => {
   return ok(res, quotes);
 });
 
+// GET /api/quotes/suggestions?search=&exclude=<queryId>&limit=
+// Recent quotes across all trips, used as starting points for a new quote.
+// search matches trip number or guest name.
+export const quoteSuggestions = asyncHandler(async (req, res) => {
+  const { search, exclude } = req.query;
+  const limit = Math.min(Number(req.query.limit) || 6, 20);
+
+  const filter = {};
+  if (exclude) filter.query = { $ne: exclude };
+  if (search?.trim()) {
+    const term = search.trim();
+    const or = [{ 'guest.name': new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }];
+    const num = Number(term.replace(/\D/g, ''));
+    if (num) or.push({ queryNumber: num });
+    const matches = await Query.find({ $or: or }).select('_id').limit(100);
+    filter.query = { ...(filter.query || {}), $in: matches.map((q) => q._id) };
+  }
+
+  const quotes = await Quote.find(filter)
+    .sort('-createdAt')
+    .limit(limit)
+    .populate({ path: 'query', select: 'queryNumber guest destinations nights', populate: { path: 'destinations', select: 'name' } });
+  return ok(res, quotes);
+});
+
+// POST /api/quotes/:id/clone  { query: <target trip id> }
+// Copies an existing quote onto another trip as a fresh draft.
+export const cloneQuote = asyncHandler(async (req, res) => {
+  const source = await Quote.findById(req.params.id);
+  if (!source) throw ApiError.notFound('Source quote not found');
+  const target = await Query.findById(req.body.query);
+  if (!target) throw ApiError.badRequest('Target trip not found');
+
+  const src = source.toObject();
+  // Drop subdocument _ids so Mongoose assigns fresh ones on the copy.
+  const stripIds = (v) => JSON.parse(JSON.stringify(v, (k, val) => (k === '_id' ? undefined : val)));
+
+  const quote = await Quote.create({
+    query: target._id,
+    title: src.title,
+    currency: src.currency || target.currency || 'INR',
+    startDate: target.startDate || src.startDate,
+    nights: target.nights ?? src.nights,
+    pax: target.pax || src.pax,
+    packages: stripIds(src.packages || []),
+    pricingStrategy: src.pricingStrategy,
+    totalFoc: src.totalFoc,
+    selectedPackageIndex: src.selectedPackageIndex,
+    inclusions: src.inclusions,
+    exclusions: src.exclusions,
+    terms: src.terms,
+    createdBy: req.user._id,
+  });
+  await syncQuery(target._id);
+  await logActivity(target._id, req.user._id, `created quote from suggestion #${src.quoteNumber}`, 'quote');
+  if (target.status === 'new_query') {
+    await Query.findByIdAndUpdate(target._id, { status: 'in_progress' });
+    await logActivity(target._id, req.user._id, 'updated stage from New Query to In Progress', 'stage');
+  }
+  return created(res, quote);
+});
+
 // GET /api/quotes/:id
 export const getQuote = asyncHandler(async (req, res) => {
   const quote = await Quote.findById(req.params.id)
@@ -94,8 +156,10 @@ export const updateQuoteStatus = asyncHandler(async (req, res) => {
   quote.status = status;
   await quote.save();
 
-  // Accepting a quote converts the query.
+  // Accepting a quote converts the query. Only one quote per trip can be
+  // accepted — demote any previously accepted quote back to 'sent'.
   if (status === 'accepted') {
+    await Quote.updateMany({ query: quote.query, _id: { $ne: quote._id }, status: 'accepted' }, { status: 'sent' });
     await Query.findByIdAndUpdate(quote.query, { status: 'converted' });
   }
   await syncQuery(quote.query);

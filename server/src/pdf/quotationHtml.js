@@ -10,6 +10,16 @@ const stars = (n) => '&#9733;'.repeat(Math.min(n || 5, 5));
 const li = (arr) => (arr || []).map((x) => `<li>${esc(x)}</li>`).join('');
 const bullet = (arr) => (arr || []).map((x) => `<div class="bl"><span class="arr">&#9658;</span><span>${esc(x)}</span></div>`).join('');
 
+// Like bullet(), but renders a leading "Label: " prefix in bold.
+const tcBullet = (arr) => (arr || []).map((x) => {
+  const s = String(x ?? '');
+  const idx = s.indexOf(': ');
+  const body = idx > 0 && idx <= 45
+    ? `<b>${esc(s.slice(0, idx + 1))}</b> ${esc(s.slice(idx + 2))}`
+    : esc(s);
+  return `<div class="bl"><span class="arr">&#9658;</span><span>${body}</span></div>`;
+}).join('');
+
 const LETTERHEAD = `
   <div class="lh">
     <div class="brand"><div class="logo">&#127796;</div><div><div class="bn">${esc(company.name)}</div><div class="sub">Quality Tours. Exceptional Service.</div></div></div>
@@ -52,7 +62,7 @@ export function quotationHtml(q) {
 
   const inclusions = q.inclusions?.length ? q.inclusions : company.defaultInclusions;
   const exclusions = q.exclusions?.length ? q.exclusions : company.defaultExclusions;
-  const tc = company.termsAndConditions || {};
+  const tcSections = Array.isArray(company.termsAndConditions) ? company.termsAndConditions : [];
   const whyUs = company.whyUs || {};
   const gallery = company.galleryImages || [];
 
@@ -111,9 +121,12 @@ export function quotationHtml(q) {
     </div>`).join('');
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; font-size: 11.5px; background: #fff; }
+  body { font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif; color: #1e293b; font-size: 11.5px; background: #fff; -webkit-font-smoothing: antialiased; }
 
   /* ---- page wrapper ---- */
   .page { padding: 14px 20px 14px; min-height: 0; }
@@ -138,9 +151,9 @@ export function quotationHtml(q) {
   .band { background: #1566d6; color: #fff; padding: 8px 14px; font-weight: 800; font-size: 14px; border-radius: 6px; margin-bottom: 12px; }
 
   /* ---- tables ---- */
-  table { width: 100%; border-collapse: collapse; border-radius: 7px; overflow: hidden; margin-top: 8px; }
-  thead th { background: #1566d6; color: #fff; padding: 6px 5px; font-size: 10.5px; text-align: center; font-weight: 600; }
-  td { padding: 6px 5px; border-bottom: 1px solid #e8eef8; font-size: 10.5px; }
+  table { width: 100%; border-collapse: collapse; border-radius: 7px; overflow: hidden; margin-top: 14px; }
+  thead th { background: #1566d6; color: #fff; padding: 9px 7px; font-size: 10.5px; text-align: center; font-weight: 600; }
+  td { padding: 9px 7px; border-bottom: 1px solid #e8eef8; font-size: 10.5px; }
   td.c { text-align: center; }
   td.b { font-weight: 700; color: #0f51ad; }
   .muted { color: #94a3b8; text-align: center; padding: 8px; }
@@ -148,20 +161,20 @@ export function quotationHtml(q) {
   .final { color: #1566d6; font-weight: 800; font-size: 13px; }
 
   /* ---- page-1 quote panels ---- */
-  .panels { display: flex; gap: 10px; margin-bottom: 12px; }
+  .panels { display: flex; gap: 10px; margin-bottom: 22px; }
   .panel { flex: 1; border: 1px solid #b6d0ff; border-radius: 9px; overflow: hidden; }
-  .ph { background: #1566d6; color: #fff; padding: 6px 11px; font-weight: 700; font-size: 11px; }
-  .pc { background: #eef4ff; padding: 9px 11px; }
+  .ph { background: #1566d6; color: #fff; padding: 8px 13px; font-weight: 700; font-size: 11px; }
+  .pc { background: #eef4ff; padding: 11px 13px; }
 
   /* ---- cost breakage row ---- */
-  .breakage { display: flex; gap: 10px; margin-top: 10px; }
+  .breakage { display: flex; gap: 10px; margin-top: 18px; }
   .cb { flex: 1; display: flex; border-radius: 9px; overflow: hidden; border: 1px solid #e2e8f0; }
-  .cb .l { background: #1566d6; color: #fff; padding: 10px 12px; font-weight: 800; font-size: 12px; display: flex; align-items: center; text-align: center; line-height: 1.3; }
+  .cb .l { background: #1566d6; color: #fff; padding: 12px 14px; font-weight: 800; font-size: 12px; display: flex; align-items: center; text-align: center; line-height: 1.3; }
   .cb .r { flex: 1; background: #fffaf0; }
-  .cb .row { display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #e8eef8; font-size: 11px; }
+  .cb .row { display: flex; justify-content: space-between; padding: 9px 13px; border-bottom: 1px solid #e8eef8; font-size: 11.5px; }
   .advance { flex: 1; display: flex; align-items: center; justify-content: space-between; background: #1566d6; color: #fff; border-radius: 9px; overflow: hidden; }
-  .advance .amt { background: #0f51ad; padding: 10px 16px; font-size: 17px; font-weight: 800; white-space: nowrap; }
-  .note { margin-top: 10px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 7px; padding: 7px 10px; text-align: center; font-size: 9.5px; color: #64748b; }
+  .advance .amt { background: #0f51ad; padding: 12px 18px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+  .note { margin-top: 16px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 7px; padding: 10px 13px; text-align: center; font-size: 10px; color: #64748b; line-height: 1.6; }
 
   /* ---- day-wise itinerary ---- */
   .day-card { border: 1px solid #d8e6ff; border-radius: 7px; overflow: hidden; margin-bottom: 8px; }
@@ -189,7 +202,7 @@ export function quotationHtml(q) {
   .pay .kv { font-size: 11px; margin: 2px 0; }
 
   /* ---- T&C ---- */
-  .tc-section { margin-top: 14px; }
+  .tc-section { margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
   .tc-section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #1e293b; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
   .bl { display: flex; gap: 6px; margin-bottom: 4px; font-size: 11px; color: #334155; line-height: 1.4; }
 
@@ -223,7 +236,7 @@ export function quotationHtml(q) {
   .gallery-footer .gf-tag { font-size: 12px; color: #b6d0ff; margin-top: 3px; }
   .gallery-footer .gf-contact { font-size: 11px; color: #d8e6ff; margin-top: 8px; }
   .gallery-footer .gf-web { font-size: 10px; color: #b6d0ff; margin-top: 4px; }
-  h2 { font-size: 16px; margin: 14px 0 6px; color: #0f51ad; font-weight: 800; }
+  h2 { font-size: 16px; margin: 22px 0 10px; color: #0f51ad; font-weight: 800; }
   .sub { white-space: nowrap; }
 </style>
 </head>
@@ -325,9 +338,7 @@ export function quotationHtml(q) {
   ${LETTERHEAD}
   <div class="band">Terms &amp; Conditions:</div>
 
-  ${tc.ferry?.length ? `<div class="tc-section"><h3>Ferry / Cruise</h3>${bullet(tc.ferry)}</div>` : ''}
-  ${tc.travelingSafety?.length ? `<div class="tc-section"><h3>Traveling Safety</h3>${bullet(tc.travelingSafety)}</div>` : ''}
-  ${tc.paymentsRefunds?.length ? `<div class="tc-section"><h3>Payments &amp; Refunds</h3>${bullet(tc.paymentsRefunds)}</div>` : ''}
+  ${tcSections.map((s) => `<div class="tc-section"><h3>${esc(s.heading)}</h3>${tcBullet(s.items)}</div>`).join('')}
 
   <div class="company-box">
     <div style="display:flex;align-items:center;gap:10px">

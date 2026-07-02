@@ -3,7 +3,7 @@ import { api } from './client.js';
 export const bookingsApi = {
   list: (params) => api.get('/bookings', { params }).then((r) => r.data),
   get: (id) => api.get(`/bookings/${id}`).then((r) => r.data.data),
-  fromQuote: (quoteId) => api.post(`/bookings/from-quote/${quoteId}`).then((r) => r.data.data),
+  fromQuote: (quoteId, payload) => api.post(`/bookings/from-quote/${quoteId}`, payload || {}).then((r) => r.data.data),
   setStatus: (id, status) => api.patch(`/bookings/${id}/status`, { status }).then((r) => r.data.data),
   remove: (id) => api.delete(`/bookings/${id}`).then((r) => r.data.data),
 

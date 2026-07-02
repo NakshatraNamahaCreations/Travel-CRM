@@ -21,7 +21,7 @@ router.use(protect);
 
 router.get('/stats', queryStats);
 router.get('/', listQueries);
-router.post('/upload-csv', upload.single('file'), uploadQueriesCsv);
+router.post('/upload-csv', can('trips.create'), upload.single('file'), uploadQueriesCsv);
 router.get('/:id', getQuery);
 router.post('/', can('trips.create'), validate(createQuerySchema), createQuery);
 router.put('/:id', can('trips.edit'), validate(updateQuerySchema), updateQuery);

@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow, addDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Calendar, Users, Phone, Mail, Tag as TagIcon, MessageSquare,
   User as UserIcon, MoreVertical, Pencil, Ban, Plus, FileText, CheckCircle2, Clock, Circle, Trash2, ListChecks, Share2,
-  Bed, Bus, CreditCard, History, ChevronRight,
+  Bed, Bus, CreditCard, History, ChevronRight, Sparkles,
 } from 'lucide-react';
 import { queriesApi } from '../../api/queries.js';
 import { bookingsApi } from '../../api/bookings.js';
@@ -15,7 +15,6 @@ import { commentsApi } from '../../api/comments.js';
 import { installmentsApi } from '../../api/installments.js';
 import { activityLogApi } from '../../api/activities.js';
 import { usersApi } from '../../api/masterData.js';
-import { money } from '../../lib/pricing.js';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
 import Modal from '../../components/ui/Modal.jsx';
@@ -24,13 +23,6 @@ import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
 import ServiceBookingsTab from '../../components/trips/ServiceBookingsTab.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 
-const QUOTE_BADGE = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-50 text-blue-700', accepted: 'bg-green-50 text-green-700', rejected: 'bg-red-50 text-red-700' };
-// Forward pipeline stages shown in the status dropdown.
-const PIPELINE = [
-  { value: 'new_query', label: 'New Query' }, { value: 'in_progress', label: 'In Progress' },
-  { value: 'converted', label: 'Converted' }, { value: 'on_trip', label: 'On Trip' },
-  { value: 'past', label: 'Past Trips' },
-];
 const TERMINAL_LABEL = { canceled: 'Canceled', dropped: 'Dropped' };
 // Drop is allowed before conversion; Cancel only after.
 const BEFORE_CONVERT = ['new_query', 'in_progress'];
@@ -131,6 +123,7 @@ function AddCommentModal({ open, onClose, onSave, pending }) {
 const TABS = [
   { key: 'basic', label: 'Basic Details' },
   { key: 'quotes', label: 'All Quotes' },
+  { key: 'new_quote', label: 'New Quote' },
   { key: 'services', label: 'Services Bookings' },
   { key: 'accounting', label: 'Accounting' },
   { key: 'docs', label: 'Docs' },
@@ -144,7 +137,10 @@ const STATUS_BADGE = {
   converted: 'bg-green-50 text-green-700', on_trip: 'bg-purple-50 text-purple-700',
   past: 'bg-gray-100 text-gray-600', canceled: 'bg-red-50 text-red-700', dropped: 'bg-red-50 text-red-700',
 };
-const ALL_LABEL = { ...TERMINAL_LABEL, ...Object.fromEntries(PIPELINE.map((p) => [p.value, p.label])) };
+const ALL_LABEL = {
+  new_query: 'New Query', in_progress: 'In Progress', converted: 'Converted',
+  on_trip: 'On Trip', past: 'Past Trips', ...TERMINAL_LABEL,
+};
 
 const pkgOf = (quote) => quote?.packages?.[quote.selectedPackageIndex || 0] || quote?.packages?.[0] || null;
 const paxLabel = (pax) => pax ? `${pax.adults || 0}A${pax.children?.length ? `, ${pax.children.length}C` : ''}` : '';
@@ -173,12 +169,7 @@ export default function QueryDetailPage() {
   };
   const refreshComments = () => qc.invalidateQueries({ queryKey: ['comments', id] });
 
-  const statusMut = useMutation({
-    mutationFn: (status) => queriesApi.setStatus(id, status),
-    onSuccess: () => { toast.success('Status updated'); refresh(); },
-    onError: (e) => toast.error(e.message),
-  });
-  const lostMut = useMutation({
+const lostMut = useMutation({
     mutationFn: async ({ reason, reminderOn, comments: c }) => {
       await queriesApi.setStatus(id, lostMode, reason, reminderOn || undefined);
       if (c?.trim()) await commentsApi.create({ query: id, body: `${lostMode === 'canceled' ? 'Cancelled' : 'Dropped'}: ${c}` });
@@ -242,10 +233,6 @@ export default function QueryDetailPage() {
               <p className="text-sm font-medium text-gray-700">{q.owner?.name || 'Not set'}</p>
             </div>
             <div className="flex items-center gap-2">
-              <select className="input w-36" value={q.status} onChange={(e) => statusMut.mutate(e.target.value)} disabled={statusMut.isPending}>
-                {PIPELINE.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                {TERMINAL_LABEL[q.status] && <option value={q.status}>{TERMINAL_LABEL[q.status]}</option>}
-              </select>
               <KebabMenu status={q.status} onEdit={() => navigate(`/trips/${id}/edit`)} onDrop={() => setLostMode('dropped')} onCancel={() => setLostMode('canceled')} />
             </div>
           </div>
@@ -271,7 +258,8 @@ export default function QueryDetailPage() {
             onSaved={refresh}
           />
         )}
-        {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} />}
+        {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} canConvert={BEFORE_CONVERT.includes(q.status)} />}
+        {activeTab === 'new_quote' && <NewQuoteTab id={id} />}
         {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} />}
         {activeTab === 'accounting' && <AccountingTab id={id} />}
         {activeTab === 'docs' && <DocsTab quotes={quotes} />}
@@ -334,16 +322,55 @@ function BasicDetailsTab({ q, quote, comments, onAddComment, onToggleResolve, on
               <div className="card p-5">
                 <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bus size={16} className="text-brand-500" /> Transportation &amp; Activities</h3>
                 <div className="space-y-2">
-                  {pkg.transports.map((t, i) => (
-                    <div key={i} className="rounded-lg border border-gray-100 p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-semibold text-brand-600">Day {t.day || i + 1}</span>
-                          <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
-                          {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
+                  {pkg.transports.map((t, i) => {
+                    const dayNos = Array.isArray(t.days) && t.days.length ? t.days : [t.day || i + 1];
+                    return (
+                      <div key={i} className="rounded-lg border border-gray-100 p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-semibold text-brand-600">Day {dayNos.join(', ')}</span>
+                            <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
+                            {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
+                          </div>
+                          <div className="text-right text-xs text-gray-500">{(t.items || []).map((it) => `${it.qty}× ${it.type}`).join(', ')}</div>
                         </div>
-                        <div className="text-right text-xs text-gray-500">{(t.items || []).map((it) => `${it.qty}× ${it.type}`).join(', ')}</div>
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Special inclusions in hotels */}
+            {pkg?.inclusions?.length > 0 && (
+              <div className="card p-5">
+                <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bed size={16} className="text-brand-500" /> Special Hotel Inclusions</h3>
+                <div className="divide-y divide-gray-100">
+                  {pkg.inclusions.map((inc, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-900">{inc.service || 'Service'}</p>
+                        <p className="text-xs text-gray-400">{[inc.hotelName, inc.night ? `Night ${inc.night}` : null, inc.comments].filter(Boolean).join(' • ')}</p>
+                      </div>
+                      <span className="font-semibold text-gray-800">{inc.price ? `₹${Number(inc.price).toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Other special services */}
+            {pkg?.extras?.length > 0 && (
+              <div className="card p-5">
+                <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Sparkles size={16} className="text-brand-500" /> Other Special Services</h3>
+                <div className="divide-y divide-gray-100">
+                  {pkg.extras.map((e, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-900">{e.label || 'Service'}</p>
+                        <p className="text-xs text-gray-400">{[e.date ? format(new Date(e.date), 'd MMM, yyyy') : null, e.comments].filter(Boolean).join(' • ')}</p>
+                      </div>
+                      <span className="font-semibold text-gray-800">{e.price ? `₹${Number(e.price).toLocaleString('en-IN')}` : '—'}</span>
                     </div>
                   ))}
                 </div>
@@ -465,32 +492,380 @@ function ArrivalDeparture({ q, onSaved }) {
 }
 
 /* ------------------------------- All Quotes ------------------------------ */
-export function QuotesTab({ id, quotes, onShare }) {
-  return (
-    <div className="card p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 font-semibold text-gray-900"><FileText size={16} /> Quotes <span className="text-sm font-normal text-gray-400">({quotes.length})</span></h3>
-        <Link to={`/trips/${id}/quote/new`} className="btn-primary text-sm"><Plus size={15} /> Create Quote</Link>
+const ord = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+
+export function QuotesTab({ id, quotes, onShare, canConvert }) {
+  // Default selection: the converted (accepted) quote, else the latest.
+  const acceptedId = quotes.find((x) => x.status === 'accepted')?._id;
+  const [selId, setSelId] = useState(null);
+  const activeId = selId && quotes.some((x) => x._id === selId) ? selId : (acceptedId || quotes[0]?._id);
+
+  const { data: sel } = useQuery({ queryKey: ['quote-full', activeId], queryFn: () => quotesApi.get(activeId), enabled: !!activeId });
+
+  if (!quotes.length) {
+    return (
+      <div className="card p-8 text-center text-sm text-gray-400">
+        No quotes yet. <Link to={`/trips/${id}/quote/new`} className="font-medium text-brand-600 hover:underline">Build the first itinerary &amp; quote.</Link>
       </div>
-      {!quotes.length ? (
-        <p className="py-6 text-center text-sm text-gray-400">No quotes yet. Build the first itinerary &amp; quote.</p>
-      ) : (
-        <div className="divide-y divide-gray-100">
-          {quotes.map((quote) => (
-            <div key={quote._id} className="flex items-center justify-between py-3">
-              <Link to={`/quotes/${quote._id}`} className="flex-1 hover:opacity-80">
-                <p className="font-medium text-gray-900">#{quote.quoteNumber} · {quote.title || 'Untitled quote'}</p>
-                <p className="text-xs text-gray-400">{quote.days?.length || 0} days · {quote.costItems?.length || 0} cost lines</p>
-              </Link>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-gray-900">{money(quote.pricing?.total, quote.currency)}</span>
-                <span className={cn('rounded px-2 py-0.5 text-xs font-medium', QUOTE_BADGE[quote.status])}>{quote.status}</span>
-                <button onClick={() => onShare(quote._id)} title="Share package" className="btn-secondary px-2 py-1 text-xs"><Share2 size={14} /></button>
+    );
+  }
+
+  const latestId = quotes[0]?._id; // list is sorted newest first
+  const pkg = pkgOf(sel);
+  const hotelTotal = (pkg?.hotels || []).reduce((s, h) => s + (h.amount || 0), 0);
+  const startDate = sel?.startDate ? new Date(sel.startDate) : null;
+
+  // Transports grouped by day number for the day-wise listing.
+  const byDay = new Map();
+  (pkg?.transports || []).forEach((t) => {
+    const dayNos = Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1];
+    dayNos.forEach((d) => {
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(t);
+    });
+  });
+  const dayGroups = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
+
+  return (
+    <div className="flex items-start gap-5">
+      {/* ---- Left: quote version list ---- */}
+      <aside className="w-44 shrink-0">
+        <Link to={`/trips/${id}/quote/new`} className="btn-secondary mb-3 flex w-full items-center justify-center gap-1 text-xs"><Plus size={13} /> New Quote</Link>
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {quotes.map((quote) => {
+            const isSel = quote._id === activeId;
+            const isConverted = quote.status === 'accepted';
+            return (
+              <button
+                key={quote._id}
+                onClick={() => setSelId(quote._id)}
+                className={cn(
+                  'block w-full border-l-[3px] px-3 py-2.5 text-left transition',
+                  isSel ? 'border-brand-600 bg-brand-50/60' : 'border-transparent hover:bg-gray-50',
+                )}
+              >
+                <p className={cn('flex items-center gap-1.5 text-lg font-bold leading-tight', isConverted ? 'text-green-600' : 'text-gray-800')}>
+                  {(quote.pricing?.total || 0).toLocaleString('en-IN')}
+                  {isConverted && <CheckCircle2 size={14} className="shrink-0 text-green-500" title="Used for conversion" />}
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-500">
+                  {quote.startDate ? format(new Date(quote.startDate), 'd MMM') : 'Flexible'} • {(quote.nights || 0) + 1}D • {paxLabel(quote.pax) || '—'}
+                </p>
+                <p className="text-[10.5px] text-gray-400">{formatDistanceToNow(new Date(quote.createdAt), { addSuffix: true })}</p>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+
+      {/* ---- Right: selected quote detail ---- */}
+      <div className="min-w-0 flex-1">
+        {!sel ? (
+          <div className="py-16 text-center text-gray-400">Loading quote…</div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">Package Quote Price</h3>
+              <div className="flex items-center gap-2">
+                <Link to={`/quotes/${sel._id}/edit`} className="btn-primary text-sm"><Pencil size={14} /> Edit Quote</Link>
+                <button onClick={() => onShare(sel._id)} className="btn-secondary text-sm"><Share2 size={14} /> Share</button>
               </div>
             </div>
-          ))}
-        </div>
+
+            {/* Price banner — green when this quote won the conversion */}
+            <div className={cn(
+              'inline-block min-w-[320px] overflow-hidden rounded-lg border',
+              sel.status === 'accepted' ? 'border-green-300' : 'border-gray-200',
+            )}>
+              {sel.status === 'accepted' && (
+                <div className="border-b border-green-200 bg-green-50 px-4 py-1.5 text-xs font-semibold text-green-700">Used for Conversion</div>
+              )}
+              <div className="flex items-baseline gap-2 bg-white px-4 py-3">
+                <span className="text-xs font-semibold text-gray-400">{sel.currency || 'INR'}</span>
+                <span className="text-xl font-bold text-brand-700">{(sel.pricing?.total || 0).toLocaleString('en-IN')}</span>
+                <span className="text-xs text-gray-500">(exc. GST)</span>
+                <span className="text-gray-300">/</span>
+                <span className="text-xs font-semibold text-gray-400">{sel.currency || 'INR'}</span>
+                <span className="text-sm font-semibold text-gray-700">{(sel.pricing?.subtotal || 0).toLocaleString('en-IN')}</span>
+                <span className="text-xs text-gray-400">(cost price)</span>
+              </div>
+            </div>
+
+            <p className="mt-2 text-xs text-gray-400">
+              Created {formatDistanceToNow(new Date(sel.createdAt), { addSuffix: true })}{sel.createdBy?.name ? ` by ${sel.createdBy.name}` : ''}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {sel._id === latestId && (
+                <span className="inline-block rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-500">Latest Quote</span>
+              )}
+              {canConvert && (
+                <Link to={`/trips/${id}/convert/${sel._id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50">
+                  <CheckCircle2 size={13} /> Convert using Quote
+                </Link>
+              )}
+            </div>
+
+            {/* Trip summary strip */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700">
+              <span className="flex items-center gap-1.5"><Calendar size={14} className="text-gray-400" /> {startDate ? format(startDate, 'd MMM, yyyy') : 'Flexible'} for {(sel.nights || 0) + 1} Days</span>
+              <span className="text-gray-300">•</span>
+              <span className="flex items-center gap-1.5"><Users size={14} className="text-gray-400" /> {sel.pax?.adults || 0} Adult{(sel.pax?.adults || 0) !== 1 ? 's' : ''}{sel.pax?.children?.length ? `, ${sel.pax.children.length} Child${sel.pax.children.length !== 1 ? 'ren' : ''}` : ''}</span>
+            </div>
+
+            <h3 className="mt-5 text-base font-bold text-gray-900">Services</h3>
+
+            {/* Accommodation */}
+            {pkg?.hotels?.length > 0 && (
+              <div className="mt-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><Bed size={15} className="text-brand-600" /></span>
+                  <h4 className="font-semibold text-gray-900">Accommodation</h4>
+                </div>
+                <div className="card card-flush overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-gray-100 text-left text-xs text-gray-400">
+                      <tr><th className="px-4 py-2 font-medium">Night</th><th className="px-4 py-2 font-medium">Hotel</th><th className="px-4 py-2 font-medium">Meal</th><th className="px-4 py-2 font-medium">Rooms</th><th className="px-4 py-2 text-right font-medium">Price</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pkg.hotels.map((h, i) => {
+                        const firstNight = (h.nights || [])[0];
+                        return (
+                          <tr key={i}>
+                            <td className="px-4 py-3 align-top">
+                              <p className="font-medium text-gray-800">{(h.nights || []).map(ord).join(', ') || '—'}</p>
+                              {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="font-medium text-gray-900">{h.hotelName}</p>
+                              <p className="text-xs text-gray-400">{[h.city, h.stars ? `${h.stars} Star` : null].filter(Boolean).join(', ')}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top text-gray-600">{h.mealPlan || '—'}</td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="text-gray-800">{h.rooms || 1} {h.roomType || 'Room'}</p>
+                              <p className="text-xs text-gray-400">{h.paxPerRoom || 2} Pax{h.aweb ? ` +${h.aweb} AWEB` : ''}{h.cnb ? ` +${h.cnb} CNB` : ''}</p>
+                            </td>
+                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{h.amount ? `₹${h.amount.toLocaleString('en-IN')}` : '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <span className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-700">Total: {hotelTotal ? `₹${hotelTotal.toLocaleString('en-IN')}` : 'N/A'}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Transportation & Activities */}
+            {dayGroups.length > 0 && (
+              <div className="mt-5">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><Bus size={15} className="text-brand-600" /></span>
+                  <h4 className="font-semibold text-gray-900">Transportation and Activities</h4>
+                </div>
+                <div className="space-y-3">
+                  {dayGroups.map(([day, rows]) => (
+                    <div key={day} className="flex gap-4">
+                      <div className="w-24 shrink-0 pt-3">
+                        <p className="text-sm font-semibold text-gray-800">{ord(day)} Day</p>
+                        {startDate && <p className="text-xs text-gray-400">{format(addDays(startDate, day - 1), 'EEE, d MMM')}</p>}
+                      </div>
+                      <div className="card card-flush min-w-0 flex-1 divide-y divide-gray-100">
+                        {rows.map((t, i) => {
+                          const amt = (t.items || []).reduce((s, it) => s + (it.amount || 0), 0);
+                          return (
+                            <div key={i} className="flex items-start justify-between gap-4 px-4 py-3">
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
+                                {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-sm text-gray-700">{(t.items || []).map((it) => `${it.qty || 1}-${it.type || 'Vehicle'}`).join(', ') || '—'}</p>
+                                <p className="text-xs font-semibold text-gray-900">{amt ? `₹${amt.toLocaleString('en-IN')}` : <span className="font-normal text-gray-400">N/A</span>}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Special inclusions + other services */}
+            {(pkg?.inclusions?.length > 0 || pkg?.extras?.length > 0) && (
+              <div className="mt-5">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><Sparkles size={15} className="text-brand-600" /></span>
+                  <h4 className="font-semibold text-gray-900">Special Services</h4>
+                </div>
+                <div className="card card-flush divide-y divide-gray-100">
+                  {(pkg.inclusions || []).map((inc, i) => (
+                    <div key={`inc-${i}`} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-900">{inc.service || 'Service'}</p>
+                        <p className="text-xs text-gray-400">{[inc.hotelName, inc.night ? `Night ${inc.night}` : null].filter(Boolean).join(' • ') || 'Hotel inclusion'}</p>
+                      </div>
+                      <span className="font-semibold text-gray-800">{inc.price ? `₹${Number(inc.price).toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                  ))}
+                  {(pkg.extras || []).map((e, i) => (
+                    <div key={`ext-${i}`} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-900">{e.label || 'Service'}</p>
+                        <p className="text-xs text-gray-400">{[e.date ? format(new Date(e.date), 'd MMM') : null, e.comments].filter(Boolean).join(' • ') || 'Trip service'}</p>
+                      </div>
+                      <span className="font-semibold text-gray-800">{e.price ? `₹${Number(e.price).toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!pkg?.hotels?.length && !dayGroups.length && !pkg?.inclusions?.length && !pkg?.extras?.length && (
+              <div className="card mt-3 p-8 text-center text-sm text-gray-400">No services added to this quote yet.</div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------- New Quote ------------------------------ */
+// Start a quote from an existing one (searchable suggestions) or from scratch.
+function NewQuoteTab({ id }) {
+  const navigate = useNavigate();
+  const [term, setTerm] = useState('');
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(term.trim()), 350);
+    return () => clearTimeout(t);
+  }, [term]);
+
+  const { data: suggestions = [], isLoading } = useQuery({
+    queryKey: ['quote-suggestions', id, debounced],
+    queryFn: () => quotesApi.suggestions({ search: debounced || undefined, exclude: id, limit: 6 }),
+  });
+
+  const cloneMut = useMutation({
+    mutationFn: (quoteId) => quotesApi.clone(quoteId, id),
+    onSuccess: (q) => { toast.success('Quote created — review and adjust it'); navigate(`/quotes/${q._id}/edit`); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-sm font-semibold text-slate-800">To create a quote you can start with the below suggestions.</p>
+        <input
+          className="input w-72"
+          placeholder="Search by trip id or guest name"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="py-16 text-center text-slate-400">Loading suggestions…</div>
+      ) : !suggestions.length ? (
+        <div className="card p-10 text-center text-sm text-slate-400">No matching quotes found. Create a custom quotation below.</div>
+      ) : (
+        suggestions.map((sq) => (
+          <SuggestionCard key={sq._id} quote={sq} pending={cloneMut.isPending} onUse={() => cloneMut.mutate(sq._id)} />
+        ))
       )}
+
+      <div className="mt-6 text-center">
+        <Link to={`/trips/${id}/quote/new`} className="btn-primary inline-flex px-6"><Plus size={15} /> Create Custom Quotation</Link>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionCard({ quote, onUse, pending }) {
+  const [view, setView] = useState('itinerary');
+  const pkg = pkgOf(quote);
+  const trip = quote.query;
+  const dests = (trip?.destinations || []).map((d) => d.name).join(', ');
+
+  // Day-wise lines: prefer the flattened itinerary, fall back to package transports.
+  const days = quote.days?.length
+    ? quote.days.map((d) => ({ day: d.dayNumber, title: d.title, sub: d.description }))
+    : (pkg?.transports || []).map((t, i) => ({
+        day: (Array.isArray(t.days) && t.days[0]) || t.day || i + 1,
+        title: t.serviceLocation || `Day ${(Array.isArray(t.days) && t.days[0]) || t.day || i + 1}`,
+        sub: t.serviceType,
+      }));
+
+  return (
+    <div className="card mb-4 overflow-hidden">
+      {/* Card header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+        <p className="text-sm text-slate-700"><span className="font-bold text-slate-900">{tripNo(trip?.queryNumber)}</span> • {[trip?.guest?.salutation, trip?.guest?.name].filter(Boolean).join(' ') || 'Guest'}</p>
+        <div className="flex items-center gap-2 text-xs">
+          {dests && <span className="font-medium text-slate-600">{dests}</span>}
+          <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-semibold text-slate-500">{quote.nights || 0}N</span>
+          <span className="rounded bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-700">₹{(quote.pricing?.total || 0).toLocaleString('en-IN')}</span>
+        </div>
+      </div>
+
+      {/* Preview tabs */}
+      <div className="flex gap-5 border-b border-slate-100 px-4">
+        {['itinerary', 'hotels', 'details'].map((v) => (
+          <button key={v} onClick={() => setView(v)} className={cn('border-b-2 py-2 text-sm font-medium capitalize', view === v ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700')}>
+            {v}
+          </button>
+        ))}
+      </div>
+
+      <div className="max-h-56 overflow-y-auto px-4 py-3">
+        {view === 'itinerary' && (
+          days.length ? (
+            <div className="space-y-1.5">
+              {days.map((d, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 shrink-0 rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">Day {d.day}</span>
+                  <span className="rounded bg-amber-50 px-2 py-0.5 text-[13px] text-slate-700">{d.title}{d.sub ? <span className="text-slate-400"> — {d.sub}</span> : null}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="py-4 text-center text-xs text-slate-400">No itinerary in this quote.</p>
+        )}
+        {view === 'hotels' && (
+          pkg?.hotels?.length ? (
+            <div className="divide-y divide-slate-100">
+              {pkg.hotels.map((h, i) => (
+                <div key={i} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-800">{h.hotelName}</p>
+                    <p className="text-xs text-slate-400">{[h.city, h.roomType, h.mealPlan].filter(Boolean).join(' • ')}</p>
+                  </div>
+                  <span className="text-xs text-slate-500">{(h.nights || []).length || 1}N • {h.rooms || 1} room(s)</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="py-4 text-center text-xs text-slate-400">No hotels in this quote.</p>
+        )}
+        {view === 'details' && (
+          <div className="grid grid-cols-2 gap-3 py-1 text-sm sm:grid-cols-4">
+            <div><p className="text-[11px] uppercase text-slate-400">Duration</p><p className="font-semibold text-slate-800">{(quote.nights || 0) + 1} Days</p></div>
+            <div><p className="text-[11px] uppercase text-slate-400">Travelers</p><p className="font-semibold text-slate-800">{quote.pax?.adults || 0} Adult{(quote.pax?.adults || 0) !== 1 ? 's' : ''}{quote.pax?.children?.length ? `, ${quote.pax.children.length} Child` : ''}</p></div>
+            <div><p className="text-[11px] uppercase text-slate-400">Package Price</p><p className="font-semibold text-slate-800">₹{(quote.pricing?.total || 0).toLocaleString('en-IN')}</p></div>
+            <div><p className="text-[11px] uppercase text-slate-400">Options</p><p className="font-semibold text-slate-800">{quote.packages?.length || 1} Package{(quote.packages?.length || 1) !== 1 ? 's' : ''}</p></div>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onUse}
+        disabled={pending}
+        className="block w-full border-t border-brand-100 bg-brand-50 py-2.5 text-center text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:opacity-50"
+      >
+        {pending ? 'Creating…' : 'Use this Quote'}
+      </button>
     </div>
   );
 }

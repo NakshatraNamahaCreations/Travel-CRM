@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Pencil, Printer, Check, Send, X, CalendarCheck, FileText, Share2 } from 'lucide-react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { ArrowLeft, Pencil, CalendarCheck, FileText, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
@@ -21,16 +21,9 @@ const STATUS_BADGE = {
 export default function QuoteViewPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const [shareOpen, setShareOpen] = useState(false);
 
   const { data: q, isLoading } = useQuery({ queryKey: ['quote', id], queryFn: () => quotesApi.get(id) });
-
-  const statusMut = useMutation({
-    mutationFn: (status) => quotesApi.setStatus(id, status),
-    onSuccess: () => { toast.success('Status updated'); qc.invalidateQueries({ queryKey: ['quote', id] }); },
-    onError: (e) => toast.error(e.message),
-  });
 
   const bookingMut = useMutation({
     mutationFn: () => bookingsApi.fromQuote(id),
@@ -57,10 +50,7 @@ export default function QuoteViewPage() {
           <Link to={`/quotes/${id}/edit`} className="btn-secondary text-sm"><Pencil size={14} /> Edit</Link>
           <button onClick={() => setShareOpen(true)} className="btn-secondary text-sm"><Share2 size={14} /> Share</button>
           <Link to={`/quotes/${id}/quotation`} className="btn-primary text-sm"><FileText size={14} /> Quotation PDF</Link>
-          {q.status !== 'sent' && <button onClick={() => statusMut.mutate('sent')} className="btn-secondary text-sm"><Send size={14} /> Mark Sent</button>}
-          {q.status !== 'accepted' && <button onClick={() => statusMut.mutate('accepted')} className="btn-primary text-sm"><Check size={14} /> Accept</button>}
-          {q.status === 'accepted' && <button onClick={() => bookingMut.mutate()} className="btn-primary text-sm" disabled={bookingMut.isPending}><CalendarCheck size={14} /> Convert to Booking</button>}
-          {q.status !== 'rejected' && <button onClick={() => statusMut.mutate('rejected')} className="btn-secondary text-sm text-red-600"><X size={14} /> Reject</button>}
+          <button onClick={() => bookingMut.mutate()} className="btn-primary text-sm" disabled={bookingMut.isPending}><CalendarCheck size={14} /> {bookingMut.isPending ? 'Converting…' : 'Convert to Booking'}</button>
         </div>
       </div>
 

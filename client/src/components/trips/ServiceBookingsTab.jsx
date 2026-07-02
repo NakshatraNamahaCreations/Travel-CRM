@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Hotel, Bus, Pencil, Trash2, Sparkles, User } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, addDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import StarRating from '../ui/StarRating.jsx';
@@ -13,6 +13,8 @@ const SUBS = [
   { k: 'hotel', l: 'Hotels', icon: Hotel },
   { k: 'operational', l: 'Operational', icon: Bus },
 ];
+const TITLES = { hotel: 'Hotel Bookings', operational: 'Operational Services' };
+const ord = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 
 const STATUS = {
   initialized: { label: 'Initialized', cls: 'bg-slate-100 text-slate-600' },
@@ -57,6 +59,70 @@ function StatusSelect({ row, onChange }) {
   );
 }
 
+// Day-grouped operational services (Sembark-style: day chip left, service rows right).
+function OperationalGroups({ rows, startDate, onStatus, onEdit, onDelete }) {
+  // Older rows have no `day` — derive it from checkIn vs trip start.
+  const dayOf = (r) => {
+    if (r.day) return r.day;
+    if (r.checkIn && startDate) {
+      const diff = Math.round((new Date(r.checkIn) - new Date(startDate)) / 86400000);
+      if (diff >= 0) return diff + 1;
+    }
+    return 0;
+  };
+  const byDay = new Map();
+  rows.forEach((r) => {
+    const d = dayOf(r);
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(r);
+  });
+  const groups = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([day, groupRows]) => {
+        const date = day && startDate ? addDays(new Date(startDate), day - 1) : (groupRows[0]?.checkIn ? new Date(groupRows[0].checkIn) : null);
+        return (
+          <div key={day} className="flex items-start gap-4">
+            <div className="w-24 shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
+              <p className="text-sm font-semibold text-slate-800">{day ? `${ord(day)} Day` : '—'}</p>
+              {date && <p className="text-[11px] text-slate-400">{format(date, 'EEE, d MMM')}</p>}
+            </div>
+            <div className="card card-flush min-w-0 flex-1 divide-y divide-gray-100">
+              {groupRows.map((r) => {
+                const [serviceType, cabDetail] = (r.detail || '').split(' — ');
+                return (
+                  <div key={r._id} className="flex items-start gap-4 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-brand-700">{[r.name, serviceType].filter(Boolean).join(' - ')}</p>
+                      <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
+                        <User size={10} /> {r.bookedBy?.name || '—'}{r.updatedAt ? ` • ${ago(r.updatedAt)}` : ''}
+                      </div>
+                    </div>
+                    <div className="w-36 shrink-0 text-sm text-gray-600">{cabDetail || serviceType || '—'}</div>
+                    <div className="w-32 shrink-0">
+                      <StatusSelect row={r} onChange={(status) => onStatus(r, status)} />
+                      {r.tag && <span className="mt-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{r.tag}</span>}
+                    </div>
+                    <div className="w-32 shrink-0 text-right">
+                      <span className="text-[11px] uppercase text-gray-400">Booking: </span>
+                      <span className="font-semibold text-gray-900">{money(r.price, r.currency)}</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 pt-0.5 text-gray-300">
+                      <button onClick={() => onEdit(r)} className="hover:text-brand-600" title="Edit"><Pencil size={14} /></button>
+                      <button onClick={() => onDelete(r)} className="hover:text-red-600" title="Remove"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ServiceBookingsTab({ queryId, quote, startDate }) {
   const [sub, setSub] = useState('hotel');
   const [editRow, setEditRow] = useState(null);
@@ -91,7 +157,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate }) {
     if (await confirm({ title: 'Remove booking line?', message: `“${row.name}” will be removed from bookings.`, confirmLabel: 'Remove', danger: true })) delMut.mutate(row._id);
   };
 
-  const title = SUBS.find((s) => s.k === sub)?.l;
+  const title = TITLES[sub] || SUBS.find((s) => s.k === sub)?.l;
   const canGenerate = !!quote?._id;
 
   return (
@@ -106,23 +172,28 @@ export default function ServiceBookingsTab({ queryId, quote, startDate }) {
 
       <div className="min-w-0 flex-1">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900">{title} Bookings</h3>
-          {canGenerate && rows.length > 0 && (
-            <button onClick={() => genMut.mutate()} disabled={genMut.isPending} className="btn-secondary text-xs"><Sparkles size={13} /> Generate from quote</button>
-          )}
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         </div>
 
         {isLoading ? (
           <div className="card p-8 text-center text-sm text-gray-400">Loading…</div>
         ) : !rows.length ? (
           <div className="card flex flex-col items-center gap-3 p-10 text-center">
-            <p className="text-sm text-gray-400">No {title.toLowerCase()} bookings yet.</p>
+            <p className="text-sm text-gray-400">No {title.toLowerCase()} yet.</p>
             {canGenerate ? (
               <button onClick={() => genMut.mutate()} disabled={genMut.isPending} className="btn-primary text-sm"><Sparkles size={14} /> {genMut.isPending ? 'Generating…' : 'Generate from quote'}</button>
             ) : (
               <p className="text-xs text-gray-400">Accept a quote first to generate bookings.</p>
             )}
           </div>
+        ) : sub === 'operational' ? (
+          <OperationalGroups
+            rows={rows}
+            startDate={startDate}
+            onStatus={(r, status) => updMut.mutate({ id: r._id, patch: { status } })}
+            onEdit={setEditRow}
+            onDelete={askDelete}
+          />
         ) : (
           <div className="card card-flush overflow-x-auto">
             <table className="w-full text-sm">

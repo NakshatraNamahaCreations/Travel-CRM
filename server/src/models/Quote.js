@@ -27,6 +27,7 @@ const hotelRowSchema = new mongoose.Schema(
     cwebRate: { type: Number, default: 0 },
     cnbRate: { type: Number, default: 0 },
     givenPerNight: { type: Number, default: 0 }, // selling override (0 = use cost)
+    cardRate: { type: Number, default: 0 }, // supplier card rate shown as "cost" in the builder
     amount: { type: Number, default: 0 }, // computed cost
   },
   { _id: true }
@@ -48,6 +49,7 @@ const transportItemSchema = new mongoose.Schema(
     type: { type: String, trim: true }, // e.g. "17 Seater Tempo Traveller"
     qty: { type: Number, default: 1 },
     rate: { type: Number, default: 0 },
+    given: { type: Number, default: 0 }, // selling override (0 = use cost)
     amount: { type: Number, default: 0 },
   },
   { _id: false }
@@ -56,6 +58,8 @@ const transportItemSchema = new mongoose.Schema(
 const transportDaySchema = new mongoose.Schema(
   {
     day: { type: Number, default: 1 },
+    days: [{ type: Number }], // all day numbers this service covers, e.g. [1,2]
+    service: { type: mongoose.Schema.Types.ObjectId, ref: 'TransportService' }, // master link for rate lookup
     serviceLocation: { type: String, trim: true }, // "Port Blair to Havelock"
     serviceType: { type: String, trim: true }, // "Transfer and Radhanagar Beach"
     startTime: { type: String, trim: true },
@@ -66,7 +70,12 @@ const transportDaySchema = new mongoose.Schema(
 );
 
 const extraSchema = new mongoose.Schema(
-  { label: { type: String, trim: true }, price: { type: Number, default: 0 } },
+  {
+    label: { type: String, trim: true },
+    price: { type: Number, default: 0 },
+    date: { type: Date },
+    comments: { type: String, trim: true },
+  },
   { _id: true }
 );
 
@@ -83,6 +92,10 @@ const packageSchema = new mongoose.Schema(
     transports: [transportDaySchema],
     extras: [extraSchema],
     flights: [flightSchema],
+
+    // Shared cab config ("Same Cab Type for All" in the builder)
+    sameCabType: { type: Boolean, default: false },
+    sharedCabItems: [{ type: { type: String, trim: true }, qty: { type: Number, default: 1 }, _id: false }],
 
     markupType: { type: String, enum: ['percent', 'flat'], default: 'percent' },
     markupValue: { type: Number, default: 0 },
@@ -210,11 +223,14 @@ function flattenSelected(doc) {
 
   // Build day-wise itinerary from transports if none set explicitly.
   if (!doc.days?.length && (pkg.transports || []).length) {
-    doc.days = pkg.transports.map((t) => ({
-      dayNumber: t.day || 1,
-      title: t.serviceLocation || `Day ${t.day || 1}`,
-      description: [t.serviceType, t.startTime].filter(Boolean).join(' · '),
-    }));
+    doc.days = pkg.transports.map((t) => {
+      const dayNo = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
+      return {
+        dayNumber: dayNo,
+        title: t.serviceLocation || `Day ${dayNo}`,
+        description: [t.serviceType, t.startTime].filter(Boolean).join(' · '),
+      };
+    });
   }
 
   doc.markupType = pkg.markupType;

@@ -4,6 +4,7 @@ import { Booking } from '../models/Booking.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
+import { createNotification } from './notification.controller.js';
 
 function todayStart() {
   const d = new Date();
@@ -153,6 +154,22 @@ export const logPayment = asyncHandler(async (req, res) => {
   await inst.save();
 
   if (inst.direction === 'incoming') await syncBookingPaid(inst.booking);
+
+  // Notify booking owner about received payment.
+  if (inst.direction === 'incoming') {
+    const booking = await Booking.findById(inst.booking).populate('owner', '_id');
+    if (booking?.owner && String(booking.owner._id) !== String(req.user._id)) {
+      await createNotification({
+        recipient: booking.owner._id,
+        type: 'payment_received',
+        title: 'Payment Received',
+        body: `₹${paidAmount.toLocaleString('en-IN')} received — Instalment #${inst.installmentNumber}`,
+        link: `/bookings/${inst.booking}`,
+        createdBy: req.user._id,
+      });
+    }
+  }
+
   return ok(res, inst);
 });
 
@@ -188,7 +205,7 @@ export const deleteInstallment = asyncHandler(async (req, res) => {
  * Outgoing = total supplier cost due at trip start (what we owe suppliers).
  * Safe to call repeatedly — skips a direction if one already exists.
  */
-export async function generateForBooking(booking, quote, userId) {
+export async function generateForBooking(booking, quote, userId, opts = {}) {
   if (!booking) return;
   const b = await Booking.findById(booking._id).populate('destinations', 'name').populate('query', 'queryNumber');
   if (!b) return;
@@ -208,7 +225,16 @@ export async function generateForBooking(booking, quote, userId) {
   const out = [];
   const hasIncoming = await Installment.findOne({ booking: b._id, direction: 'incoming' });
   if (!hasIncoming && b.totalAmount > 0) {
-    out.push({ ...base, direction: 'incoming', amount: b.totalAmount });
+    // Custom schedule from the conversion page, else one full-amount instalment.
+    const rows = (Array.isArray(opts.instalments) ? opts.instalments : [])
+      .map((r) => ({ amount: Number(r.amount) || 0, dueDate: r.dueDate ? new Date(r.dueDate) : base.dueDate }))
+      .filter((r) => r.amount > 0);
+    const schedule = rows.length ? rows : [{ amount: b.totalAmount, dueDate: base.dueDate }];
+    const comment = opts.comment?.trim() ? [{ body: opts.comment.trim(), createdBy: userId }] : null;
+    schedule.forEach((r, i) => out.push({
+      ...base, direction: 'incoming', amount: r.amount, dueDate: r.dueDate,
+      ...(i === 0 && comment ? { comments: comment } : {}),
+    }));
   }
   const supplierCost = (quote?.costItems || b.costItems || []).reduce((s, it) => s + (it.amount || 0), 0);
   const hasOutgoing = await Installment.findOne({ booking: b._id, direction: 'outgoing' });

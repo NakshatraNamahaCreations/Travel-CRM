@@ -8,6 +8,7 @@ import { ok, created, paginate } from '../utils/apiResponse.js';
 import { generateForBooking } from './installment.controller.js';
 import { logActivity } from './activity.controller.js';
 import { autoGenerateServiceBookings } from './serviceBooking.controller.js';
+import { createNotification } from './notification.controller.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -73,13 +74,31 @@ export const createFromQuote = asyncHandler(async (req, res) => {
   });
 
   // Confirming the quote + booking moves the query to converted.
+  // Only one quote per trip can be the converted one — demote any other accepted quote.
+  await Quote.updateMany({ query: query._id, _id: { $ne: quote._id }, status: 'accepted' }, { status: 'sent' });
   await Quote.findByIdAndUpdate(quote._id, { status: 'accepted' });
   await Query.findByIdAndUpdate(query._id, { status: 'converted', bookedAmount: booking.totalAmount });
   await logActivity(query._id, req.user?._id, `converted to booking from quote #${quote.quoteNumber}`, 'booking');
 
+  // Notify the trip owner that a booking was created.
+  if (query.owner && String(query.owner) !== String(req.user._id)) {
+    await createNotification({
+      recipient: query.owner,
+      type: 'booking_created',
+      title: 'New Booking Created',
+      body: `Booking confirmed for ${query.guest?.name || 'Guest'} — Quote #${quote.quoteNumber}`,
+      link: `/bookings/${booking._id}`,
+      createdBy: req.user._id,
+    });
+  }
+
   // Generate the incoming + outgoing payment schedule for this trip.
+  // The conversion page can pass a custom instalment split + comment.
   try {
-    await generateForBooking(booking, quote, req.user._id);
+    await generateForBooking(booking, quote, req.user._id, {
+      instalments: req.body?.instalments,
+      comment: req.body?.comment,
+    });
   } catch {
     /* non-fatal — booking still succeeds even if schedule generation fails */
   }

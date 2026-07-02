@@ -16,6 +16,13 @@ export const createHotelNote = asyncHandler(async (req, res) => {
   return created(res, item);
 });
 
+// PATCH /api/hotel-notes/:id
+export const updateHotelNote = asyncHandler(async (req, res) => {
+  const item = await HotelNote.findByIdAndUpdate(req.params.id, { ...req.body }, { new: true, runValidators: true });
+  if (!item) throw ApiError.notFound('Note not found');
+  return ok(res, item);
+});
+
 // DELETE /api/hotel-notes/:id
 export const deleteHotelNote = asyncHandler(async (req, res) => {
   const item = await HotelNote.findByIdAndDelete(req.params.id);

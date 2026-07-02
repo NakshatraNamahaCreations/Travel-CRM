@@ -3,6 +3,7 @@ import { TravelActivityPrice } from '../models/TravelActivityPrice.js';
 import { TransportPrice } from '../models/TransportPrice.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok } from '../utils/apiResponse.js';
+import { ApiError } from '../utils/ApiError.js';
 
 const onDate = (date) => {
   const d = date ? new Date(date) : new Date();
@@ -30,10 +31,19 @@ export const activityRate = asyncHandler(async (req, res) => {
 });
 
 // GET /api/lookups/transport-rate?service=&config=&date=
+// Config matching is forgiving: exact (case-insensitive) → substring → any config,
+// since uploaded price sheets label vehicles like "Wagon R (3 Pax)" while the
+// builder may just say "Wagon R".
 export const transportRate = asyncHandler(async (req, res) => {
   const { service, config, date } = req.query;
-  const filter = { service, ...onDate(date) };
-  if (config) filter.config = config;
-  const price = await TransportPrice.findOne(filter).sort('-startDate');
+  if (!service) throw ApiError.badRequest('service is required');
+  const base = { service, ...onDate(date) };
+  let price = null;
+  if (config) {
+    const escaped = config.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    price = await TransportPrice.findOne({ ...base, config: new RegExp(`^${escaped}$`, 'i') }).sort('-startDate');
+    if (!price) price = await TransportPrice.findOne({ ...base, config: new RegExp(escaped, 'i') }).sort('-startDate');
+  }
+  if (!price) price = await TransportPrice.findOne(base).sort('-startDate');
   return ok(res, price);
 });

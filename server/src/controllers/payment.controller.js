@@ -60,6 +60,14 @@ export const createPayment = asyncHandler(async (req, res) => {
   return created(res, payment);
 });
 
+// PATCH /api/payments/:id
+export const updatePayment = asyncHandler(async (req, res) => {
+  const payment = await Payment.findByIdAndUpdate(req.params.id, { ...req.body }, { new: true });
+  if (!payment) throw ApiError.notFound('Payment not found');
+  if (payment.party === 'customer') await syncBookingPaid(payment.booking);
+  return ok(res, payment);
+});
+
 // DELETE /api/payments/:id
 export const deletePayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findByIdAndDelete(req.params.id);

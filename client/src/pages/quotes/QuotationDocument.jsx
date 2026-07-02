@@ -154,7 +154,7 @@ export default function QuotationDocument() {
 
   const inclusions = q.inclusions?.length ? q.inclusions : company.defaultInclusions;
   const exclusions = q.exclusions?.length ? q.exclusions : company.defaultExclusions;
-  const tc = company.termsAndConditions || {};
+  const tcSections = Array.isArray(company.termsAndConditions) ? company.termsAndConditions : [];
   const whyUs = company.whyUs || {};
   const gallery = company.galleryImages || [];
 
@@ -374,19 +374,22 @@ export default function QuotationDocument() {
             <PageLetterhead />
             <Band>Terms &amp; Conditions:</Band>
 
-            {[
-              { heading: 'Ferry / Cruise', items: tc.ferry },
-              { heading: 'Traveling Safety', items: tc.travelingSafety },
-              { heading: 'Payments & Refunds', items: tc.paymentsRefunds },
-            ].map(({ heading, items }) => items?.length ? (
-              <div key={heading} className="mt-4">
+            {tcSections.map(({ heading, items }) => items?.length ? (
+              <div key={heading} className="mt-4" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                 <p className="mb-1.5 border-b border-slate-200 pb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-700">{heading}</p>
                 <ul className="space-y-1.5">
-                  {items.map((item, i) => (
-                    <li key={i} className="flex gap-2 text-[11px] text-slate-700">
-                      <span className="mt-0.5 shrink-0 text-brand-500 text-[9px]">▸</span><span>{item}</span>
-                    </li>
-                  ))}
+                  {items.map((item, i) => {
+                    const idx = item.indexOf(': ');
+                    const hasLabel = idx > 0 && idx <= 45;
+                    return (
+                      <li key={i} className="flex gap-2 text-[11px] text-slate-700">
+                        <span className="mt-0.5 shrink-0 text-brand-500 text-[9px]">▸</span>
+                        <span>
+                          {hasLabel ? (<><b>{item.slice(0, idx + 1)}</b> {item.slice(idx + 2)}</>) : item}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ) : null)}

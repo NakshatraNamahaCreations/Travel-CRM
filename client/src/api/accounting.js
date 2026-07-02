@@ -5,5 +5,6 @@ export const paymentsApi = {
   summary: () => api.get('/payments/summary').then((r) => r.data.data),
   supplierLedger: () => api.get('/payments/supplier-ledger').then((r) => r.data.data),
   create: (payload) => api.post('/payments', payload).then((r) => r.data.data),
+  update: (id, payload) => api.patch(`/payments/${id}`, payload).then((r) => r.data.data),
   remove: (id) => api.delete(`/payments/${id}`).then((r) => r.data.data),
 };

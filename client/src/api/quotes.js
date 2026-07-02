@@ -2,6 +2,8 @@ import { api } from './client.js';
 
 export const quotesApi = {
   listForQuery: (queryId) => api.get('/quotes', { params: { query: queryId } }).then((r) => r.data.data),
+  suggestions: (params) => api.get('/quotes/suggestions', { params }).then((r) => r.data.data),
+  clone: (id, queryId) => api.post(`/quotes/${id}/clone`, { query: queryId }).then((r) => r.data.data),
   get: (id) => api.get(`/quotes/${id}`).then((r) => r.data.data),
   create: (payload) => api.post('/quotes', payload).then((r) => r.data.data),
   update: (id, payload) => api.put(`/quotes/${id}`, payload).then((r) => r.data.data),

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ChevronDown, ChevronRight, LogOut, Palmtree, Plane, CalendarCheck, Wallet, Briefcase,
-  User as UserIcon, Settings, LayoutDashboard,
+  ChevronDown, LogOut, Palmtree, Plane, CalendarCheck, Wallet, Briefcase,
+  User as UserIcon, Settings, LayoutDashboard, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { cn } from '../lib/cn.js';
@@ -17,6 +17,7 @@ const GROUPS = [
   },
   {
     label: 'Bookings', icon: CalendarCheck, items: [
+      { label: 'All Bookings', to: '/bookings' },
       { label: 'Hotel Bookings', to: '/bookings/hotels' },
       { label: 'Hotel Check-In/Outs', to: '/bookings/hotel-checkins' },
       { label: 'Operational Bookings', to: '/bookings/operational' },
@@ -27,6 +28,7 @@ const GROUPS = [
     label: 'Accounting', icon: Wallet, roles: ['admin', 'manager', 'accounts'], items: [
       { label: 'Incoming Payments', to: '/accounting/payments' },
       { label: 'Outgoing Payments', to: '/accounting/ledger' },
+      { label: 'Invoices', to: '/accounting/invoices' },
       { label: 'Trip Check In/Out Report', to: '/accounting/trip-check-in-out' },
       { label: 'Accounts', to: '/accounting/accounts' },
       { label: 'Transactions', to: '/accounting/transactions' },
@@ -45,6 +47,7 @@ const GROUPS = [
   {
     label: 'Settings', icon: Settings, roles: ['admin', 'manager'], items: [
       { label: 'Users & Roles', to: '/settings/users' },
+      { label: 'Organization & Teams', to: '/settings/organization' },
       { label: 'Destinations', to: '/settings/destinations' },
       { label: 'Cities / Towns', to: '/settings/cities' },
       { label: 'States / Regions', to: '/settings/states' },
@@ -140,6 +143,26 @@ export default function Sidebar({ open: drawerOpen = false, onClose = () => {} }
                   <LayoutDashboard size={14} />
                 </span>
                 <span className="flex-1 text-left">Dashboard</span>
+                {isActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
+              </>
+            )}
+          </NavLink>
+
+          {/* Tasks */}
+          <NavLink
+            to="/tasks"
+            onClick={onClose}
+            className={({ isActive }) => cn(
+              'group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[12.5px] font-semibold transition-all duration-150',
+              isActive ? 'nav-item-active text-white' : 'text-blue-100/70 hover:bg-white/6 hover:text-white'
+            )}
+          >
+            {({ isActive }) => (
+              <>
+                <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-150', isActive ? 'nav-icon-active' : 'bg-white/6 group-hover:bg-white/10')}>
+                  <ClipboardList size={14} />
+                </span>
+                <span className="flex-1 text-left">Tasks</span>
                 {isActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
               </>
             )}

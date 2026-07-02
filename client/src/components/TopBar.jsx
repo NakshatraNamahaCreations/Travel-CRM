@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Bell, Home, Menu, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../store/AuthContext.jsx';
+import { notificationsApi } from '../api/notifications.js';
 
 /* Map path prefixes → page title shown in header */
 const PAGE_TITLES = {
@@ -27,6 +29,11 @@ const PAGE_TITLES = {
   '/settings/destinations': 'Destinations',
   '/settings/cities': 'Cities / Towns',
   '/settings/states': 'States / Regions',
+  '/notifications': 'Notifications',
+  '/tasks': 'Tasks',
+  '/accounting/invoices': 'Invoices',
+  '/settings/organization': 'Organization & Teams',
+  '/bookings': 'All Bookings',
   '/': 'Dashboard',
 };
 
@@ -50,6 +57,14 @@ export default function TopBar({ onMenuClick }) {
   const pageTitle = usePageTitle();
 
   const initials = (user?.name || 'U').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+
+  const { data: countData } = useQuery({
+    queryKey: ['notifications-count'],
+    queryFn: notificationsApi.unreadCount,
+    refetchInterval: 30000, // poll every 30s
+    staleTime: 20000,
+  });
+  const unreadCount = countData?.count ?? 0;
 
   const submit = (e) => {
     e.preventDefault();
@@ -123,13 +138,18 @@ export default function TopBar({ onMenuClick }) {
           </Link>
 
           {/* Notifications */}
-          <button
+          <Link
+            to="/notifications"
             className="relative flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             title="Notifications"
           >
             <Bell size={16} />
-            <span className="notif-badge absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-          </button>
+            {unreadCount > 0 && (
+              <span className="notif-badge absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
 
           {/* Divider */}
           <div className="mx-1 h-6 w-px bg-slate-200" />

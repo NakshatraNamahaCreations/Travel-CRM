@@ -39,18 +39,23 @@ function rowsFromQuote(pkg, startDate) {
   const operational = (pkg.transports || []).map((t, i) => {
     const price = (t.items || []).reduce((s, it) => s + (it.amount || (it.qty || 0) * (it.rate || 0)), 0);
     const detail = (t.items || []).map((it) => `${it.qty || 1}× ${it.type || 'Service'}`).join(', ');
-    const checkIn = startDate ? addDays(startDate, (t.day || i + 1) - 1) : null;
+    const dayNo = (Array.isArray(t.days) && t.days[0]) || t.day || i + 1;
+    const checkIn = startDate ? addDays(startDate, dayNo - 1) : null;
     return {
-      kind: 'operational', name: t.serviceLocation || t.serviceType || `Day ${t.day || i + 1} Service`,
-      detail: [t.serviceType, detail].filter(Boolean).join(' — '), checkIn, price, order: i,
+      kind: 'operational', name: t.serviceLocation || t.serviceType || `Day ${dayNo} Service`,
+      detail: [t.serviceType, detail].filter(Boolean).join(' — '), day: dayNo, checkIn, price, order: i,
     };
   });
 
-  return { hotel: hotels, operational };
+  const flights = (pkg.flights || []).map((f, i) => ({
+    kind: 'flight', name: f.label || `Flight ${i + 1}`, price: f.cost || 0, order: i,
+  }));
+
+  return { hotel: hotels, operational, flight: flights };
 }
 
 // Shared helper — called from createFromQuote and the manual generate endpoint.
-export async function autoGenerateServiceBookings(queryId, quoteId, userId, kinds = ['hotel', 'operational']) {
+export async function autoGenerateServiceBookings(queryId, quoteId, userId, kinds = ['hotel', 'operational', 'flight']) {
   const [quote, query] = await Promise.all([Quote.findById(quoteId), Query.findById(queryId)]);
   if (!quote) return [];
   const pkg = pkgOf(quote);
@@ -75,7 +80,7 @@ export const generateServiceBookings = asyncHandler(async (req, res) => {
   const { query: queryId, quote: quoteId, kind } = req.body;
   if (!queryId || !quoteId) throw ApiError.badRequest('query and quote are required');
 
-  const kinds = kind ? [kind] : ['hotel', 'operational'];
+  const kinds = kind ? [kind] : ['hotel', 'operational', 'flight'];
   const createdRows = await autoGenerateServiceBookings(queryId, quoteId, req.user?._id, kinds);
   if (!createdRows.length && !kind) throw ApiError.badRequest('Quote has no package to generate from');
   return created(res, createdRows);

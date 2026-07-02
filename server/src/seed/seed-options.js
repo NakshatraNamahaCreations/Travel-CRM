@@ -21,6 +21,14 @@ const DEFAULTS = {
     '17 Seater Tempo Traveller', '26 Seater Tempo Traveller',
   ],
   hotelGroup: ['Taj', 'Lemon Tree', 'Symphony', 'Silver Sand', 'TSG', 'NK', 'Aquays', 'Ocean Tree'],
+  hotelService: [
+    'Candle Light Dinner', 'Beach Side Candle Light Dinner', 'Gala Dinner',
+    'Honeymoon Cake', 'Flower Bed Decoration', 'Fruit Basket', 'Early Check-in', 'Late Check-out',
+  ],
+  tripService: [
+    'Cake and Room Decoration', 'Candle Light Dinner', 'Candle Light Dinner (Pool Side)',
+    'Off Road Dinner', 'Side Treking', 'Bonfire', 'Photography / Videography', 'Scuba Diving',
+  ],
   paymentPreference: [
     '25% on Booking Date, 75% 1 day after Checkin Date',
     '25% on Booking Date, 75% 2 days before Checkin Date',
