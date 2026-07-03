@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Clipboard, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Download, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
 import { querySourcesApi, usersApi } from '../../api/masterData.js';
 import { useAuth } from '../../store/AuthContext.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import { downloadCsv } from '../../lib/downloadCsv.js';
 
 const COLUMNS = ['Destination', 'Start Date', 'No of Nights', 'Trip ID', 'Guest Name', 'Phone Number', 'Email', 'No of Adults', 'Children', 'Comments'];
 const SAMPLE_ROWS = [
@@ -14,11 +15,6 @@ const SAMPLE_ROWS = [
   ['Sikkim', '13-01-2026', '5', '', 'Anand SS', '', '', '4', '', 'Budget:56,000'],
   ['Kerala', '07-12-2026', '5', 'AB123232', 'Rajat Sharma', '', 'rajat@example.com', '6', '1,2', '5 star Hotels'],
 ];
-
-function csvCell(v) {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 export default function UploadQueriesPage() {
   const navigate = useNavigate();
@@ -31,7 +27,7 @@ export default function UploadQueriesPage() {
 
   const mut = useMutation({
     mutationFn: () => queriesApi.uploadCsv(file, { source: source?._id, owner: owner?._id }),
-    onSuccess: (data) => { setResult(data); toast.success(`Imported ${data.created} quer${data.created === 1 ? 'y' : 'ies'}`); },
+    onSuccess: (data) => { setResult(data); setFile(null); toast.success(`Imported ${data.created} quer${data.created === 1 ? 'y' : 'ies'}`); },
     onError: (e) => toast.error(e.message || 'Upload failed'),
   });
 
@@ -46,15 +42,7 @@ export default function UploadQueriesPage() {
     mut.mutate();
   };
 
-  const copyTemplate = async () => {
-    const csv = [COLUMNS, ...SAMPLE_ROWS].map((r) => r.map(csvCell).join(',')).join('\n');
-    try {
-      await navigator.clipboard.writeText(csv);
-      toast.success('Template copied to clipboard');
-    } catch {
-      toast.error('Could not copy — select the table and copy manually');
-    }
-  };
+  const downloadTemplate = () => downloadCsv([COLUMNS, ...SAMPLE_ROWS], 'queries-sample.csv');
 
   return (
     <div>
@@ -73,7 +61,7 @@ export default function UploadQueriesPage() {
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
           <span className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">Choose File</span>
           <span className="text-sm text-slate-500">{file ? file.name : 'No file selected'}</span>
-          <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+          <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
         {fileError && (
           <p className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-red-500 px-2 py-1 text-xs font-medium text-white">
@@ -134,7 +122,7 @@ export default function UploadQueriesPage() {
               </tbody>
             </table>
           </div>
-          <button onClick={copyTemplate} className="btn-secondary mt-3 text-sm"><Clipboard size={15} /> Copy Template Format</button>
+          <button onClick={downloadTemplate} className="btn-secondary mt-3 text-sm"><Download size={15} /> Download Sample CSV</button>
         </div>
       </div>
     </div>

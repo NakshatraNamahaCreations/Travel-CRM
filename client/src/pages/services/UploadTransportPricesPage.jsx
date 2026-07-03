@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Copy, X } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Download, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { importApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import { downloadCsv } from '../../lib/downloadCsv.js';
 
 const TEMPLATE = [
   ['Duty Code', 'A', 'B', 'Service', 'Distance', 'Start Time', 'Duration(mins)', 'Day Schedule', 'Season 1 (Ops): 1 Jul 2026 - 30 Sep 2026', '', 'Season 2: 13 Oct 2026 - 24 Oct 2026', ''],
@@ -35,6 +36,8 @@ export default function UploadTransportPricesPage() {
     onSuccess: (out) => {
       const totals = out.reduce((a, s) => ({ services: a.services + (s.services || 0), priceRows: a.priceRows + (s.priceRows || 0) }), { services: 0, priceRows: 0 });
       setResult(totals);
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
       toast.success('Prices uploaded');
     },
     onError: (e) => toast.error(e.message || 'Upload failed'),
@@ -47,10 +50,7 @@ export default function UploadTransportPricesPage() {
     setResult(null);
   };
 
-  const copyTemplate = () => {
-    const csv = TEMPLATE.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    navigator.clipboard.writeText(csv).then(() => toast.success('Template copied'), () => toast.error('Copy failed'));
-  };
+  const downloadTemplate = () => downloadCsv(TEMPLATE, 'transport-prices-sample.csv');
 
   return (
     <div>
@@ -118,7 +118,7 @@ export default function UploadTransportPricesPage() {
         <div className="mt-8 rounded-2xl bg-slate-50 p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">CSV File Format</h2>
-            <button onClick={copyTemplate} className="btn-secondary text-sm"><Copy size={14} /> Copy Template Format</button>
+            <button onClick={downloadTemplate} className="btn-secondary text-sm"><Download size={14} /> Download Sample CSV</button>
           </div>
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for transport service prices, follow this format. Each row has a <b>Duty Code</b>, locations (<b>A → B</b>), <b>Service</b>, <b>Distance, Start Time, Duration, Day Schedule</b>, then one block of <b>vehicle-type</b> columns per season date-range. Re-uploading a file refreshes that supplier's prices.

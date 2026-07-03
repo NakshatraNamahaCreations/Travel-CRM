@@ -1,17 +1,18 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Copy, X } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Download, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { importApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import { downloadCsv } from '../../lib/downloadCsv.js';
 
 const TEMPLATE = [
   ['Name', 'Service', 'Description', 'Open Time', 'Close Time', 'Duration(Mins)', 'Slots', 'Season 1 (Ops): 1 Jul 2026 - 30 Sep 2026', '', 'Season 2: 13 Oct 2026 - 24 Oct 2026', ''],
   ['', '', '', '', '', '', '', 'Adult', 'Child (6-12)', 'Adult', 'Child (6-12)'],
   ['Port Blair To Havelock', 'Private Catamaran Ferry : Premium', 'Details for this Activity Service', '08:00', '16:00', '90', '08:00,10:45', '2200', '3000', '2500', '3500'],
-  ['', 'Private Catamaran Ferry : Deluxe', '', '', '(Mon)', '90', '', '3000', '4000', '3500', '4500'],
+  ['Port Blair To Havelock', 'Private Catamaran Ferry : Deluxe', '', '', '(Mon)', '90', '', '3000', '4000', '3500', '4500'],
   ['Havelock To Neil Island', 'Private Catamaran Ferry', '', '', '-', '120', '-', '2100', '3200', '2500', '3500'],
 ];
 
@@ -35,6 +36,8 @@ export default function UploadActivityPricesPage() {
     onSuccess: (out) => {
       const totals = out.reduce((a, s) => ({ activities: a.activities + (s.activities || 0), priceRows: a.priceRows + (s.priceRows || 0) }), { activities: 0, priceRows: 0 });
       setResult(totals);
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
       toast.success('Prices uploaded');
     },
     onError: (e) => toast.error(e.message || 'Upload failed'),
@@ -47,10 +50,7 @@ export default function UploadActivityPricesPage() {
     setResult(null);
   };
 
-  const copyTemplate = () => {
-    const csv = TEMPLATE.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    navigator.clipboard.writeText(csv).then(() => toast.success('Template copied'), () => toast.error('Copy failed'));
-  };
+  const downloadTemplate = () => downloadCsv(TEMPLATE, 'activity-prices-sample.csv');
 
   return (
     <div>
@@ -118,7 +118,7 @@ export default function UploadActivityPricesPage() {
         <div className="mt-8 rounded-2xl bg-slate-50 p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">CSV File Format</h2>
-            <button onClick={copyTemplate} className="btn-secondary text-sm"><Copy size={14} /> Copy Template Format</button>
+            <button onClick={downloadTemplate} className="btn-secondary text-sm"><Download size={14} /> Download Sample CSV</button>
           </div>
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for travel activity prices, follow this format. Each row has a <b>Name</b>, <b>Service</b> (ticket/package), optional <b>Description, Open Time, Close Time, Duration, Slots</b>, then one block of <b>Adult / Child</b> columns per season date-range. Leave the Name blank to add another service under the previous activity.

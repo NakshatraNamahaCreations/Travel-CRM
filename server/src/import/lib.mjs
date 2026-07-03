@@ -66,5 +66,8 @@ export function pickSheets(sheetNames) {
     else result.push({ sheet: o, name: o.trim() });
   }
   for (const c of copies) if (!used.has(c)) result.push({ sheet: c, name: strip(c) });
+  // CSV uploads parse as a single generic "Sheet1" — don't drop them. Empty
+  // name so importers fall back to the name found inside the sheet data.
+  if (!result.length) return sheetNames.map((s) => ({ sheet: s, name: '' }));
   return result;
 }

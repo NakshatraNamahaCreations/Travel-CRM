@@ -7,8 +7,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        // Local server. For the deployed backend instead, use https://travel.nakshatranamahacreations.in
+        target: 'http://localhost:5008',
         changeOrigin: true,
+        secure: false,
       },
     },
   },

@@ -32,6 +32,8 @@ export function parseHotelSheet(rows, displayName) {
     for (let c = g.start; c < g.end; c++) { const mp = cell(rows[M], c); if (mp) g.meals.push({ col: c, mealPlan: mp }); }
     g.ranges = [];
     for (let i = H + 1; i < M; i++) for (let c = g.start; c < g.end; c++) { const r = parseRange(cell(rows[i], c)); if (r) g.ranges.push(r); }
+    // CSV template keeps the dates inside the season label itself, e.g. "Season 1: 1 Jul 2026 - 30 Sep 2026".
+    if (!g.ranges.length) { const r = parseRange(g.label); if (r) g.ranges.push(r); }
   }
 
   let name = '', loc = '', star = 0;
@@ -107,6 +109,8 @@ export function parseActivitiesSheet(rows) {
     for (let c = g.start; c < g.end; c++) { const cfg = cell(rows[C], c); if (cfg) g.configs.push({ col: c, config: cfg }); }
     g.ranges = [];
     for (let i = H + 1; i < C; i++) for (let c = g.start; c < g.end; c++) { const r = parseRange(cell(rows[i], c)); if (r) g.ranges.push(r); }
+    // CSV template keeps the dates inside the season label itself.
+    if (!g.ranges.length) { const r = parseRange(cell(rows[H], g.start)); if (r) g.ranges.push(r); }
   }
   const activities = new Map(); const prices = []; let curName = '';
   for (let i = C + 1; i < rows.length; i++) {
@@ -160,12 +164,16 @@ export function parseTransportSheet(rows) {
   const ranges = []; let V = -1;
   for (let i = H + 1; i < Math.min(rows.length, H + 6); i++) {
     let hasDate = false, hasText = false;
-    for (const g of groups) for (let c = g.start; c < g.end; c++) { const v = cell(rows[i], c); if (!v) continue; if (parseRange(v)) { ranges.push(parseRange(v)); hasDate = true; } else hasText = true; }
+    for (const g of groups) for (let c = g.start; c < g.end; c++) { const v = cell(rows[i], c); if (!v) continue; const r = parseRange(v); if (r) { ranges.push(r); (g.ranges = g.ranges || []).push(r); hasDate = true; } else hasText = true; }
     if (hasText && !hasDate && V < 0) V = i;
   }
   if (V < 0) V = H + 1;
+  // CSV template keeps the dates inside the season label itself.
+  for (const g of groups) if (!g.ranges) { const r = parseRange(cell(rows[H], g.start)); if (r) { g.ranges = [r]; ranges.push(r); } }
   const vehicles = [];
-  for (const g of groups) for (let c = g.start; c < g.end; c++) { const v = cell(rows[V], c); if (v) vehicles.push({ col: c, name: v }); }
+  // Pair each vehicle column with its own season's date range(s); fall back to
+  // all ranges for legacy sheets where dates couldn't be matched to a group.
+  for (const g of groups) for (let c = g.start; c < g.end; c++) { const v = cell(rows[V], c); if (v) vehicles.push({ col: c, name: v, ranges: g.ranges }); }
   const dateRanges = ranges.length ? ranges : [null];
   const routes = new Map(); let curRoute = '';
   for (let i = V + 1; i < rows.length; i++) {
@@ -176,7 +184,7 @@ export function parseTransportSheet(rows) {
     if (!routes.has(curRoute)) routes.set(curRoute, { items: [], prices: [] });
     const route = routes.get(curRoute);
     route.items.push({ name: service, description: cell(r, 7) });
-    for (const v of vehicles) { const price = num(cell(r, v.col)); if (!price) continue; for (const range of dateRanges) if (range) route.prices.push({ itemName: service, config: v.name, price, ...range }); }
+    for (const v of vehicles) { const price = num(cell(r, v.col)); if (!price) continue; for (const range of (v.ranges || dateRanges)) if (range) route.prices.push({ itemName: service, config: v.name, price, ...range }); }
   }
   return [...routes.entries()].map(([name, v]) => ({ name, ...v }));
 }

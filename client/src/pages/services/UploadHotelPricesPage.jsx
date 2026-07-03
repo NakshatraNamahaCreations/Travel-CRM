@@ -1,21 +1,22 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Copy, X } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Download, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { importApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import { downloadCsv } from '../../lib/downloadCsv.js';
 
 // A representative CSV template in the Sembark pivoted format (group → seasons → meal plans).
 const TEMPLATE = [
   ['Group Name', 'Location', 'Name', 'Star', 'Room', 'Season 1 (Ops): 1 Jul 2026 - 30 Sep 2026', '', 'Season 2: 13 Oct 2026 - 24 Oct 2026', ''],
   ['', '', '', '', '', 'CP', 'MAP', 'CP', 'MAP'],
   ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Deluxe (2P)', '1200', '1800', '2200', '2800'],
-  ['', '', '', '', 'Super Deluxe (2P)', '1800', '2400', '2500', '2800'],
-  ['', '', '', '', 'Extra Bed (Adult)', '1800', '2000', '2500', '2800'],
-  ['', '', '', '', 'Extra Bed (Child)', '2000', '2400', '2500', '2800'],
-  ['', '', '', '', 'Child without Bed (CNB)', '2000', '2400', '2500', '2800'],
+  ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Super Deluxe (2P)', '1800', '2400', '2500', '2800'],
+  ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Extra Bed (Adult)', '1800', '2000', '2500', '2800'],
+  ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Extra Bed (Child)', '2000', '2400', '2500', '2800'],
+  ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Child without Bed (CNB)', '2000', '2400', '2500', '2800'],
 ];
 
 export default function UploadHotelPricesPage() {
@@ -38,6 +39,8 @@ export default function UploadHotelPricesPage() {
     onSuccess: (summaries) => {
       const totals = summaries.reduce((a, s) => ({ hotels: a.hotels + (s.hotels || 0), priceRows: a.priceRows + (s.priceRows || 0), skipped: a.skipped + (s.skipped || 0) }), { hotels: 0, priceRows: 0, skipped: 0 });
       setResult(totals);
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
       toast.success('Prices uploaded');
     },
     onError: (e) => toast.error(e.message || 'Upload failed'),
@@ -50,10 +53,7 @@ export default function UploadHotelPricesPage() {
     setResult(null);
   };
 
-  const copyTemplate = () => {
-    const csv = TEMPLATE.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    navigator.clipboard.writeText(csv).then(() => toast.success('Template copied'), () => toast.error('Copy failed'));
-  };
+  const downloadTemplate = () => downloadCsv(TEMPLATE, 'hotel-prices-sample.csv');
 
   return (
     <div>
@@ -123,7 +123,7 @@ export default function UploadHotelPricesPage() {
         <div className="mt-8 rounded-2xl bg-slate-50 p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">CSV File Format</h2>
-            <button onClick={copyTemplate} className="btn-secondary text-sm"><Copy size={14} /> Copy Template Format</button>
+            <button onClick={downloadTemplate} className="btn-secondary text-sm"><Download size={14} /> Download Sample CSV</button>
           </div>
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for hotel prices, please follow this format. Each hotel group has a <b>Group Name, Location, Name, Star</b>, then a <b>Room</b> column, followed by one block of meal-plan columns (CP / MAP / AP …) per season date-range. Use <b>Extras</b> rows for Extra Bed (Adult/Child) and Child without Bed (CNB). Re-uploading a file refreshes that hotel's prices.

@@ -1,17 +1,18 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Copy, X } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, Download, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { importApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import { downloadCsv } from '../../lib/downloadCsv.js';
 
 // Flat hotels master CSV (no prices).
 const TEMPLATE = [
   ['Group Name', 'Location', 'Name', 'Star', 'Address Line 1', 'Landmark', 'Pin Code', 'Phone Dial Code', 'Contact Number', 'Contact Number 2', 'Email Id', 'Checkin Time', 'Checkout Time', 'Url'],
   ['The MRS Group', 'Jaipur, Rajasthan, India', 'Nahargarh Haveli', '3', 'B - 4, Ajmer Rd, Gopalbari', 'Behind Corporate Park', '302001', '+91', '9810997861', '9998889988', 'support@example.com', '14:00', '11:00', 'https://hotelxyz.com'],
-  ['...', '...', 'Hilton Jaipur', '3', 'B - 4, Ajmer Rd, Gopalbari', 'Behind Corporate Park', '302001', '+91', '9810997861', '', 'support@example.com', '14:00', '11:00', ''],
+  ['The MRS Group', 'Jaipur, Rajasthan, India', 'Hilton Jaipur', '3', 'B - 4, Ajmer Rd, Gopalbari', 'Behind Corporate Park', '302001', '+91', '9810997861', '', 'support@example.com', '14:00', '11:00', ''],
   ['Sky Stays', 'Ahmedabad, Gujarat, India', 'Royal Square', '4', '4th Floor, Sparsh Arcade, Zundal', 'Near Bagga Hyundai', '382424', '+91', '8511084939', '8988899888', 'support@example.com', '13:00', '10:00', 'https://mmt.com/hotel/1212'],
 ];
 
@@ -35,6 +36,8 @@ export default function UploadHotelsPage() {
     onSuccess: (out) => {
       const totals = out.reduce((a, s) => ({ hotels: a.hotels + (s.hotels || 0), skipped: a.skipped + (s.skipped || 0) }), { hotels: 0, skipped: 0 });
       setResult(totals);
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
       toast.success('Hotels uploaded');
     },
     onError: (e) => toast.error(e.message || 'Upload failed'),
@@ -47,10 +50,7 @@ export default function UploadHotelsPage() {
     setResult(null);
   };
 
-  const copyTemplate = () => {
-    const csv = TEMPLATE.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    navigator.clipboard.writeText(csv).then(() => toast.success('Template copied'), () => toast.error('Copy failed'));
-  };
+  const downloadTemplate = () => downloadCsv(TEMPLATE, 'hotels-sample.csv');
 
   return (
     <div>
@@ -116,7 +116,7 @@ export default function UploadHotelsPage() {
         <div className="mt-8 rounded-2xl bg-slate-50 p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">CSV File Format</h2>
-            <button onClick={copyTemplate} className="btn-secondary text-sm"><Copy size={14} /> Copy Template Format</button>
+            <button onClick={downloadTemplate} className="btn-secondary text-sm"><Download size={14} /> Download Sample CSV</button>
           </div>
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             One row per hotel. Leave <b>Group Name</b> / <b>Location</b> blank (or use <b>…</b>) to repeat the previous row's value. <b>Location</b> is "City, State, Country".
