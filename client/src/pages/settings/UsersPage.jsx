@@ -10,8 +10,14 @@ import DataTable from '../../components/ui/DataTable.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import { cn } from '../../lib/cn.js';
 import { PERMISSION_MODULES, ACTION_LABELS, roleDefaultGranted } from '../../lib/permissions.js';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
 
 const ROLES = ['admin', 'manager', 'sales', 'operations', 'accounts'];
+
+const EMPTY_FILTERS = { role: '' };
+const FILTER_FIELDS = [
+  { key: 'role', label: 'Role', type: 'select', options: ROLES.map((r) => ({ value: r, label: r[0].toUpperCase() + r.slice(1) })) },
+];
 const ROLE_BADGE = {
   admin: 'bg-purple-50 text-purple-700', manager: 'bg-blue-50 text-blue-700',
   sales: 'bg-green-50 text-green-700', operations: 'bg-amber-50 text-amber-700', accounts: 'bg-cyan-50 text-cyan-700',
@@ -104,13 +110,15 @@ function UserForm({ existing, onSaved }) {
 export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // user | 'new' | null
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
   const { can } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', debounced],
-    queryFn: () => usersApi.list({ search: debounced, limit: 50 }),
+    queryKey: ['users', debounced, filters],
+    queryFn: () => usersApi.list({ search: debounced, limit: 50, ...(filters.role ? { role: filters.role } : {}) }),
   });
 
   const statusMut = useMutation({
@@ -144,8 +152,10 @@ export default function UsersPage() {
 
   return (
     <ServiceShell title="Users & Teams" search={search} onSearch={setSearch} total={data?.meta?.total} onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)} filterCount={countFilters(filters)}
       actions={can('users.create') && <button onClick={() => setEditing('new')} className="btn-primary"><Plus size={16} /> Add User</button>}>
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No users found." />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add User' : 'Edit User'} width="max-w-2xl">
         {editing && <UserForm existing={editing === 'new' ? null : editing} onSaved={() => { setEditing(null); refresh(); }} />}
       </Modal>

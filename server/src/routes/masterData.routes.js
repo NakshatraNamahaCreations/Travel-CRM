@@ -8,7 +8,7 @@ import { makeCrudRouter } from './_crudRouter.js';
 const openWrite = { writeRoles: ['admin', 'manager', 'sales'] };
 
 export const destinationRoutes = makeCrudRouter(
-  crudFactory(Destination, { searchFields: ['name', 'country', 'region'], sort: 'name' }),
+  crudFactory(Destination, { searchFields: ['name', 'country', 'region'], filterFields: ['region'], sort: 'name' }),
   { writeRoles: ['admin', 'manager', 'sales', 'operations'] }
 );
 

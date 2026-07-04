@@ -7,6 +7,33 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'nume
 const fmtDateDM = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const stars = (n) => '&#9733;'.repeat(Math.min(n || 5, 5));
+
+// "14:00" → "02:00 PM"; returns '' when unparsable.
+const fmtTime = (hm) => {
+  const m = String(hm || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '';
+  let h = +m[1];
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${String(h).padStart(2, '0')}:${m[2]} ${ap}`;
+};
+// Arrival = start time + duration minutes.
+const arrTime = (hm, durMins) => {
+  const m = String(hm || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m || !durMins) return '';
+  const total = (+m[1]) * 60 + (+m[2]) + Number(durMins);
+  const h24 = Math.floor(total / 60) % 24;
+  return fmtTime(`${h24}:${String(total % 60).padStart(2, '0')}`);
+};
+const linkify = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
+// Master descriptions may contain rich-text HTML; reduce to plain text for the PDF.
+const stripHtml = (s) => String(s || '')
+  .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n')
+  .replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ')
+  .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d))
+  .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
+  .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&')
+  .replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
 const dash = (arr) => (arr || []).map((x) => `<div class="dl">- ${esc(x)}</div>`).join('');
 
 // Like dash(), but renders a leading "Label: " prefix in bold.
@@ -21,7 +48,9 @@ const tcDash = (arr) => (arr || []).map((x) => {
 
 // Short place codes for the legend strips under the tables (PB | HL | NL ...).
 const placeCode = (name) => {
-  const s = String(name || '').toLowerCase();
+  const t = String(name || '').trim();
+  if (/^[A-Za-z]{2,3}$/.test(t)) return t.toUpperCase(); // already a short code (PB, HL, NL...)
+  const s = t.toLowerCase();
   if (s.includes('port blair')) return 'PB';
   if (s.includes('havelock') || s.includes('swaraj')) return 'HL';
   if (s.includes('neil') || s.includes('shaheed')) return 'NL';
@@ -40,7 +69,7 @@ const LETTERHEAD = `
       </div>
     </div>
     <div class="lh-col"><b>Address:</b>${company.address.map(esc).join('<br/>')}</div>
-    <div class="lh-col"><b>Email:</b>${company.emails.map(esc).join('<br/>')}</div>
+    <div class="lh-col wide"><b>Email:</b>${company.emails.map(esc).join('<br/>')}</div>
     <div class="lh-col"><b>Phone:</b>${company.phones.map(esc).join('<br/>')}</div>
   </div>`;
 
@@ -81,40 +110,183 @@ export function quotationHtml(q) {
   const gallery = company.galleryImages || [];
 
   // ---- Ferry / transfer table ----
+  // Static schedule fallback: match ferry name keyword + sector code (PB>HL ...)
+  // against company.ferrySchedule when the transfer has no start time entered.
+  const sectorKey = (loc) => {
+    const parts = String(loc || '').split(/\s+to\s+|\s*(?:>|&gt;|→|—|–)\s*|\s+-\s+/i).filter(Boolean);
+    return parts.length >= 2 ? `${placeCode(parts[0])}>${placeCode(parts[parts.length - 1])}` : '';
+  };
+  const staticTimes = (name, loc) => {
+    const n = String(name || '').toLowerCase();
+    const entry = (company.ferrySchedule || []).find((f) => n.includes(f.match));
+    return entry?.times?.[sectorKey(loc)] || null;
+  };
   const pillCls = (i) => 'pl' + (i % 3);
   const transports = pkg.transports || [];
   const transferRows = transports.map((t, i) => {
     const days = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : []);
     const dayLabel = days.length > 0 ? `Day ${days.join(', ')}` : '—';
+    const sched = staticTimes(t.serviceType, t.serviceLocation);
+    const dep = fmtTime(t.startTime) || (sched ? fmtTime(sched[0]) : '') || esc(t.startTime) || '&mdash;';
+    const arr = arrTime(t.startTime, t.durationMins) || (sched ? fmtTime(sched[1]) : '') || '&mdash;';
     return `<tr>
       <td class="bcell">${esc(t.serviceType || t.serviceLocation || dayLabel)}</td>
       <td><span class="pill ${pillCls(i)}">${esc(t.serviceLocation || dayLabel)}</span></td>
-      <td>${esc(t.startTime) || '&mdash;'}</td>
+      <td>${dep}</td>
+      <td>${arr}</td>
     </tr>`;
   }).join('');
   const ferryLegend = transports.map((t) => esc(t.serviceLocation)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
-  // ---- Hotels table ----
+  // ---- Hotels table (page 1 — compact, with star rating under the name) ----
   const hotels = pkg.hotels || [];
-  const hotelRows = hotels.map((h) => `<tr>
-    <td class="bcell">${esc(h.hotelName)}</td><td>${esc(h.roomType)}</td><td>${esc(h.city)}</td>
-    <td>${h.rooms || 0}</td><td>${(h.nights || []).length || 1}</td>
-    <td>${h.aweb || 0}</td><td>${h.cnb || 0}</td>
-    <td><span class="pill navy">${esc(h.mealPlan)}</span></td>
-  </tr>`).join('') || '<tr><td colspan="8" class="muted">No hotels added.</td></tr>';
+  const starRow = (n) => `<span class="tstars">${'&#9733;'.repeat(Math.min(n || 3, 5))}</span>`;
+  const hotelRows = hotels.map((h) => {
+    const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
+    return `<tr>
+      <td class="bcell hcell">
+        <div>${esc(h.hotelName)}</div>
+        ${starRow(master.stars)}
+      </td>
+      <td>${esc(h.roomType)}</td><td>${esc(h.city)}</td>
+      <td>${h.rooms || 0}</td><td>${(h.nights || []).length || 1}</td>
+      <td>${h.aweb || 0}</td><td>${h.cnb || 0}</td>
+      <td><span class="pill navy">${esc(h.mealPlan)}</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted">No hotels added.</td></tr>';
+
+  // ---- Hotels / Accommodations cards (own section — image + details) ----
+  const ordinalPdf = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  const hotelCards = hotels.map((h) => {
+    const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
+    const nightsArr = (h.nights || []).length ? h.nights : [1];
+    const badges = nightsArr.map((n) => `<span class="nbadge">${ordinalPdf(n)}</span>`).join(' ');
+    const checkIn = start ? fmtDate(addDays(start, nightsArr[0] - 1)) : '';
+    const nameHtml = master.detailsLink
+      ? `<a href="${esc(linkify(master.detailsLink))}" class="cardname">${esc(h.hotelName)} <span class="ext">&#8599;</span></a>`
+      : `<span class="cardname">${esc(h.hotelName)}</span>`;
+    const st = Math.min(master.stars || 3, 5);
+    const desc = master.notes || master.address || '';
+    const paxTotal = (Number(h.paxPerRoom) || 2) * (Number(h.rooms) || 1);
+    return `<div class="hcard">
+      <div class="hinfo">
+        <div class="hnights">${badges} Night${nightsArr.length > 1 ? 's' : ''} at <b>${esc(h.city || master.location?.city || '')}</b></div>
+        ${checkIn ? `<div class="hcheckin">Check-in on ${checkIn}</div>` : ''}
+        <div>${nameHtml}</div>
+        <div class="cardstars">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></div>
+        ${desc ? `<div class="carddesc">${esc(String(desc).slice(0, 140))}</div>` : ''}
+        <div class="hmeta">
+          <div>
+            <p class="k">ROOMS</p>
+            <p class="v">${h.rooms || 1} ${esc(h.roomType || 'Room')}</p>
+            <p class="s">${paxTotal} Pax${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</p>
+          </div>
+          <div>
+            <p class="k">MEAL PLAN</p>
+            <p class="v">${esc(h.mealPlan || '—')}</p>
+          </div>
+        </div>
+      </div>
+      ${master.imageUrl ? `<img class="hphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
+    </div>`;
+  }).join('');
   const hotelLegend = hotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
-  // ---- Day wise itinerary ----
+  // ---- Cover page data ----
+  const fmtDateWD = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }) : '');
+  const routeCode = hotels.map((h) => `${(h.nights || []).length || 1}${placeCode(h.city)}`).join('&gt;');
+  const destCovered = (() => {
+    const m = new Map();
+    hotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
+    return [...m.entries()].map(([c, n]) => `<b>${esc(c)} - ${n}</b>`).join(' &nbsp;<span class="pin">&#128205;</span>&nbsp; ');
+  })();
+  const heroImg = company.heroImage || gallery[2] || gallery[0] || '';
+
+  // City a given trip day belongs to (from hotel night assignments).
+  const cityOfDay = (n) => {
+    const h = hotels.find((x) => (x.nights || []).includes(n));
+    return h?.city || hotels[hotels.length - 1]?.city || '';
+  };
+
+  // ---- Itinerary introduction (day list) ----
+  const introRows = (q.days || []).map((d) => {
+    const headline = (d.title && !/^day\s*\d+$/i.test(d.title.trim()) && d.title)
+      || String(d.description || '').split(/\n|·|•/).map((x) => x.trim()).filter(Boolean).join(' + ')
+      || 'Leisure day';
+    return `<div class="introrow"><span class="introday">Day ${d.dayNumber}</span>${esc(headline)}</div>`;
+  }).join('');
+
+  // ---- Day wise itinerary (full-width day bands + hotel strip) ----
+  const normName = (s) => String(s || '').trim().toLowerCase();
   const dayBlocks = (q.days || []).map((d) => {
-    const date = d.date || (start ? addDays(start, (d.dayNumber || 1) - 1) : null);
+    const n = d.dayNumber || 1;
+    const date = d.date || (start ? addDays(start, n - 1) : null);
+    // Rich service blocks: service name + "Day Schedule" description from the
+    // transport master (imported from the Transport Excel), when available.
+    const dayTs = transports.filter((t) => (Array.isArray(t.days) ? t.days : [t.day]).includes(n));
+    const svcBlocks = dayTs.map((t) => {
+      const master = t.service && typeof t.service === 'object' ? t.service : null;
+      const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
+      const desc = stripHtml(item?.description || '');
+      if (!desc) return '';
+      const paras = desc.split('\n').filter(Boolean)
+        .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
+      return `<div class="svcblk"><div class="dwtitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}</div>`;
+    }).filter(Boolean).join('');
+    const describedTypes = new Set(dayTs
+      .filter((t) => {
+        const master = t.service && typeof t.service === 'object' ? t.service : null;
+        const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
+        return stripHtml(item?.description || '');
+      })
+      .map((t) => normName(t.serviceType)));
     const lines = String(d.description || '').split(/\n|·|•/).filter((x) => x.trim())
-      .map((l) => `<div class="ditem">- ${esc(l.trim())}</div>`).join('');
-    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) ? ` &mdash; ${esc(d.title)}` : '';
+      .filter((l) => !describedTypes.has(normName(l.replace(/\d{1,2}:\d{2}.*$/, ''))))
+      .filter((l) => !(svcBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
+      .map((l) => `<div class="ditem">&bull;&nbsp; ${esc(l.trim())}</div>`).join('')
+      || (svcBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
+    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) && !svcBlocks ? `<div class="dwtitle">${esc(d.title)}</div>` : '';
+    const nightHotels = hotels.filter((h) => (h.nights || []).includes(n));
+    const strips = nightHotels.map((h) => {
+      const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
+      const st = Math.min(master.stars || 3, 5);
+      return `<div class="hstrip">
+        ${master.imageUrl ? `<img class="hthumb" src="${esc(master.imageUrl)}" alt=""/>` : ''}
+        <div class="hsmain">
+          <div class="hsname">Hotel &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
+          <div class="hscols">
+            <div><p class="k">CATEGORY</p><p class="v"><span class="tstars">${'&#9733;'.repeat(st)}</span></p></div>
+            <div><p class="k">ROOM TYPE</p><p class="v">${esc(h.roomType || '—')}</p></div>
+            <div><p class="k">MEAL PLAN</p><p class="v">${esc(h.mealPlan || '—')}</p></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
     return `<div class="dayblk">
-      <div class="dayhdr">&#9654; DAY ${d.dayNumber}:&nbsp; ${date ? fmtDateDM(date) : ''}${title}</div>
-      ${lines}
+      <div class="dwband">Day ${n} ${esc(cityOfDay(n))} &nbsp;&#124;&nbsp; ${date ? fmtDateWD(date) : ''}</div>
+      <div class="dwbody">${title}${svcBlocks}${lines}${strips}</div>
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
+
+  // ---- Optional activities (config-driven upsell grid) ----
+  const optActs = (company.optionalActivities || []).map((a) => `
+    <div class="oacard">
+      ${a.image ? `<img src="${esc(a.image)}" alt=""/>` : ''}
+      <div class="oaname">${esc(a.name)}</div>
+      <div class="oacost"><b>Adult Cost :</b> ${inr(a.adult)}</div>
+      <div class="oacost"><b>Child Cost :</b> ${inr(a.child)}</div>
+    </div>`).join('');
+
+  // ---- Emergency contacts + social icons ----
+  const ecRows = (company.emergencyContacts || []).map((c) => `<tr>
+    <td class="dkcell">${esc(c.name)}</td><td class="dkcell">${esc(c.phone)}</td>
+    <td class="dkcell">${esc(c.email)}</td><td class="dkcell">${esc(c.availableOn)}</td>
+  </tr>`).join('');
+  const socialIcons = (company.social || []).map((s) => `
+    <a class="soc" href="${esc(s.url)}">
+      <span class="socicon" style="background:${esc(s.color)}">${s.short}</span>
+      <span class="soclbl">${esc(s.label)}</span>
+    </a>`).join('');
 
   const extras = (pkg.extras || []).map((e) => e.label || e.name).filter(Boolean).join(', ');
 
@@ -155,7 +327,7 @@ export function quotationHtml(q) {
     --yellow: #fdfbd8; --green: #18a24b; --ink: #16212e;
   }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
-  body { font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--ink); font-size: 11px; background: #fff; -webkit-font-smoothing: antialiased; }
+  body { font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--ink); font-size: 13px; background: #fff; -webkit-font-smoothing: antialiased; }
 
   /* ---- page wrapper: flex column so the blue bar pins to the bottom ---- */
   .page { min-height: 272mm; display: flex; flex-direction: column; }
@@ -164,113 +336,183 @@ export function quotationHtml(q) {
   .grow { flex: 1; }
 
   /* ---- letterhead: brand + Address | Email | Phone columns ---- */
-  .lh { display: flex; align-items: stretch; margin-bottom: 16px; }
-  .brand { display: flex; align-items: center; gap: 9px; width: 31%; }
+  .lh { display: flex; align-items: center; margin-bottom: 10px; }
+  .brand { display: flex; align-items: center; gap: 9px; width: 29%; flex-shrink: 0; padding-right: 10px; }
   .logo { width: 42px; height: 42px; border-radius: 10px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 21px; flex-shrink: 0; }
-  .bn { font-size: 15.5px; font-weight: 800; color: var(--blue); line-height: 1.2; }
-  .bsub { font-size: 8px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.09em; margin-top: 2px; white-space: nowrap; }
-  .lh-col { flex: 1; text-align: center; border-left: 1px solid #c9d4df; padding: 2px 8px; font-size: 9.5px; color: #445468; line-height: 1.55; }
-  .lh-col b { display: block; font-size: 10.5px; color: var(--ink); margin-bottom: 3px; }
+  .bn { font-size: 14.5px; font-weight: 800; color: var(--blue); line-height: 1.2; white-space: nowrap; }
+  .bsub { font-size: 7.5px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+  .lh-col { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center; border-left: 1px solid #c9d4df; padding: 4px 8px; font-size: 10.5px; color: #445468; line-height: 1.5; }
+  .lh-col.wide { flex: 1.25; }
+  .lh-col b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 3px; }
 
   /* ---- blue band heading ---- */
-  .band { background: var(--blue); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 14.5px; border-radius: 5px; margin-bottom: 14px; }
+  .band { background: var(--blue); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 17px; border-radius: 5px; margin-bottom: 14px; }
 
   /* ---- page-1 quotation panels ---- */
-  .panels { display: flex; justify-content: space-between; gap: 56px; margin: 6px 0 10px; }
+  .panels { display: flex; justify-content: space-between; gap: 56px; margin: 4px 0 6px; }
   .panel { flex: 1; border: 1.5px solid var(--blue-dark); border-radius: 10px; overflow: hidden; }
-  .ph { background: var(--blue); color: #fff; padding: 8px 14px; font-weight: 700; font-size: 12px; }
-  .pc { background: var(--lblue); padding: 10px 14px 12px; min-height: 62px; }
-  .pill { display: inline-block; border-radius: 999px; padding: 2.5px 11px; color: #fff; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .ph { background: var(--blue); color: #fff; padding: 8px 14px; font-weight: 700; font-size: 14px; }
+  .pc { background: var(--lblue); padding: 9px 14px 10px; min-height: 56px; }
+  .pill { display: inline-block; border-radius: 999px; padding: 2.5px 11px; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; }
   .pill.navy { background: var(--navy); }
   .pill.pl0 { background: #3565d6; } .pill.pl1 { background: #8b3fd1; } .pill.pl2 { background: #0e6b50; }
 
   /* ---- section headings ---- */
-  .h1 { font-size: 19px; font-weight: 800; color: var(--ink); margin: 16px 0 6px; }
+  .h1 { font-size: 21px; font-weight: 800; color: var(--ink); margin: 10px 0 4px; }
 
   /* ---- tables ---- */
-  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 10px; background: #fff; }
+  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #fff; }
   .tbl table { width: 100%; border-collapse: collapse; }
-  .tbl thead th { background: var(--blue); color: #fff; padding: 8px 6px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 700; border-right: 1px solid rgba(255,255,255,0.28); }
+  .tbl thead th { background: var(--blue); color: #fff; padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 700; border-right: 1px solid rgba(255,255,255,0.28); }
   .tbl thead th:last-child { border-right: 0; }
-  .tbl td { padding: 9px 6px; text-align: center; font-size: 10.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px solid #e3ecf4; }
+  .tbl td { padding: 7.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px solid #e3ecf4; }
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
-  .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 6px; text-align: center; font-size: 8.5px; font-weight: 700; color: #46566a; }
-  .tbl td.hl { background: var(--yellow); color: var(--ink); font-weight: 800; font-size: 12px; }
+  .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 6px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
+  .tbl td.hl { background: var(--yellow); color: var(--ink); font-weight: 800; font-size: 14px; }
   .muted { color: #94a3b8; text-align: center; padding: 8px; font-weight: 500; }
+  .tbl td.hcell { text-align: left; }
+  .tstars { color: #f5a623; font-size: 11px; letter-spacing: 1px; }
+  .ext { font-size: 8px; }
+
+  /* ---- Hotels / Accommodations cards ---- */
+  .hcard { display: flex; align-items: stretch; gap: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
+  .hinfo { flex: 1; min-width: 0; }
+  .nbadge { display: inline-block; border: 1.4px solid var(--blue); color: var(--blue-dark); font-weight: 800; font-size: 10.5px; border-radius: 6px; padding: 1.5px 7px; }
+  .hnights { font-size: 14.5px; color: #2c3d51; margin-bottom: 2px; }
+  .hnights b { font-size: 15.5px; color: var(--ink); }
+  .hcheckin { font-size: 11px; color: #64748b; margin-bottom: 7px; }
+  .cardname { font-size: 16.5px; font-weight: 800; color: var(--blue-dark); text-decoration: none; }
+  a.cardname { text-decoration: underline; }
+  .cardstars { color: #f5a623; font-size: 14px; letter-spacing: 1.5px; margin: 2px 0 4px; }
+  .cardstars .dim { color: #d7dde5; }
+  .carddesc { font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 6px; }
+  .hmeta { display: flex; gap: 34px; margin-top: 6px; }
+  .hmeta .k { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8fa0b3; }
+  .hmeta .v { font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 1px; }
+  .hmeta .s { font-size: 10.5px; color: #64748b; }
+  .hphoto { width: 225px; height: 130px; object-fit: cover; border-radius: 9px; flex-shrink: 0; align-self: center; }
 
   /* ---- cost breakage + confirm bar ---- */
-  .breakrow { display: flex; gap: 14px; margin-top: 16px; }
+  .breakrow { display: flex; gap: 14px; margin-top: 10px; }
   .cb { flex: 1; display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
   .cb .l { background: var(--blue); color: #fff; font-weight: 800; font-size: 16px; line-height: 1.35; display: flex; align-items: center; justify-content: center; text-align: center; width: 38%; padding: 10px; }
   .cb .rows { flex: 1; display: flex; flex-direction: column; }
   .cb .row { flex: 1; display: flex; }
   .cb .row + .row { border-top: 1px solid var(--line); }
-  .cb .k { flex: 1.25; display: flex; align-items: center; justify-content: flex-end; padding: 8px 12px; font-weight: 700; font-size: 10px; text-transform: uppercase; }
-  .cb .v { flex: 1; background: var(--yellow); border-left: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11.5px; }
-  .confirm { display: flex; margin-top: 14px; border-radius: 9px; overflow: hidden; }
-  .confirm .lab { flex: 1; background: var(--blue); color: #fff; font-weight: 800; font-size: 13.5px; display: flex; align-items: center; justify-content: center; padding: 13px; }
-  .confirm .amt { background: var(--green); color: #fff; font-weight: 800; font-size: 20px; padding: 13px 36px; display: flex; align-items: center; white-space: nowrap; }
-  .notebox { margin-top: 13px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 14px; font-size: 8.8px; color: #37475a; text-align: center; line-height: 1.85; }
+  .cb .k { flex: 1.25; display: flex; align-items: center; justify-content: flex-end; padding: 5px 12px; font-weight: 700; font-size: 12px; text-transform: uppercase; }
+  .cb .v { flex: 1; background: var(--yellow); border-left: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13.5px; }
+  .cb .row { min-height: 26px; }
+  .cb .v.tv { background: #e4f6ea; color: #0e7a38; font-weight: 800; }
+  .confirm { display: flex; margin-top: 10px; border-radius: 9px; overflow: hidden; }
+  .confirm .lab { flex: 1; background: var(--blue); color: #fff; font-weight: 800; font-size: 15.5px; display: flex; align-items: center; justify-content: center; padding: 10px; }
+  .confirm .amt { background: var(--green); color: #fff; font-weight: 800; font-size: 22px; padding: 10px 36px; display: flex; align-items: center; white-space: nowrap; }
+  .notebox { margin-top: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 14px; font-size: 10.8px; color: #37475a; text-align: center; line-height: 1.6; }
+
+  /* ---- cover page ---- */
+  .hero { border-radius: 12px; overflow: hidden; height: 118mm; }
+  .hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .coverband { background: var(--blue); color: #fff; font-weight: 800; font-size: 19.5px; text-align: center; letter-spacing: 0.02em; padding: 12px 16px; margin: 0 -4px; border-radius: 4px; text-transform: uppercase; }
+  .covermeta { display: flex; justify-content: space-between; font-size: 12.5px; color: #37475a; margin: 12px 2px 4px; }
+  .stats { display: flex; justify-content: center; gap: 70px; margin-top: 22px; text-align: center; }
+  .stat .sk { font-size: 12.5px; color: #46566a; letter-spacing: 0.02em; }
+  .stat .sv { font-size: 15px; font-weight: 800; color: var(--ink); margin-top: 4px; }
+  .destcov { text-align: center; margin-top: 26px; }
+  .destcov .sk { font-size: 12.5px; color: #46566a; letter-spacing: 0.04em; }
+  .destcov .sv { font-size: 14px; margin-top: 6px; color: var(--ink); }
+  .destcov .pin { font-size: 11px; }
+
+  /* ---- itinerary introduction ---- */
+  .introrow { font-size: 12.8px; color: #2c3d51; padding: 7px 4px; border-bottom: 1px dashed #d5e0ea; line-height: 1.5; }
+  .introrow:last-child { border-bottom: 0; }
+  .introday { display: inline-block; min-width: 52px; font-weight: 800; color: var(--blue-dark); }
 
   /* ---- day-wise itinerary ---- */
-  .itin { border: 1.5px solid var(--blue); border-radius: 13px; background: var(--lblue2); padding: 20px 24px; column-count: 2; column-gap: 30px; }
-  .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 18px; }
-  .dayhdr { font-weight: 800; font-size: 11px; margin-bottom: 7px; color: var(--ink); }
-  .ditem { font-size: 10.5px; color: #2c3d51; line-height: 1.55; }
+  .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+  .dwband { background: var(--blue); color: #fff; font-weight: 700; font-size: 13.5px; padding: 7px 14px; border-radius: 5px 5px 0 0; }
+  .dwbody { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; background: #fff; padding: 11px 15px; }
+  .dwtitle { font-weight: 800; font-size: 13px; color: var(--ink); text-transform: uppercase; margin-bottom: 6px; }
+  .ditem { font-size: 12.5px; color: #2c3d51; line-height: 1.65; }
+  .svcblk { margin-bottom: 8px; }
+  .svcblk + .svcblk { border-top: 1px dashed #d5e0ea; padding-top: 8px; }
+  .ddesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 3px; }
+  .hstrip { display: flex; align-items: center; gap: 13px; border-top: 1px dashed #c9d8e5; margin-top: 10px; padding-top: 10px; }
+  .hthumb { width: 88px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
+  .hsname { font-weight: 800; font-size: 13px; color: var(--blue-dark); margin-bottom: 4px; }
+  .hscols { display: flex; gap: 30px; }
+  .hscols .k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: #8fa0b3; }
+  .hscols .v { font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 1px; }
+
+  /* ---- optional activities ---- */
+  .oagrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
+  .oacard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-align: center; padding-bottom: 10px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .oacard img { width: 100%; height: 108px; object-fit: cover; display: block; margin-bottom: 8px; }
+  .oaname { font-weight: 800; font-size: 12.5px; color: var(--ink); text-transform: uppercase; padding: 0 8px; }
+  .oacost { font-size: 11.5px; color: #2c3d51; margin-top: 3px; }
+
+  /* ---- social + end of document ---- */
+  .socialrow { display: flex; justify-content: center; gap: 46px; margin-top: 14px; }
+  .soc { text-align: center; text-decoration: none; }
+  .socicon { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px; margin: 0 auto 5px; }
+  .soclbl { font-size: 10.5px; font-weight: 700; color: var(--blue-dark); text-decoration: underline; }
+  .eod { display: flex; align-items: center; gap: 14px; margin-top: 20px; color: #46566a; font-weight: 700; letter-spacing: 0.35em; font-size: 13px; }
+  .eod::before, .eod::after { content: ''; flex: 1; border-top: 1.4px solid #9db8d2; }
   .extra { display: flex; margin-top: 14px; border-radius: 11px; overflow: hidden; }
-  .extra .el { background: var(--blue-dark); color: #fff; font-weight: 800; font-size: 12px; padding: 15px 18px; display: flex; align-items: center; white-space: nowrap; }
-  .extra .er { flex: 1; background: var(--blue); color: #fff; font-size: 11px; padding: 15px 16px; display: flex; align-items: center; }
+  .extra .el { background: var(--blue-dark); color: #fff; font-weight: 800; font-size: 14px; padding: 15px 18px; display: flex; align-items: center; white-space: nowrap; }
+  .extra .er { flex: 1; background: var(--blue); color: #fff; font-size: 13px; padding: 15px 16px; display: flex; align-items: center; }
 
   /* ---- info boxes (note / inclusions / exclusions) ---- */
   .box { border: 1.2px solid var(--line); border-radius: 10px; padding: 11px 15px; margin-top: 12px; background: #fff; }
   .box.g { background: #f2fbf5; border-color: #7ecf9a; }
   .box.r { background: #fef5f5; border-color: #f0a8a8; }
-  .box h3 { font-size: 11.5px; font-weight: 800; color: var(--ink); margin-bottom: 6px; letter-spacing: 0.02em; }
-  .dl { font-size: 10.5px; color: #2c3d51; line-height: 1.6; }
+  .box h3 { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 6px; letter-spacing: 0.02em; }
+  .dl { font-size: 12.5px; color: #2c3d51; line-height: 1.6; }
 
   /* ---- payment info ---- */
   .paybox { border: 1.6px solid var(--blue); background: #e9f3fb; border-radius: 13px; padding: 16px 20px; margin-top: 15px; }
   .paybox .ptitle { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
   .paybox .picon { font-size: 22px; }
-  .paybox .kv { font-size: 10.5px; margin: 3.5px 0; color: #2c3d51; }
+  .paybox .kv { font-size: 12.5px; margin: 3.5px 0; color: #2c3d51; }
   .paybox .kv b { display: inline-block; min-width: 100px; color: var(--ink); }
   .paybox .plink { border-top: 1.2px solid #b9d7ec; margin-top: 10px; padding-top: 9px; }
-  .infobox { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 9px; color: #37475a; text-align: center; line-height: 2; }
+  .banktbl { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #b9d7ec; border-radius: 8px; overflow: hidden; }
+  .banktbl td { border: 1px solid #cfe2f1; padding: 7px 12px; font-size: 12.5px; color: #2c3d51; }
+  .banktbl td.bk { width: 32%; font-weight: 800; color: var(--ink); background: #f2f8fd; }
+  .infobox { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 11px; color: #37475a; text-align: center; line-height: 2; }
 
   /* ---- company & contact card (page 4) ---- */
   .cocard { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; }
   .cocard .cbrand { width: 33%; text-align: center; }
   .cocard .cbrand .logo { margin: 0 auto 6px; width: 48px; height: 48px; font-size: 24px; }
   .cocard .cweb { font-size: 9px; color: #64748b; margin-top: 3px; }
-  .cocard .ccol { flex: 1; border-left: 1px solid #d8e2ec; padding: 4px 16px; font-size: 10.5px; color: #2c3d51; line-height: 1.65; }
-  .cocard .ccol b { display: block; font-size: 11px; color: var(--ink); margin-bottom: 4px; letter-spacing: 0.03em; }
-  .support { background: var(--lblue2); border: 1px solid #bcd9ee; border-radius: 9px; padding: 9px 14px; text-align: center; font-size: 9.3px; color: #2c3d51; line-height: 1.9; margin-top: 12px; }
+  .cocard .ccol { flex: 1; border-left: 1px solid #d8e2ec; padding: 4px 16px; font-size: 12.5px; color: #2c3d51; line-height: 1.65; }
+  .cocard .ccol b { display: block; font-size: 13px; color: var(--ink); margin-bottom: 4px; letter-spacing: 0.03em; }
+  .support { background: var(--lblue2); border: 1px solid #bcd9ee; border-radius: 9px; padding: 9px 14px; text-align: center; font-size: 11.3px; color: #2c3d51; line-height: 1.9; margin-top: 12px; }
 
   /* ---- T&C ---- */
-  .tab { display: inline-block; background: var(--blue); color: #fff; font-weight: 800; font-size: 14px; padding: 11px 26px; border-radius: 9px 9px 0 0; margin-top: 18px; }
+  .tab { display: inline-block; background: var(--blue); color: #fff; font-weight: 800; font-size: 15px; padding: 11px 26px; border-radius: 9px 9px 0 0; margin-top: 18px; }
   .tccontent { border-top: 2.5px solid var(--blue); padding-top: 10px; }
-  .tcintro { font-size: 10.5px; color: #2c3d51; margin: 4px 0 8px; }
+  .tcintro { font-size: 12.5px; color: #2c3d51; margin: 4px 0 8px; }
   .tc-section { margin-top: 11px; break-inside: avoid; page-break-inside: avoid; }
-  .tc-section h3 { font-size: 10.5px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+  .tc-section h3 { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
 
   /* ---- why us / reviews ---- */
   .script { font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 15px; color: var(--ink); margin: 6px 0 14px; }
   .review-card { border: 1.4px solid #8fd0a5; border-radius: 11px; background: #fff; padding: 13px 16px; margin-bottom: 12px; }
-  .review-text { font-size: 10.8px; color: #2c3d51; line-height: 1.7; }
+  .review-text { font-size: 12.8px; color: #2c3d51; line-height: 1.7; }
   .review-footer { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
   .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .reviewer-name { font-weight: 800; font-size: 11.5px; color: var(--ink); }
-  .reviewer-via { font-size: 9px; color: #64748b; margin-top: 1px; }
+  .reviewer-name { font-weight: 800; font-size: 13.5px; color: var(--ink); }
+  .reviewer-via { font-size: 11px; color: #64748b; margin-top: 1px; }
   .stars { color: #f59e0b; font-size: 10px; letter-spacing: 1px; }
   .readmore { background: #f2f5f8; border: 1px solid var(--line); border-radius: 11px; padding: 14px 18px; margin-top: 14px; display: flex; align-items: center; }
   .readmore .rm-left { flex: 1; }
   .readmore h3 { font-size: 13px; font-weight: 800; margin-bottom: 8px; }
-  .rm-row { font-size: 10.5px; margin: 4px 0; color: #2c3d51; }
+  .rm-row { font-size: 12.5px; margin: 4px 0; color: #2c3d51; }
   .rm-row b { display: inline-block; min-width: 86px; }
   .rm-url { color: var(--blue-dark); }
   .searchpill { background: #e4e9ee; border-radius: 999px; padding: 9px 16px; font-size: 11px; color: #37475a; display: flex; align-items: center; gap: 8px; min-width: 220px; justify-content: space-between; }
-  .disclaimer { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 16px; font-size: 8.6px; color: #5b6b7d; text-align: center; line-height: 1.8; }
+  .disclaimer { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 16px; font-size: 10.2px; color: #5b6b7d; text-align: center; line-height: 1.8; }
 
   /* ---- gallery ---- */
   .mosaic { display: grid; grid-template-columns: 1.05fr 1.35fr 1.35fr 1.05fr; grid-auto-rows: 104px; gap: 8px; }
@@ -282,12 +524,30 @@ export function quotationHtml(q) {
   .qcard { border: 1px solid var(--line); border-radius: 12px; padding: 22px; text-align: center; margin-top: 14px; }
   .qcard .qlogo { font-size: 26px; margin-bottom: 8px; }
   .qcard .qtag { font-size: 16.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--ink); text-transform: uppercase; }
-  .cpr { margin-top: auto; background: var(--blue); color: #fff; text-align: center; font-size: 9.5px; font-weight: 600; padding: 7px; border-radius: 2px; }
+  .cpr { margin-top: auto; background: var(--blue); color: #fff; text-align: center; font-size: 10.5px; font-weight: 600; padding: 7px; border-radius: 2px; }
 </style>
 </head>
 <body>
 
-<!-- ===== PAGE 1 — Quote summary ===== -->
+<!-- ===== COVER PAGE ===== -->
+<div class="page pb">
+  ${LETTERHEAD}
+  ${heroImg ? `<div class="hero"><img src="${esc(heroImg)}" alt=""/></div>` : ''}
+  <div class="coverband">${q.nights} Nights ${(q.nights || 0) + 1} Days ${esc(pkg.name || 'Package')} Tour to Andaman${routeCode ? ` &nbsp;-&nbsp; ${routeCode}` : ''}</div>
+  <div class="covermeta">
+    <span>Quotation Proposal</span>
+    <span>Query ID:- &nbsp;M${esc(pad4(q.query?.queryNumber))}</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="sk">Tour Start Date</div><div class="sv">${fmtDate(start)}</div></div>
+    <div class="stat"><div class="sk">DURATION</div><div class="sv">${q.nights} Nights / ${(q.nights || 0) + 1} Days</div></div>
+    <div class="stat"><div class="sk">TRAVELLERS</div><div class="sv">${pax} Pax${paxChildren ? ` (${paxAdults} Adult + ${paxChildren} Child)` : ''}</div></div>
+  </div>
+  ${destCovered ? `<div class="destcov"><div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div></div>` : ''}
+  ${BOTTOMBAR}
+</div>
+
+<!-- ===== PAGE 2 — Quote summary ===== -->
 <div class="page pb">
   ${LETTERHEAD}
 
@@ -295,24 +555,24 @@ export function quotationHtml(q) {
     <div class="panel">
       <div class="ph">Quotation for:</div>
       <div class="pc">
-        <div style="font-weight:800;font-size:12.5px">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')} &nbsp;&#124;&nbsp; M${esc(pad4(q.query?.queryNumber))}</div>
-        ${guest.phones?.[0] ? `<div style="font-size:10px;color:#37475a;margin-top:2px">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
-        <div style="margin-top:5px;font-size:10.5px;font-weight:700">Adults: ${paxAdults}, &nbsp;Child: ${paxChildren} &nbsp;&nbsp;<span class="pill navy">${esc(pkg.name || 'Package')}</span></div>
+        <div style="font-weight:800;font-size:14.5px">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')} &nbsp;&#124;&nbsp; M${esc(pad4(q.query?.queryNumber))}</div>
+        ${guest.phones?.[0] ? `<div style="font-size:12px;color:#37475a;margin-top:2px">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
+        <div style="margin-top:5px;font-size:12.5px;font-weight:700">Adults: ${paxAdults}, &nbsp;Child: ${paxChildren} &nbsp;&nbsp;<span class="pill navy">${esc(pkg.name || 'Package')}</span></div>
       </div>
     </div>
     <div class="panel">
       <div class="ph">${esc(tripTitle)}:</div>
       <div class="pc" style="text-align:right">
-        <div style="font-weight:800;font-size:10.5px">Travel Dates:</div>
-        <div style="font-size:11px;margin-top:3px">${fmtDate(start)}</div>
-        <div style="font-size:11px">${end ? fmtDate(end) : ''}</div>
+        <div style="font-weight:800;font-size:12.5px">Travel Dates:</div>
+        <div style="font-size:13px;margin-top:3px">${fmtDate(start)}</div>
+        <div style="font-size:13px">${end ? fmtDate(end) : ''}</div>
       </div>
     </div>
   </div>
 
   <div class="h1">Cruise and Hotel Information:</div>
   ${transferRows ? `<div class="tbl"><table>
-    <thead><tr><th style="width:34%">Name</th><th style="width:33%">Ferry Sector</th><th>Departure Timings</th></tr></thead>
+    <thead><tr><th style="width:32%">Name</th><th style="width:28%">Ferry Sector</th><th>Departure Timings</th><th>Arrival Timings</th></tr></thead>
     <tbody>${transferRows}</tbody></table>
     ${ferryLegend ? `<div class="legend">${ferryLegend}</div>` : ''}
   </div>` : ''}
@@ -345,8 +605,11 @@ export function quotationHtml(q) {
     <div class="cb">
       <div class="l">COST<br/>BREAKAGE:</div>
       <div class="rows">
-        <div class="row"><div class="k">PAX:</div><div class="v">${pax}</div></div>
+        <div class="row"><div class="k">PAX:</div><div class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</div></div>
         <div class="row"><div class="k">TOUR COST PER PERSON:</div><div class="v">${inr(perPerson)}</div></div>
+        ${paxAdults ? `<div class="row"><div class="k">ADULTS &nbsp;(${paxAdults} &times; ${inr(perPerson)}):</div><div class="v">${inr(paxAdults * perPerson)}</div></div>` : ''}
+        ${paxChildren ? `<div class="row"><div class="k">CHILDREN &nbsp;(${paxChildren} &times; ${inr(perPerson)}):</div><div class="v">${inr(paxChildren * perPerson)}</div></div>` : ''}
+        <div class="row"><div class="k">TOTAL PACKAGE COST:</div><div class="v tv">${inr(p.total)}</div></div>
       </div>
     </div>
   </div>
@@ -364,16 +627,36 @@ export function quotationHtml(q) {
   ${BOTTOMBAR}
 </div>
 
-<!-- ===== PAGE 2 — Day Wise Itinerary ===== -->
+<!-- ===== Itinerary Introduction + Day Wise Itinerary ===== -->
 <div class="page pb">
+  ${introRows ? `<div class="band">Itinerary Introduction</div>
+  <div style="margin-bottom:16px">${introRows}</div>` : ''}
   <div class="band">${q.nights}N${(q.nights || 0) + 1}D Day Wise Itinerary:</div>
-  <div class="itin grow">${dayBlocks}</div>
-  <div class="extra">
+  <div class="grow">${dayBlocks}</div>
+  ${extras ? `<div class="extra">
     <div class="el">EXTRA INCLUSIONS:</div>
     <div class="er">${esc(extras)}</div>
-  </div>
+  </div>` : ''}
   ${BOTTOMBAR}
 </div>
+
+<!-- ===== Hotels / Accommodations — details with images ===== -->
+${hotelCards ? `<div class="page pb">
+  <div class="band">Hotels / Accommodations:</div>
+  ${hotelCards}
+  ${BOTTOMBAR}
+</div>` : ''}
+
+<!-- ===== Optional Activities — upsell grid ===== -->
+${optActs ? `<div class="page pb">
+  <div class="band">OPTIONAL ACTIVITIES (On Request &mdash; Not Included in Package Cost):</div>
+  <div class="oagrid">${optActs}</div>
+  <div class="infobox" style="margin-top:16px">
+    <div>Want to add any of these experiences to your trip? Let your travel consultant know and we will include it in your final itinerary.</div>
+    <div>All water activities are subject to weather conditions and slot availability on the day of the activity.</div>
+  </div>
+  ${BOTTOMBAR}
+</div>` : ''}
 
 <!-- ===== PAGE 3 — Additional Info / Payment ===== -->
 <div class="page pb">
@@ -383,13 +666,21 @@ export function quotationHtml(q) {
   <div class="box r"><h3>EXCLUSIONS:</h3>${dash(exclusions)}</div>
   <div class="paybox">
     <div class="ptitle"><span class="picon">&#128179;</span> Payment Information:</div>
-    <div class="kv"><b>Holder Name:</b> ${esc(company.bank.holder)}</div>
-    <div class="kv"><b>Bank:</b> ${esc(company.bank.bank)}</div>
-    <div class="kv"><b>Address:</b> ${esc(company.bank.address)}</div>
-    <div class="kv"><b>Acc. No.:</b> ${esc(company.bank.accNo)}</div>
-    <div class="kv"><b>IFSC Code:</b> ${esc(company.bank.ifsc)}</div>
-    <div class="kv plink"><b>Payment Link:</b> ${esc(company.bank.paymentLink)}</div>
+    <table class="banktbl">
+      <tr><td class="bk">Account Name</td><td>${esc(company.bank.holder)}</td></tr>
+      <tr><td class="bk">Bank</td><td>${esc(company.bank.bank)}</td></tr>
+      <tr><td class="bk">Branch Address</td><td>${esc(company.bank.address)}</td></tr>
+      <tr><td class="bk">Current A/C No.</td><td>${esc(company.bank.accNo)}</td></tr>
+      <tr><td class="bk">IFSC Code</td><td>${esc(company.bank.ifsc)}</td></tr>
+      <tr><td class="bk">GSTIN</td><td>${esc(company.gstin)}</td></tr>
+      <tr><td class="bk">Payment Link</td><td>${esc(company.bank.paymentLink)}</td></tr>
+    </table>
   </div>
+  ${ecRows ? `<div class="h1" style="font-size:14px;margin-top:16px">Emergency Contact Information:</div>
+  <div class="tbl" style="margin-top:6px"><table>
+    <thead><tr><th>Contact Name</th><th>Mobile Number</th><th>Email Id</th><th>Available On</th></tr></thead>
+    <tbody>${ecRows}</tbody></table>
+  </div>` : ''}
   <div class="infobox">
     <div>For payment made through bank transfer, please give us at least 30 minutes so we can confirm payment with the bank.</div>
     <div>For UPI transactions, please share the screenshot of the payment for instant confirmation.</div>
@@ -447,7 +738,10 @@ export function quotationHtml(q) {
   <div class="qcard">
     <div class="qlogo">&#127796;</div>
     <div class="qtag">${esc(company.tagline)}</div>
+    ${socialIcons ? `<div style="font-size:10px;color:#46566a;margin-top:14px;font-weight:700">Find us in the Social World:</div>
+    <div class="socialrow">${socialIcons}</div>` : ''}
   </div>
+  <div class="eod">End&nbsp;of&nbsp;Document</div>
   <div class="cpr">&copy; ${esc(company.name)} &nbsp;&#124;&nbsp; ${esc(company.website)}</div>
 </div>
 

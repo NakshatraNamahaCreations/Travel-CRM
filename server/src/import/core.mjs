@@ -13,6 +13,12 @@ import { parseRange, parsePersons, parseStar, num, parseLoc, pickSheets } from '
 const cell = (r, c) => { const v = r && r[c]; return v == null ? '' : String(v).trim(); };
 const sheetRows = (ws) => XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
+// Case-insensitive, whitespace-tolerant exact-name filter, so CSV spelling
+// variations ("silver sand  resort") upsert onto the existing record instead
+// of creating a duplicate (prices link to hotels by _id after import).
+const escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const nameEq = (s) => ({ $regex: `^\\s*${escRx(String(s).trim()).replace(/\s+/g, '\\s+')}\\s*$`, $options: 'i' });
+
 /* ===================== HOTELS ===================== */
 export function parseHotelSheet(rows, displayName) {
   let H = -1;
@@ -80,11 +86,11 @@ export async function importHotels(wb, opts = {}) {
     if (!parsed || !parsed.name || !parsed.prices.length) { skipped++; continue; }
     let destId = cityCache.get(parsed.location.city);
     if (parsed.location.city && !destId) {
-      const d = await Destination.findOneAndUpdate({ name: parsed.location.city }, { name: parsed.location.city, region: 'Andaman' }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const d = await Destination.findOneAndUpdate({ name: nameEq(parsed.location.city) }, { $set: { region: 'Andaman' }, $setOnInsert: { name: parsed.location.city } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       destId = d._id; cityCache.set(parsed.location.city, destId);
     }
     const dests = [...new Set([...(destId ? [String(destId)] : []), ...extraDest])];
-    const hotel = await Hotel.findOneAndUpdate({ name: parsed.name }, { name: parsed.name, location: parsed.location, stars: parsed.stars, mealPlans: parsed.mealPlans, roomTypes: parsed.roomTypes, destinations: dests }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    const hotel = await Hotel.findOneAndUpdate({ name: nameEq(parsed.name) }, { $set: { location: parsed.location, stars: parsed.stars, mealPlans: parsed.mealPlans, roomTypes: parsed.roomTypes, destinations: dests }, $setOnInsert: { name: parsed.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
     await HotelPrice.deleteMany({ hotel: hotel._id });
     const rows = parsed.prices.map((p) => ({ hotel: hotel._id, startDate: p.start, endDate: p.end, mealPlan: p.mealPlan, roomType: p.roomType, basePrice: p.basePrice, persons: p.persons, aweb: p.aweb, cweb: p.cweb, cwoeb: p.cwoeb }));
     if (rows.length) await HotelPrice.insertMany(rows);
@@ -141,7 +147,7 @@ export async function importActivities(wb, { destinations = [] } = {}) {
   for (const sheetName of wb.SheetNames) {
     const { activities: acts, prices } = parseActivitiesSheet(sheetRows(wb.Sheets[sheetName]));
     for (const [name, info] of acts) {
-      const doc = await TravelActivity.findOneAndUpdate({ name }, { name, ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes: [...info.ticketTypes].map((t) => ({ name: t })) }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const doc = await TravelActivity.findOneAndUpdate({ name: nameEq(name) }, { $set: { ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes: [...info.ticketTypes].map((t) => ({ name: t })) }, $setOnInsert: { name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TravelActivityPrice.deleteMany({ activity: doc._id });
       const rows = prices.filter((p) => p.activity === name && p.start && p.end).map((p) => ({ activity: doc._id, service: p.service, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TravelActivityPrice.insertMany(rows);
@@ -194,7 +200,7 @@ export async function importTransport(wb) {
   let services = 0, priceRows = 0;
   for (const { sheet } of pickSheets(wb.SheetNames)) {
     for (const route of parseTransportSheet(sheetRows(wb.Sheets[sheet]))) {
-      const doc = await TransportService.findOneAndUpdate({ name: route.name }, { name: route.name, from: route.name, destinations: andaman ? [andaman._id] : [], items: route.items.slice(0, 50) }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: andaman ? [andaman._id] : [], items: route.items.slice(0, 50) }, $setOnInsert: { name: route.name, from: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TransportPrice.deleteMany({ service: doc._id });
       const rows = route.prices.map((p) => ({ service: doc._id, itemName: p.itemName, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TransportPrice.insertMany(rows);
@@ -313,14 +319,15 @@ export async function importHotelsMaster(wb, opts = {}) {
         if (rec.location.city) {
           let id = cityCache.get(rec.location.city);
           if (!id) {
-            const d = await Destination.findOneAndUpdate({ name: rec.location.city }, { name: rec.location.city }, { upsert: true, new: true, setDefaultsOnInsert: true });
+            const d = await Destination.findOneAndUpdate({ name: nameEq(rec.location.city) }, { name: rec.location.city }, { upsert: true, new: true, setDefaultsOnInsert: true });
             id = d._id; cityCache.set(rec.location.city, id);
           }
           destIds.push(String(id));
         }
         const patch = { ...rec, destinations: [...new Set(destIds)] };
         Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
-        await Hotel.findOneAndUpdate({ name: rec.name }, patch, { upsert: true, new: true, setDefaultsOnInsert: true });
+        delete patch.name;
+        await Hotel.findOneAndUpdate({ name: nameEq(rec.name) }, { $set: patch, $setOnInsert: { name: rec.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
         hotels++;
       } catch { skipped++; }
     }

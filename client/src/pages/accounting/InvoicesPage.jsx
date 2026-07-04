@@ -9,14 +9,37 @@ import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { money } from '../../lib/pricing.js';
 import { cn } from '../../lib/cn.js';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
+
+const EMPTY_FILTERS = { payment: '', createdAfter: '', createdBefore: '' };
+const FILTER_FIELDS = [
+  { key: 'payment', label: 'Payment Status', type: 'select', options: [
+    { value: 'paid', label: 'Paid' },
+    { value: 'partial', label: 'Partially Paid' },
+  ] },
+  { fromKey: 'createdAfter', toKey: 'createdBefore', label: 'Invoice Date Between', type: 'dateRange' },
+];
 
 // Proforma invoices are derived from bookings (one invoice per booking).
 export default function InvoicesPage() {
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const { data, isLoading } = useQuery({
-    queryKey: ['invoices', debounced],
-    queryFn: () => bookingsApi.list({ search: debounced, status: 'all', limit: 50 }),
+    queryKey: ['invoices', debounced, filters.createdAfter, filters.createdBefore],
+    queryFn: () => bookingsApi.list({
+      search: debounced, status: 'all', limit: 50,
+      ...(filters.createdAfter ? { createdAfter: filters.createdAfter } : {}),
+      ...(filters.createdBefore ? { createdBefore: filters.createdBefore } : {}),
+    }),
+  });
+
+  // Paid/partial is derived per row, so that filter is applied client-side.
+  const rows = (data?.data || []).filter((b) => {
+    if (filters.payment === 'paid') return !(b.balanceDue > 0);
+    if (filters.payment === 'partial') return b.balanceDue > 0;
+    return true;
   });
 
   const invNo = (b) => `INV-${b.bookingNumber}`;
@@ -31,8 +54,10 @@ export default function InvoicesPage() {
   ];
 
   return (
-    <ServiceShell title="Invoices (Proforma)" search={search} onSearch={setSearch} total={data?.meta?.total}>
-      <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No invoices yet — create a booking first." />
+    <ServiceShell title="Invoices (Proforma)" search={search} onSearch={setSearch} total={filters.payment ? rows.length : data?.meta?.total}
+      onFilterClick={() => setShowFilters(true)} filterCount={countFilters(filters)}>
+      <DataTable columns={columns} rows={rows} loading={isLoading} emptyLabel="No invoices yet — create a booking first." />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

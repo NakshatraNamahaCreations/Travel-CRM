@@ -23,6 +23,16 @@ const QUERY_STATUS_FOR = { confirmed: 'converted', on_trip: 'on_trip', completed
 export const listBookings = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  if (req.query.createdAfter || req.query.createdBefore) {
+    filter.createdAt = {};
+    if (req.query.createdAfter) filter.createdAt.$gte = new Date(req.query.createdAfter);
+    if (req.query.createdBefore) { const d = new Date(req.query.createdBefore); d.setHours(23, 59, 59, 999); filter.createdAt.$lte = d; }
+  }
+  if (req.query.startAfter || req.query.startBefore) {
+    filter.startDate = {};
+    if (req.query.startAfter) filter.startDate.$gte = new Date(req.query.startAfter);
+    if (req.query.startBefore) { const d = new Date(req.query.startBefore); d.setHours(23, 59, 59, 999); filter.startDate.$lte = d; }
+  }
   if (req.query.search) {
     const term = req.query.search.trim();
     const rx = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');

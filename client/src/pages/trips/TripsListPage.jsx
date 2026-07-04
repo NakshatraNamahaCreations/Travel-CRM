@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X } from 'lucide-react';
-import { format } from 'date-fns';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
+import { commentsApi } from '../../api/comments.js';
 import { destinationsApi, querySourcesApi, tagsApi, teamsApi, usersApi } from '../../api/masterData.js';
 import { useAuth } from '../../store/AuthContext.jsx';
+import { useDebounced } from '../../hooks/useDebounced.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
@@ -49,6 +52,11 @@ export default function TripsListPage() {
   const [debounced, setDebounced] = useState(urlQ);
   const [showFilters, setShowFilters] = useState(false);
   const [applied, setApplied] = useState(null);
+  const [menuFor, setMenuFor] = useState(null);   // query id whose kebab menu is open
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0, up: false }); // anchor for the fixed-position menu
+  const [tagsFor, setTagsFor] = useState(null);   // query object being tag-edited
+  const [followFor, setFollowFor] = useState(null); // query object getting a follow-up
+  const navigate = useNavigate();
   const qc = useQueryClient();
 
   // Translate applied advanced filters into list query params.
@@ -94,6 +102,16 @@ export default function TripsListPage() {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['queries'] });
     qc.invalidateQueries({ queryKey: ['query-stats'] });
+  };
+
+  const cancelMut = useMutation({
+    mutationFn: (id) => queriesApi.setStatus(id, 'canceled'),
+    onSuccess: () => { toast.success('Query canceled'); refresh(); },
+    onError: (e) => toast.error(e.message || 'Could not cancel'),
+  });
+  const cancelQuery = (q) => {
+    setMenuFor(null);
+    if (window.confirm(`Cancel query ${tripNo(q.queryNumber)}?`)) cancelMut.mutate(q._id);
   };
 
   return (
@@ -175,7 +193,10 @@ export default function TripsListPage() {
                     <th className="px-4 py-3">Basic Details</th>
                     <th className="px-4 py-3">Sales Person</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Tags</th>
+                    <th className="px-4 py-3">Follow-up</th>
                     <th className="px-4 py-3">Created</th>
+                    <th className="w-10 px-2 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -204,12 +225,82 @@ export default function TripsListPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-600">{q.owner?.name || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={cn('rounded px-2 py-0.5 text-xs font-medium', STATUS_BADGE[q.status])}>
+                        <span className={cn('whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium', STATUS_BADGE[q.status])}>
                           {TABS.find((t) => t.value === q.status)?.label || q.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex max-w-[180px] flex-wrap gap-1">
+                          {(q.tags || []).map((t) => (
+                            <span key={t._id} className="whitespace-nowrap rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                              {t.name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {q.lastComment ? (
+                          <>
+                            <p className="max-w-[190px] truncate text-[12.5px] text-gray-700">{q.lastComment.body}</p>
+                            <p className="text-[11px] text-gray-400">{formatDistanceToNow(new Date(q.lastComment.createdAt), { addSuffix: true })}</p>
+                          </>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3 text-gray-500">
                         {format(new Date(q.createdAt), 'd MMM yyyy')}
+                      </td>
+                      <td className="relative px-2 py-3 text-right">
+                        {can('trips.edit') && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setMenuPos({ x: r.right, y: r.bottom, up: r.bottom + 150 > window.innerHeight });
+                                setMenuFor(menuFor === q._id ? null : q._id);
+                              }}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                            {menuFor === q._id && (
+                              <div
+                                className="fixed z-20 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 text-left shadow-2xl"
+                                style={{
+                                  left: Math.max(8, menuPos.x - 176),
+                                  ...(menuPos.up ? { bottom: window.innerHeight - menuPos.y + 32 } : { top: menuPos.y + 4 }),
+                                }}
+                              >
+                                {q.status === 'in_progress' ? (
+                                  <button
+                                    onClick={() => { setMenuFor(null); setFollowFor(q); }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+                                  >
+                                    <MessageSquarePlus size={13} className="text-slate-400" /> Add Follow-up
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => { setMenuFor(null); navigate(`/trips/${q._id}/quote/new`); }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+                                  >
+                                    <Plus size={13} className="text-slate-400" /> Create Quote
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => { setMenuFor(null); setTagsFor(q); }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+                                >
+                                  <TagIcon size={13} className="text-slate-400" /> Update Tags
+                                </button>
+                                <button
+                                  onClick={() => cancelQuery(q)}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-amber-600 hover:bg-amber-50"
+                                >
+                                  <Ban size={13} /> Cancel Query
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -227,7 +318,187 @@ export default function TripsListPage() {
         onApply={(f) => { setApplied(countActive(f) ? f : null); setShowFilters(false); }}
         onReset={() => { setApplied(null); setShowFilters(false); }}
       />
+
+      {/* Click-away for the row kebab menus */}
+      {menuFor && <div className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} aria-hidden="true" />}
+
+      {tagsFor && (
+        <EditTagsModal
+          query={tagsFor}
+          onClose={() => setTagsFor(null)}
+          onSaved={() => { setTagsFor(null); refresh(); }}
+        />
+      )}
+
+      {followFor && (
+        <AddFollowUpModal
+          query={followFor}
+          onClose={() => setFollowFor(null)}
+          onSaved={() => { setFollowFor(null); refresh(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// "Add Task/Comment" modal — logs a follow-up comment on the query, optionally
+// actionable with a due date and an assignee.
+function AddFollowUpModal({ query, onClose, onSaved }) {
+  const [body, setBody] = useState('');
+  const [actionable, setActionable] = useState(true);
+  const [dueDate, setDueDate] = useState('');
+  const [assignee, setAssignee] = useState(null);
+
+  const saveMut = useMutation({
+    mutationFn: () => commentsApi.create({
+      query: query._id,
+      body: body.trim(),
+      isActionable: actionable,
+      dueDate: dueDate || undefined,
+      assignedTo: assignee?._id,
+    }),
+    onSuccess: () => { toast.success('Follow-up added'); onSaved(); },
+    onError: (e) => toast.error(e.message || 'Could not save'),
+  });
+  const submit = () => {
+    if (!body.trim()) return toast.error('Enter a comment');
+    saveMut.mutate();
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-16 z-50 w-[560px] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl bg-white p-5 shadow-2xl animate-scale-in">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-900">Add Task/Comment</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="label">Comment</label>
+            <textarea rows={4} className="input" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Body of the comment here…" autoFocus />
+          </div>
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+            <input type="checkbox" checked={actionable} onChange={(e) => setActionable(e.target.checked)} className="mt-0.5 accent-brand-600" />
+            <span>
+              <span className="block text-sm font-medium text-slate-800">Mark it as actionable comment</span>
+              <span className="text-xs text-slate-400">This will make it show up in the demanding comments section</span>
+            </span>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label">Due Date <span className="font-normal text-slate-400">(optional)</span></label>
+              <input type="datetime-local" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <p className="mt-1 text-xs text-slate-400">If it needs to be resolved at a specific time</p>
+            </div>
+            <div>
+              <label className="label">Assign To Someone <span className="font-normal text-slate-400">(optional)</span></label>
+              <AsyncSelect loadOptions={usersApi.search} value={assignee} onChange={setAssignee} placeholder="Type to search…" />
+              <p className="mt-1 text-xs text-slate-400">Please leave empty if you want to work on it yourself.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-4">
+          <button onClick={submit} disabled={saveMut.isPending} className="btn-primary">
+            {saveMut.isPending ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={onClose} className="text-sm font-medium text-slate-600 hover:text-slate-900">Cancel</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// "Edit Tags" modal — select existing tags (fetched dynamically) or create new
+// ones on the fly; saves the tag ids onto the query.
+function EditTagsModal({ query, onClose, onSaved }) {
+  const [selected, setSelected] = useState(query.tags || []); // [{_id, name}]
+  const [term, setTerm] = useState('');
+  const debounced = useDebounced(term, 300);
+
+  const searchQ = useQuery({
+    queryKey: ['tags-search', debounced],
+    queryFn: () => tagsApi.search(debounced, 20),
+  });
+  const options = searchQ.data || [];
+
+  const isSelected = (t) => selected.some((s) => s._id === t._id);
+  const toggle = (t) => setSelected((s) => (isSelected(t) ? s.filter((x) => x._id !== t._id) : [...s, t]));
+
+  // Merge current selection into the visible list so checked tags never disappear.
+  const list = [...selected.filter((s) => !options.some((o) => o._id === s._id)), ...options];
+  const exactMatch = options.some((o) => o.name.toLowerCase() === term.trim().toLowerCase());
+
+  const createMut = useMutation({
+    mutationFn: () => tagsApi.create({ name: term.trim() }),
+    onSuccess: (tag) => { setSelected((s) => (s.some((x) => x._id === tag._id) ? s : [...s, tag])); setTerm(''); },
+    onError: (e) => toast.error(e.message || 'Could not create tag'),
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () => queriesApi.update(query._id, { tags: selected.map((t) => t._id) }),
+    onSuccess: () => { toast.success('Tags updated'); onSaved(); },
+    onError: (e) => toast.error(e.message || 'Could not save tags'),
+  });
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-24 z-50 w-[440px] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl bg-white p-5 shadow-2xl animate-scale-in">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-900">Edit Tags</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>
+        </div>
+
+        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Select existing or create new tags</label>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2">
+          <Search size={14} className="text-slate-400" />
+          <input
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Type to search…"
+            autoFocus
+            className="w-full text-sm outline-none"
+          />
+        </div>
+
+        <div className="mt-3 flex max-h-52 flex-wrap content-start gap-2 overflow-y-auto">
+          {list.map((t) => (
+            <label
+              key={t._id}
+              className={cn(
+                'flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-medium transition-colors',
+                isSelected(t) ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              )}
+            >
+              <input type="checkbox" checked={isSelected(t)} onChange={() => toggle(t)} className="accent-brand-600" />
+              {t.name}
+            </label>
+          ))}
+          {term.trim() && !exactMatch && (
+            <button
+              onClick={() => createMut.mutate()}
+              disabled={createMut.isPending}
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand-300 px-2.5 py-1.5 text-[12.5px] font-medium text-brand-700 hover:bg-brand-50"
+            >
+              <Plus size={13} /> Create &quot;{term.trim()}&quot;
+            </button>
+          )}
+          {!list.length && !term.trim() && (
+            <p className="py-2 text-sm text-slate-400">{searchQ.isLoading ? 'Loading…' : 'No tags yet — type a name to create one.'}</p>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-4">
+          <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="btn-primary">
+            {saveMut.isPending ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={onClose} className="text-sm font-medium text-slate-600 hover:text-slate-900">Cancel</button>
+        </div>
+      </div>
+    </>
   );
 }
 

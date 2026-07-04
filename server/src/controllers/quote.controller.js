@@ -170,7 +170,9 @@ export const updateQuoteStatus = asyncHandler(async (req, res) => {
 async function loadFullQuote(id) {
   const quote = await Quote.findById(id)
     .populate(POPULATE)
-    .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } });
+    .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } })
+    .populate({ path: 'packages.hotels.hotel', select: 'name imageUrl detailsLink address notes stars' })
+    .populate({ path: 'packages.transports.service', select: 'startCity endCity items.name items.description' });
   if (!quote) throw ApiError.notFound('Quote not found');
   return quote;
 }

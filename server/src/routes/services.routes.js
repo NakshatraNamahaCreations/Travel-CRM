@@ -52,6 +52,25 @@ function hotelAdvancedFilter(q) {
   return f;
 }
 
+// Price lists: ?activeOn=YYYY-MM-DD → rows whose season covers that date.
+function priceAdvancedFilter(q) {
+  const f = {};
+  if (q.activeOn) {
+    const d = new Date(q.activeOn);
+    f.startDate = { $lte: d };
+    f.endDate = { $gte: d };
+  }
+  return f;
+}
+
+// Advanced filters for the Travel Activities list.
+function activityAdvancedFilter(q) {
+  const f = {};
+  if (q.destinations) f.destinations = { $in: asArray(q.destinations) };
+  if (q.isActive === 'false') f.isActive = false;
+  return f;
+}
+
 // Advanced filters for the Transport Services list.
 function transportAdvancedFilter(q) {
   const f = {};
@@ -162,6 +181,7 @@ export const hotelPriceRoutes = makeCrudRouter(
     populate: [{ path: 'hotel', select: 'name location stars' }],
     sort: '-startDate',
     injectOnCreate: stampCreator,
+    advancedFilter: priceAdvancedFilter,
   }),
   { ...W, perm: 'hotels' }
 );
@@ -191,6 +211,7 @@ export const transportPriceRoutes = makeCrudRouter(
     populate: [{ path: 'service', select: 'name from to' }],
     sort: '-startDate',
     injectOnCreate: stampCreator,
+    advancedFilter: priceAdvancedFilter,
   }),
   { ...W, perm: 'transport' }
 );
@@ -200,6 +221,7 @@ export const activityRoutes = makeCrudRouter(
     searchFields: ['name'],
     populate: [{ path: 'destinations', select: 'name' }],
     injectOnCreate: stampCreator,
+    advancedFilter: activityAdvancedFilter,
   }),
   { ...W, perm: 'activities' }
 );
@@ -212,10 +234,11 @@ activityRoutes.post('/bulk-disable', authorize(...W.writeRoles), asyncHandler(as
 export const activityPriceRoutes = makeCrudRouter(
   crudFactory(TravelActivityPrice, {
     searchFields: ['service', 'config'],
-    filterFields: ['activity'],
+    filterFields: ['activity', 'service', 'config'],
     populate: [{ path: 'activity', select: 'name' }],
     sort: '-startDate',
     injectOnCreate: stampCreator,
+    advancedFilter: priceAdvancedFilter,
   }),
   { ...W, perm: 'activities' }
 );

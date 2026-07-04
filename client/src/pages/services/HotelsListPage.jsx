@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, MoreVertical, Layers, Utensils, BedDouble, StickyNote, Wallet, GitMerge, Trash2, MapPin, Map } from 'lucide-react';
+import { Plus, MoreVertical, Layers, Utensils, BedDouble, StickyNote, Wallet, GitMerge, Trash2, MapPin, Map, ImageOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hotelsApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
@@ -122,12 +122,26 @@ export default function HotelsListPage() {
       key: 'name',
       header: 'Name',
       render: (h) => (
-        <div>
-          <Link to={`/services/hotels/${h._id}`} className="font-semibold text-brand-600 hover:underline">
-            {h.name}
-          </Link>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            {h.location?.city || '—'} <StarRating value={h.stars} size={11} />
+        <div className="flex items-center gap-3">
+          {h.imageUrl ? (
+            <img
+              src={h.imageUrl}
+              alt=""
+              className="h-11 w-16 flex-shrink-0 rounded-lg border border-slate-200 object-cover"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div className="flex h-11 w-16 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-300">
+              <ImageOff size={16} />
+            </div>
+          )}
+          <div>
+            <Link to={`/services/hotels/${h._id}`} className="font-semibold text-brand-600 hover:underline">
+              {h.name}
+            </Link>
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              {h.location?.city || '—'} <StarRating value={h.stars} size={11} />
+            </div>
           </div>
         </div>
       ),

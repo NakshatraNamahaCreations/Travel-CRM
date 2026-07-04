@@ -5,14 +5,14 @@
 
 @layer base {
   html {
-    /* Compact, pro-dense base — scales all rem-based type & spacing down. */
-    font-size: 13px;
+    /* Base size — scales all rem-based type & spacing across the app. */
+    font-size: 15.5px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-surface text-[13px] text-slate-600 leading-normal;
+    @apply bg-surface text-[15.5px] text-slate-600 leading-normal;
     font-feature-settings: 'calt' 1, 'ss01' 1;
     letter-spacing: -0.006em;
   }

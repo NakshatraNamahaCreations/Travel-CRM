@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hotel, Bus, Plus, Trash2, Copy, Sparkles, Star, ChevronDown, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Hotel, Bus, Plus, Trash2, Copy, Sparkles, Star, ChevronDown, RefreshCw, AlertTriangle, Ticket } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import toast from 'react-hot-toast';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import Modal from '../../components/ui/Modal.jsx';
-import { hotelsApi, transportApi } from '../../api/services.js';
+import { hotelsApi, transportApi, activitiesApi } from '../../api/services.js';
 import { lookupApi } from '../../api/quotes.js';
 import { optionsApi } from '../../api/options.js';
 import { hotelRowCost, hotelPerNight, computePackage, money } from '../../lib/pricing.js';
@@ -15,6 +15,7 @@ import { cn } from '../../lib/cn.js';
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const emptyHotel = () => ({ nights: [1], hotel: null, hotelName: '', city: '', mealPlan: '', roomType: '', paxPerRoom: 2, rooms: 1, aweb: 0, cweb: 0, cnb: 0, ratePerNight: 0, awebRate: 0, cwebRate: 0, cnbRate: 0, cardRate: 0 });
 const emptyTransport = (days = [1]) => ({ days, serviceLocation: '', serviceType: '', startTime: '', durationMins: 60, items: [{ type: '', qty: 1, rate: 0, given: 0 }] });
+const emptyActivity = (days = [1]) => ({ days, activity: null, name: '', ticketType: '', slot: '', durationMins: 60, items: [] });
 const emptySharedItem = () => ({ type: '', qty: 1 });
 
 export default function PackageEditor({ pkg, onChange, nights, startDate, currency }) {
@@ -34,7 +35,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const autoRate = async (i) => {
     const h = pkg.hotels[i];
     if (!h.hotel) return toast.error('Select a hotel first');
-    const r = await lookupApi.hotelRate({ hotel: h.hotel._id, roomType: h.roomType, mealPlan: h.mealPlan, date: startDate });
+    const r = await lookupApi.hotelRate({ hotel: h.hotel?._id || h.hotel, roomType: h.roomType, mealPlan: h.mealPlan, date: startDate });
     if (r) { setHotel(i, { cardRate: r.basePrice, ratePerNight: r.basePrice, awebRate: r.aweb, cwebRate: r.cweb, cnbRate: r.cwoeb }); toast.success(`Rate: ${money(r.basePrice, currency)}/night`); }
     else toast('No matching rate — enter manually', { icon: '✏️' });
   };
@@ -103,6 +104,57 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     else toast('No matching rate — enter manually', { icon: '✏️' });
   };
 
+  /* ----- Activities / Tickets ----- */
+  const setAct = (i, patch) => update({ activities: pkg.activities.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) });
+  const addAct = (days = [1]) => update({ activities: [...(pkg.activities || []), emptyActivity(days)] });
+  const rmAct = async (i) => { if (await confirm({ title: 'Remove this activity?', message: `${pkg.activities[i]?.name || 'This activity'} will be removed from the package.`, confirmLabel: 'Remove' })) update({ activities: pkg.activities.filter((_, idx) => idx !== i) }); };
+  const setActItem = (ai, ii, patch) => setAct(ai, { items: (pkg.activities[ai].items || []).map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
+  const addActItem = (ai) => setAct(ai, { items: [...(pkg.activities[ai].items || []), { type: '', qty: 1, rate: 0, given: 0 }] });
+  const rmActItem = (ai, ii) => setAct(ai, { items: (pkg.activities[ai].items || []).filter((_, idx) => idx !== ii) });
+
+  const actDate = (a) => {
+    const dayNo = (Array.isArray(a.days) && a.days[0]) || 1;
+    return startDate ? format(addDays(new Date(startDate), dayNo - 1), 'yyyy-MM-dd') : undefined;
+  };
+
+  // Picking a ticket/package type auto-builds the ticket rows (Adult/Child…)
+  // with rates fetched from the Travel Activity Prices master.
+  const pickTicketType = async (ai, name) => {
+    const a = pkg.activities[ai];
+    const actId = a.activity?._id || a.activity;
+    if (!name || !actId) return setAct(ai, { ticketType: name || '' });
+    const configs = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
+    const items = [];
+    let hits = 0;
+    for (const cfg of configs) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await lookupApi.activityRate({ activity: actId, service: name, config: cfg, date: actDate(a) }).catch(() => null);
+      if (r) hits++;
+      items.push({ type: cfg, qty: 1, rate: r?.price || 0, given: 0 });
+    }
+    setAct(ai, { ticketType: name, items });
+    if (hits) toast.success(`Fetched ${hits} rate(s) from the activity price list`);
+    else toast('No matching rate — enter manually', { icon: '✏️' });
+  };
+
+  // Re-fetch rates for the current ticket rows.
+  const autoActRate = async (ai) => {
+    const a = pkg.activities[ai];
+    const actId = a.activity?._id || a.activity;
+    if (!actId) return toast.error('Pick an activity from the master list first');
+    if (!a.ticketType) return toast.error('Pick a ticket/package type first');
+    const items = [...(a.items || [])];
+    let hits = 0;
+    for (let ii = 0; ii < items.length; ii++) {
+      if (!items[ii].type) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const r = await lookupApi.activityRate({ activity: actId, service: a.ticketType, config: items[ii].type, date: actDate(a) }).catch(() => null);
+      if (r) { items[ii] = { ...items[ii], rate: r.price }; hits++; }
+    }
+    if (hits) { setAct(ai, { items }); toast.success(`Fetched ${hits} rate(s) from price list`); }
+    else toast('No matching rate — enter manually', { icon: '✏️' });
+  };
+
   /* ----- Shared Cab Types ----- */
   const sharedItems = pkg.sharedCabItems || [emptySharedItem()];
   const setSharedItem = (ii, patch) => update({ sharedCabItems: sharedItems.map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
@@ -132,7 +184,12 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                 </div>
                 <div>
                   <label className="label">Hotel</label>
-                  <AsyncSelect loadOptions={(s) => hotelsApi.list({ search: s }).then((r) => r.data)} value={h.hotel} onChange={(v) => pickHotel(i, v)} placeholder="Type to search..." />
+                  <AsyncSelect
+                    loadOptions={(s) => hotelsApi.list({ search: s }).then((r) => r.data)}
+                    value={h.hotel ? { _id: h.hotel._id || h.hotel, name: h.hotel.name || h.hotelName || '' } : null}
+                    onChange={(v) => pickHotel(i, v)}
+                    placeholder="Type to search..."
+                  />
                   {!h.hotel && <RequiredHint>Hotel field is required</RequiredHint>}
                 </div>
                 <div>
@@ -143,7 +200,13 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                 <div>
                   <label className="label">Room Type</label>
                   <AsyncSelect
-                    loadOptions={(s) => Promise.resolve((h.hotel?.roomTypes || []).filter((r) => r.name.toLowerCase().includes(s.toLowerCase())).map((r) => ({ _id: r.name, name: r.name })))}
+                    loadOptions={async (s) => {
+                      // After a reload h.hotel is just an id — fetch the master for its room types.
+                      let hotel = h.hotel;
+                      const hid = hotel?._id || hotel;
+                      if (hotel && !hotel.roomTypes && hid) hotel = await hotelsApi.get(hid).catch(() => null);
+                      return (hotel?.roomTypes || []).filter((r) => r.name.toLowerCase().includes(s.toLowerCase())).map((r) => ({ _id: r.name, name: r.name }));
+                    }}
                     value={h.roomType ? { _id: h.roomType, name: h.roomType } : null}
                     onChange={(v) => setHotel(i, { roomType: v ? v._id : '' })}
                     creatable
@@ -156,10 +219,11 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
                 <Num label="Pax/room (WoEB)" value={h.paxPerRoom} onChange={(v) => setHotel(i, { paxPerRoom: v })} />
-                <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, { rooms: v })} />
-                <Num label="AWEB" value={h.aweb} onChange={(v) => setHotel(i, { aweb: v })} />
-                <Num label="CWEB" value={h.cweb} onChange={(v) => setHotel(i, { cweb: v })} />
-                <Num label="CNB" value={h.cnb} onChange={(v) => setHotel(i, { cnb: v })} />
+                {/* Extra beds only make sense inside rooms — zero & lock them until rooms ≥ 1. */}
+                <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, v > 0 ? { rooms: v } : { rooms: v, aweb: 0, cweb: 0, cnb: 0 })} />
+                <Num label="AWEB" value={h.aweb} onChange={(v) => setHotel(i, { aweb: v })} disabled={!(Number(h.rooms) > 0)} />
+                <Num label="CWEB" value={h.cweb} onChange={(v) => setHotel(i, { cweb: v })} disabled={!(Number(h.rooms) > 0)} />
+                <Num label="CNB" value={h.cnb} onChange={(v) => setHotel(i, { cnb: v })} disabled={!(Number(h.rooms) > 0)} />
                 <div>
                   <label className="label">Comp Child</label>
                   <p className="pt-2.5 text-sm text-slate-600">Upto {h.hotel?.childEbAge?.from ?? 5}y</p>
@@ -392,7 +456,20 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     </div>
                     <div>
                       <label className="label">Service Type</label>
-                      <input className="input" placeholder="Transfer and Radhanagar Beach" value={t.serviceType} onChange={(e) => setTr(ti, { serviceType: e.target.value })} />
+                      <AsyncSelect
+                        loadOptions={async (q) => {
+                          const sid = typeof t.service === 'object' ? t.service?._id : t.service;
+                          if (!sid) return [];
+                          const s = await transportApi.get(sid).catch(() => null);
+                          return (s?.items || [])
+                            .map((it) => ({ _id: it.name, name: it.name }))
+                            .filter((o) => o.name.toLowerCase().includes((q || '').toLowerCase()));
+                        }}
+                        value={t.serviceType ? { _id: t.serviceType, name: t.serviceType } : null}
+                        onChange={(v) => setTr(ti, { serviceType: v ? v.name : '' })}
+                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                        placeholder={t.service ? 'Type to search...' : 'Pick a service location first'}
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -407,6 +484,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     {/* sub-actions */}
                     <div className="flex gap-2 pt-1">
                       <button type="button" onClick={addTr} className="btn-secondary text-xs"><Plus size={12} /> Transport Service</button>
+                      <button type="button" onClick={() => addAct(tDays)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
                     </div>
                   </div>
 
@@ -496,7 +574,151 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
               </div>
             );
           })}
-          <button type="button" onClick={addTr} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
+          {/* Activity / Ticket cards */}
+          {(pkg.activities || []).map((a, ai) => {
+            const aDays = Array.isArray(a.days) && a.days.length ? a.days : [1];
+            const dayOptions = Array.from({ length: nights || 1 }, (_, i) => ({
+              n: i + 1,
+              label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
+            }));
+            const configOptions = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
+            return (
+              <div key={`act-${ai}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+                  <Ticket size={14} className="text-brand-500" />
+                  <span className="text-xs font-semibold text-brand-600">Activity/Ticket</span>
+                </div>
+
+                <div className="flex gap-0 divide-x divide-gray-100">
+                  {/* LEFT: Days */}
+                  <div className="w-44 shrink-0 p-4">
+                    <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                      {dayOptions.map(({ n, label }) => (
+                        <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', aDays.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
+                            checked={aDays.includes(n)}
+                            onChange={() => {
+                              const next = aDays.includes(n) ? aDays.filter((d) => d !== n) : [...aDays, n].sort((x, y) => x - y);
+                              setAct(ai, { days: next.length ? next : [n] });
+                            }}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* MIDDLE: Activity details */}
+                  <div className="flex-1 p-4 space-y-3">
+                    <div>
+                      <label className="label">Name</label>
+                      <AsyncSelect
+                        loadOptions={(q) => activitiesApi.list({ search: q }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
+                        value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
+                        onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
+                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                        placeholder="Type to search..."
+                      />
+                      {a.activity && <p className="mt-1 text-[11px] text-green-600">✓ Linked to activity master — prices can auto-fill</p>}
+                    </div>
+                    <div>
+                      <label className="label">Ticket/Package Type</label>
+                      <AsyncSelect
+                        loadOptions={async (q) => {
+                          let act = a.activity;
+                          const actId = act?._id || act;
+                          if (act && !act.ticketTypes && actId) act = await activitiesApi.get(actId).catch(() => null);
+                          return (act?.ticketTypes || [])
+                            .map((tt) => ({ _id: tt.name, name: tt.name }))
+                            .filter((o) => o.name.toLowerCase().includes((q || '').toLowerCase()));
+                        }}
+                        value={a.ticketType ? { _id: a.ticketType, name: a.ticketType } : null}
+                        onChange={(v) => pickTicketType(ai, v ? v.name : '')}
+                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                        placeholder={a.activity ? 'Type to search...' : 'Pick an activity first'}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Slot</label>
+                        <input className="input" placeholder="14:00" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="label">Duration (Mins)</label>
+                        <input type="number" className="input" placeholder="60 Mins" value={a.durationMins ?? ''} onChange={(e) => setAct(ai, { durationMins: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => addAct(aDays)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
+                    </div>
+                  </div>
+
+                  {/* RIGHT: Tickets and Prices */}
+                  <div className="w-96 shrink-0 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-700">Tickets and Prices</p>
+                      <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
+                    </div>
+                    <table className="w-full table-fixed text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500">
+                          <th className="pb-1 text-left font-semibold">Type</th>
+                          <th className="pb-1 text-left font-semibold w-10">Qty.</th>
+                          <th className="pb-1 text-left font-semibold w-14">Rate</th>
+                          <th className="pb-1 text-left font-semibold w-14">Given</th>
+                          <th className="w-6" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(a.items || []).map((it, ii) => (
+                          <tr key={ii}>
+                            <td className="py-1.5 pr-2">
+                              <AsyncSelect
+                                loadOptions={(q) => Promise.resolve(configOptions.map((c) => ({ _id: c, name: c })).filter((o) => o.name.toLowerCase().includes((q || '').toLowerCase())))}
+                                value={it.type ? { _id: it.type, name: it.type } : null}
+                                onChange={(v) => setActItem(ai, ii, { type: v ? v.name : '' })}
+                                creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                                placeholder="Adult…"
+                              />
+                            </td>
+                            <td className="py-1.5 pr-1">
+                              <input type="number" className="input w-full px-1 text-center text-xs" value={it.qty ?? ''} onChange={(e) => setActItem(ai, ii, { qty: Number(e.target.value) })} />
+                            </td>
+                            <td className="py-1.5 pr-1">
+                              <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.rate ?? ''} onChange={(e) => setActItem(ai, ii, { rate: Number(e.target.value) })} />
+                            </td>
+                            <td className="py-1.5">
+                              <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.given ?? ''} onChange={(e) => setActItem(ai, ii, { given: Number(e.target.value) })} />
+                            </td>
+                            <td className="py-1.5 pl-1 text-center">
+                              <button type="button" onClick={() => rmActItem(ai, ii)} title="Remove row" className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+                            </td>
+                          </tr>
+                        ))}
+                        {!(a.items || []).length && (
+                          <tr><td colSpan={5} className="py-2 text-center text-slate-400">Pick a ticket/package type to fetch prices</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                    <button type="button" onClick={() => addActItem(ai)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
+                  </div>
+                </div>
+
+                {/* Card footer */}
+                <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
+                  <button type="button" onClick={() => rmAct(ai)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="flex gap-2">
+            <button type="button" onClick={addTr} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
+            <button type="button" onClick={() => addAct()} className="btn-secondary text-sm"><Plus size={14} /> Add Activity/Ticket</button>
+          </div>
         </div>
       </Section>
 
@@ -529,61 +751,62 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         </div>
       </Section>
 
-      {/* Markup / Tax / Rounding table */}
+      {/* Markup / Tax / Rounding */}
       <Section title="Set Markup, Tax and Rounding">
-        <div className="card card-flush overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-100 text-left align-bottom text-xs font-semibold text-slate-600">
-              <tr>
-                <th className="px-3 py-2.5">Cost Price ({currency})</th>
-                <th className="px-3 py-2.5">
-                  <div className="mb-1 text-center">Markup</div>
-                  <select className="input" value={pkg.markupType} onChange={(e) => update({ markupType: e.target.value })}>
-                    <option value="percent">Percentage</option><option value="flat">Flat</option>
-                  </select>
-                </th>
-                <th className="px-3 py-2.5">
-                  <div className="mb-1 text-center">Tax Applied On</div>
-                  <select className="input" value={pkg.taxOn || 'cost_markup'} onChange={(e) => update({ taxOn: e.target.value })} disabled={!pkg.taxApplied}>
-                    <option value="cost_markup">Cost + Markup</option><option value="markup">Only Markup</option>
-                  </select>
-                </th>
-                <th className="px-3 py-2.5">
-                  <div className="flex items-center gap-1">
-                    <input type="checkbox" checked={!!pkg.taxApplied} onChange={(e) => update({ taxApplied: e.target.checked })} />
-                    <select className="input w-[4.5rem]" value={pkg.taxName || 'GST'} onChange={(e) => update({ taxName: e.target.value })} disabled={!pkg.taxApplied}>
-                      {['GST', 'IGST', 'CGST', 'VAT'].map((t) => <option key={t}>{t}</option>)}
-                    </select>
-                    <input type="number" className="input w-14" value={pkg.taxPercent} onChange={(e) => update({ taxPercent: Number(e.target.value) })} disabled={!pkg.taxApplied} />
-                    <span className="text-slate-400">%</span>
-                  </div>
-                </th>
-                <th className="px-3 py-2.5 text-right">Total ({currency})</th>
-                <th className="px-3 py-2.5 text-center">
-                  <div className="mb-1">Round</div>
-                  <select className="input w-16" value={pkg.rounding || 1} onChange={(e) => update({ rounding: Number(e.target.value) || 1 })}>
-                    {[1, 5, 10, 50, 100].map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-amber-50/50 align-middle font-medium">
-                <td className="px-3 py-3 italic text-slate-500">Total</td>
-                <td className="px-3 py-3 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <input type="number" className="input w-24 text-center" value={pkg.markupValue} onChange={(e) => update({ markupValue: Number(e.target.value) })} />
-                    {pkg.markupType === 'percent' && <span className="text-slate-400">%</span>}
-                  </div>
-                  <div className="mt-1 text-center text-xs text-slate-400">= {money(c.markupAmount, currency)}</div>
-                </td>
-                <td className="px-3 py-3 text-center text-slate-600">{pkg.taxOn === 'markup' ? 'Only Markup' : 'Cost + Markup'}</td>
-                <td className="px-3 py-3 text-center tabular-nums">{money(c.taxAmount, currency)}</td>
-                <td className="px-3 py-3 text-right text-base font-bold tabular-nums text-slate-900">{money(c.costPrice + c.markupAmount + c.taxAmount, currency)}</td>
-                <td className="px-3 py-3 text-center text-base font-bold tabular-nums text-slate-900">{money(c.sellingPrice, currency)}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr_1fr]">
+          {/* Markup */}
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Markup</p>
+            <div className="flex items-center gap-2">
+              <select className="input w-36" value={pkg.markupType} onChange={(e) => update({ markupType: e.target.value })}>
+                <option value="percent">Percentage</option><option value="flat">Flat</option>
+              </select>
+              <input type="number" className="input w-24 text-center" value={pkg.markupValue} onChange={(e) => update({ markupValue: Number(e.target.value) })} />
+              <span className="text-sm text-slate-400">{pkg.markupType === 'percent' ? '%' : currency}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Markup amount: <span className="font-semibold text-slate-600">{money(c.markupAmount, currency)}</span></p>
+          </div>
+
+          {/* Tax */}
+          <div className="rounded-xl border border-slate-200 p-4">
+            <label className="mb-3 flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <input type="checkbox" className="accent-brand-600" checked={!!pkg.taxApplied} onChange={(e) => update({ taxApplied: e.target.checked })} />
+              Apply Tax
+            </label>
+            <div className={cn('flex items-center gap-2', !pkg.taxApplied && 'opacity-50')}>
+              <select className="input w-24" value={pkg.taxName || 'GST'} onChange={(e) => update({ taxName: e.target.value })} disabled={!pkg.taxApplied}>
+                {['GST', 'IGST', 'CGST', 'VAT'].map((t) => <option key={t}>{t}</option>)}
+              </select>
+              <input type="number" className="input w-20 text-center" value={pkg.taxPercent} onChange={(e) => update({ taxPercent: Number(e.target.value) })} disabled={!pkg.taxApplied} />
+              <span className="text-sm text-slate-400">%</span>
+              <select className="input flex-1" value={pkg.taxOn || 'cost_markup'} onChange={(e) => update({ taxOn: e.target.value })} disabled={!pkg.taxApplied}>
+                <option value="cost_markup">On Cost + Markup</option><option value="markup">On Markup Only</option>
+              </select>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Tax amount: <span className="font-semibold text-slate-600">{money(c.taxAmount, currency)}</span></p>
+          </div>
+
+          {/* Rounding */}
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Round Final Price</p>
+            <select className="input w-40" value={pkg.rounding || 1} onChange={(e) => update({ rounding: Number(e.target.value) || 1 })}>
+              {[1, 5, 10, 50, 100].map((r) => <option key={r} value={r}>Nearest {r}</option>)}
+            </select>
+            <p className="mt-2 text-xs text-slate-400">Final price is rounded to the nearest {pkg.rounding || 1}.</p>
+          </div>
+        </div>
+
+        {/* Calculation strip */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-sm">
+          <span><span className="text-xs text-slate-400">Cost Price&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.costPrice, currency)}</span></span>
+          <span className="text-slate-300">+</span>
+          <span><span className="text-xs text-slate-400">Markup&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.markupAmount, currency)}</span></span>
+          <span className="text-slate-300">+</span>
+          <span><span className="text-xs text-slate-400">{pkg.taxApplied ? `${pkg.taxName || 'GST'} ${pkg.taxPercent || 0}%` : 'Tax'}&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.taxAmount, currency)}</span></span>
+          <span className="ml-auto flex items-baseline gap-2 rounded-lg bg-brand-600 px-4 py-1.5 text-white">
+            <span className="text-xs text-blue-100">Final Price</span>
+            <span className="text-base font-bold tabular-nums">{money(c.sellingPrice, currency)}</span>
+          </span>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
@@ -617,11 +840,18 @@ function Section({ icon: Icon, title, hint, children }) {
   );
 }
 
-function Num({ label, value, onChange }) {
+function Num({ label, value, onChange, disabled = false, title }) {
   return (
     <div>
       <label className="label">{label}</label>
-      <input type="number" className="input" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input
+        type="number"
+        className={`input ${disabled ? 'cursor-not-allowed bg-slate-50 text-slate-400' : ''}`}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        disabled={disabled}
+        title={disabled ? title || 'Enter no. of rooms first' : undefined}
+      />
     </div>
   );
 }
@@ -652,7 +882,13 @@ function GivenPriceModal({ hotel, currency, onClose, onSave }) {
           {rows.map((r) => (
             <tr key={r.key}>
               <td className="py-2.5 font-medium text-slate-800">{r.label}</td>
-              <td className="py-2.5 text-center"><input type="number" className="input mx-auto w-28 text-center" value={v[r.key]} onChange={(e) => setV((s) => ({ ...s, [r.key]: e.target.value }))} /></td>
+              <td className="py-2.5 text-center">
+                {r.qty ? (
+                  <input type="number" className="input mx-auto w-28 text-center" value={v[r.key]} onChange={(e) => setV((s) => ({ ...s, [r.key]: e.target.value }))} />
+                ) : (
+                  <span className="text-slate-400">&mdash;</span>
+                )}
+              </td>
               <td className="py-2.5 text-center text-slate-600 tabular-nums">{r.qty}</td>
               <td className="py-2.5 text-right tabular-nums">{r.qty ? money((Number(v[r.key]) || 0) * r.qty, currency) : '—'}</td>
             </tr>

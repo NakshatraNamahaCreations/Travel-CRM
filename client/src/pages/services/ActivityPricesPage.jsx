@@ -3,10 +3,23 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreVertical, Calculator, UploadCloud } from 'lucide-react';
 import { format } from 'date-fns';
-import { activityPricesApi } from '../../api/services.js';
+import { activityPricesApi, activitiesApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
+
+const EMPTY_FILTERS = { activitySel: null, config: '', activeOn: '' };
+const FILTER_FIELDS = [
+  { key: 'activitySel', label: 'Activity', type: 'async', loadOptions: (s) => activitiesApi.list({ search: s }).then((r) => r.data) },
+  { key: 'config', label: 'Config (Adult / Child…)', type: 'text', placeholder: 'e.g. Adult' },
+  { key: 'activeOn', label: 'Price Active On Date', type: 'date' },
+];
+const filterParams = (f) => ({
+  ...(f.activitySel ? { activity: f.activitySel._id } : {}),
+  ...(f.config?.trim() ? { config: f.config.trim() } : {}),
+  ...(f.activeOn ? { activeOn: f.activeOn } : {}),
+});
 
 function PricesKebab() {
   const [open, setOpen] = useState(false);
@@ -34,12 +47,14 @@ export default function ActivityPricesPage() {
   const [params] = useSearchParams();
   const activity = params.get('activity') || undefined;
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['activity-prices', debounced, activity],
-    queryFn: () => activityPricesApi.list({ search: debounced, activity, limit: 50 }),
+    queryKey: ['activity-prices', debounced, activity, filters],
+    queryFn: () => activityPricesApi.list({ search: debounced, activity, limit: 50, ...filterParams(filters) }),
   });
 
   const fmt = (n) => new Intl.NumberFormat('en-IN').format(n);
@@ -57,6 +72,7 @@ export default function ActivityPricesPage() {
 
   return (
     <ServiceShell title="Travel Activity Prices" search={search} onSearch={setSearch} total={data?.meta?.total} onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)} filterCount={countFilters(filters)}
       actions={
         <>
           <Link to="/services/activity-prices/upload" className="btn-primary"><UploadCloud size={16} /> Upload Prices</Link>
@@ -64,6 +80,7 @@ export default function ActivityPricesPage() {
         </>
       }>
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No activity prices yet." />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

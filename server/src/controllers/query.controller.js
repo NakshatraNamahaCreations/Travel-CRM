@@ -1,6 +1,7 @@
 import XLSX from 'xlsx';
 import { Query } from '../models/Query.js';
 import { Destination } from '../models/Destination.js';
+import { Comment } from '../models/Comment.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
@@ -101,7 +102,24 @@ export const listQueries = asyncHandler(async (req, res) => {
     .sort(req.query.sort || '-createdAt')
     .skip(meta.skip)
     .limit(meta.limit);
-  return ok(res, items, meta);
+
+  // Latest comment per query, for the list's Follow-up column.
+  const ids = items.map((i) => i._id);
+  let lastByQuery = {};
+  if (ids.length) {
+    const rows = await Comment.aggregate([
+      { $match: { query: { $in: ids } } },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$query', body: { $first: '$body' }, createdAt: { $first: '$createdAt' } } },
+    ]);
+    lastByQuery = Object.fromEntries(rows.map((r) => [String(r._id), { body: r.body, createdAt: r.createdAt }]));
+  }
+  const out = items.map((i) => {
+    const o = i.toObject({ virtuals: true });
+    o.lastComment = lastByQuery[String(i._id)] || null;
+    return o;
+  });
+  return ok(res, out, meta);
 });
 
 // GET /api/queries/stats  — counts per pipeline status (for the sidebar tabs)

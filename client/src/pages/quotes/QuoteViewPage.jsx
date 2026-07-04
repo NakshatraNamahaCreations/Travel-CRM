@@ -104,18 +104,26 @@ export default function QuoteViewPage() {
           </div>
         )}
 
-        {/* Itinerary */}
+        {/* Itinerary — day-wise grid */}
         {q.days?.length > 0 && (
           <div className="border-b border-gray-200 py-6">
             <h2 className="mb-3 font-semibold text-gray-900">Itinerary</h2>
-            <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {q.days.map((d) => (
-                <div key={d._id || d.dayNumber} className="flex gap-3">
-                  <span className="mt-0.5 h-6 shrink-0 rounded-full bg-brand-600 px-2 text-xs font-semibold leading-6 text-white">Day {d.dayNumber}</span>
-                  <div>
-                    <p className="font-medium text-gray-900">{d.title || `Day ${d.dayNumber}`}</p>
-                    {d.description && <p className="text-sm text-gray-600">{d.description}</p>}
+                <div key={d._id || d.dayNumber} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="h-6 shrink-0 rounded-full bg-brand-600 px-2 text-xs font-semibold leading-6 text-white">Day {d.dayNumber}</span>
+                    <p className="truncate font-medium text-gray-900">{d.title || `Day ${d.dayNumber}`}</p>
                   </div>
+                  {d.description ? (
+                    <div className="space-y-0.5 text-sm text-gray-600">
+                      {String(d.description).split('\n').filter(Boolean).map((line, li) => (
+                        <p key={li}>- {line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">Leisure day</p>
+                  )}
                 </div>
               ))}
             </div>

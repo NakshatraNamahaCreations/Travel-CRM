@@ -3,14 +3,25 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreVertical, Calculator, UploadCloud } from 'lucide-react';
 import { format } from 'date-fns';
-import { transportPricesApi } from '../../api/services.js';
+import { transportPricesApi, transportApi } from '../../api/services.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import RowDisableMenu from '../../components/services/RowDisableMenu.jsx';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
 
 const PAGE_SIZE = 20;
+
+const EMPTY_FILTERS = { serviceSel: null, activeOn: '' };
+const FILTER_FIELDS = [
+  { key: 'serviceSel', label: 'Transport Service', type: 'async', loadOptions: (s) => transportApi.list({ search: s }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: [x.from, x.to].filter(Boolean).join(' to ') || x.name }))) },
+  { key: 'activeOn', label: 'Price Active On Date', type: 'date' },
+];
+const filterParams = (f) => ({
+  ...(f.serviceSel ? { service: f.serviceSel._id } : {}),
+  ...(f.activeOn ? { activeOn: f.activeOn } : {}),
+});
 
 function PricesKebab() {
   const [open, setOpen] = useState(false);
@@ -40,14 +51,16 @@ export default function TransportPricesPage() {
   const [search, setSearch] = useState('');
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
-  useEffect(() => { setPage(1); }, [debounced, service, disabledOnly]);
+  useEffect(() => { setPage(1); }, [debounced, service, disabledOnly, filters]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['transport-prices', debounced, service, disabledOnly, page],
-    queryFn: () => transportPricesApi.list({ search: debounced, service, isActive: !disabledOnly, page, limit: PAGE_SIZE }),
+    queryKey: ['transport-prices', debounced, service, disabledOnly, page, filters],
+    queryFn: () => transportPricesApi.list({ search: debounced, service, isActive: !disabledOnly, page, limit: PAGE_SIZE, ...filterParams(filters) }),
     keepPreviousData: true,
   });
 
@@ -70,6 +83,7 @@ export default function TransportPricesPage() {
 
   return (
     <ServiceShell title="Transport Service Prices" search={search} onSearch={setSearch} total={total} rangeStart={rangeStart} rangeEnd={rangeEnd} onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)} filterCount={countFilters(filters)}
       actions={
         <>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
@@ -81,6 +95,7 @@ export default function TransportPricesPage() {
       }>
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No transport prices yet." />
       <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

@@ -10,8 +10,14 @@ import Pagination from '../../components/ui/Pagination.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
 
 const PAGE_SIZE = 20;
+
+const EMPTY_FILTERS = { region: '' };
+const FILTER_FIELDS = [
+  { key: 'region', label: 'Region', type: 'text', placeholder: 'e.g. Andaman' },
+];
 
 function DestinationForm({ existing, onSaved }) {
   const isEdit = !!existing;
@@ -52,15 +58,17 @@ export default function DestinationsPage() {
   const [editing, setEditing] = useState(null); // destination | 'new' | null
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
   const confirm = useConfirm();
 
-  useEffect(() => { setPage(1); }, [debounced]);
+  useEffect(() => { setPage(1); }, [debounced, filters]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['destinations-admin', debounced, page],
-    queryFn: () => destinationsApi.list({ search: debounced, page, limit: PAGE_SIZE }),
+    queryKey: ['destinations-admin', debounced, page, filters],
+    queryFn: () => destinationsApi.list({ search: debounced, page, limit: PAGE_SIZE, ...(filters.region?.trim() ? { region: filters.region.trim() } : {}) }),
     keepPreviousData: true,
   });
 
@@ -126,6 +134,8 @@ export default function DestinationsPage() {
       rangeStart={rangeStart}
       rangeEnd={rangeEnd}
       onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)}
+      filterCount={countFilters(filters)}
       actions={
         <>
           {selected.length > 0 && (
@@ -152,6 +162,7 @@ export default function DestinationsPage() {
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add Destination' : 'Edit Destination'}>
         {editing && <DestinationForm existing={editing === 'new' ? null : editing} onSaved={() => { setEditing(null); refresh(); }} />}
       </Modal>
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

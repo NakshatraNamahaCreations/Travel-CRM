@@ -39,6 +39,7 @@ export function computePackage(pkg) {
   (pkg.hotels || []).forEach((h) => { cost += hotelRowCost(h); });
   (pkg.inclusions || []).forEach((i) => { cost += Number(i.price) || 0; });
   (pkg.transports || []).forEach((t) => (t.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0); }));
+  (pkg.activities || []).forEach((a) => (a.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0); }));
   (pkg.extras || []).forEach((e) => { cost += Number(e.price) || 0; });
   (pkg.flights || []).forEach((f) => { cost += Number(f.cost) || 0; });
   cost = r2(cost);

@@ -69,6 +69,20 @@ const transportDaySchema = new mongoose.Schema(
   { _id: true }
 );
 
+// Activity/Ticket rows inside "Transports & Activities" (Sembark parity).
+const activityRowSchema = new mongoose.Schema(
+  {
+    days: [{ type: Number }],
+    activity: { type: mongoose.Schema.Types.ObjectId, ref: 'TravelActivity' }, // master link for rate lookup
+    name: { type: String, trim: true }, // "Port Blair To Havelock"
+    ticketType: { type: String, trim: true }, // "Scuba Diving" — the activity's ticket/package type
+    slot: { type: String, trim: true }, // "14:00"
+    durationMins: { type: Number },
+    items: [transportItemSchema], // { type: 'Adult' | 'Child (6-12)', qty, rate, given }
+  },
+  { _id: true }
+);
+
 const extraSchema = new mongoose.Schema(
   {
     label: { type: String, trim: true },
@@ -90,6 +104,7 @@ const packageSchema = new mongoose.Schema(
     hotels: [hotelRowSchema],
     inclusions: [inclusionSchema],
     transports: [transportDaySchema],
+    activities: [activityRowSchema],
     extras: [extraSchema],
     flights: [flightSchema],
 
@@ -189,6 +204,12 @@ function computePackage(pkg) {
       cost += it.amount;
     }
   }
+  for (const a of pkg.activities || []) {
+    for (const it of a.items || []) {
+      it.amount = round((it.qty || 0) * (it.rate || 0));
+      cost += it.amount;
+    }
+  }
   for (const e of pkg.extras || []) cost += e.price || 0;
   for (const f of pkg.flights || []) cost += f.cost || 0;
 
@@ -217,20 +238,41 @@ function flattenSelected(doc) {
   }
   for (const inc of pkg.inclusions || []) items.push({ category: 'other', label: inc.service || 'Inclusion', meta: inc.hotelName, qty: 1, rate: inc.price || 0, amount: inc.price || 0 });
   for (const t of pkg.transports || []) for (const it of t.items || []) items.push({ category: 'transport', label: `${t.serviceLocation || ''} — ${it.type || 'Transport'}`.trim(), meta: t.serviceType, qty: it.qty || 1, rate: it.rate || 0, amount: it.amount || 0 });
+  for (const a of pkg.activities || []) for (const it of a.items || []) items.push({ category: 'activity', refId: a.activity, label: `${a.name || 'Activity'}${a.ticketType ? ` — ${a.ticketType}` : ''} (${it.type || 'Ticket'})`, meta: a.slot, qty: it.qty || 1, rate: it.rate || 0, amount: it.amount || 0 });
   for (const e of pkg.extras || []) items.push({ category: 'other', label: e.label || 'Service', qty: 1, rate: e.price || 0, amount: e.price || 0 });
   for (const f of pkg.flights || []) items.push({ category: 'other', label: f.label || 'Flight', qty: 1, rate: f.cost || 0, amount: f.cost || 0 });
   doc.costItems = items;
 
-  // Build day-wise itinerary from transports if none set explicitly.
-  if (!doc.days?.length && (pkg.transports || []).length) {
-    doc.days = pkg.transports.map((t) => {
-      const dayNo = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
-      return {
-        dayNumber: dayNo,
-        title: t.serviceLocation || `Day ${dayNo}`,
-        description: [t.serviceType, t.startTime].filter(Boolean).join(' · '),
-      };
-    });
+  // Build the day-wise itinerary from transports + activities, covering EVERY
+  // day of the trip (packages are the only authoring UI, so always rebuild).
+  {
+    const byDay = new Map(); // dayNo -> { title, lines[] }
+    const push = (dayNo, title, line) => {
+      if (!byDay.has(dayNo)) byDay.set(dayNo, { title: '', lines: [] });
+      const d = byDay.get(dayNo);
+      if (!d.title && title) d.title = title;
+      if (line) d.lines.push(line);
+    };
+    for (const t of pkg.transports || []) {
+      const days = (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]);
+      for (const dayNo of days) push(dayNo, t.serviceLocation, [t.serviceType, t.startTime].filter(Boolean).join(' · ') || t.serviceLocation);
+    }
+    for (const a of pkg.activities || []) {
+      const days = (Array.isArray(a.days) && a.days.length ? a.days : [1]);
+      for (const dayNo of days) push(dayNo, a.name, [[a.name, a.ticketType].filter(Boolean).join(' — '), a.slot].filter(Boolean).join(' · '));
+    }
+    if (byDay.size) {
+      const totalDays = Math.max((doc.nights || 0) + 1, ...byDay.keys());
+      doc.days = Array.from({ length: totalDays }, (_, i) => {
+        const dayNo = i + 1;
+        const d = byDay.get(dayNo);
+        return {
+          dayNumber: dayNo,
+          title: d?.title || `Day ${dayNo}`,
+          description: (d?.lines || []).join('\n'),
+        };
+      });
+    }
   }
 
   doc.markupType = pkg.markupType;

@@ -3,14 +3,33 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreVertical, Calculator, UploadCloud } from 'lucide-react';
 import { format } from 'date-fns';
-import { hotelPricesApi } from '../../api/services.js';
+import { hotelPricesApi, hotelsApi } from '../../api/services.js';
+import { optionsApi } from '../../api/options.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import RowDisableMenu from '../../components/services/RowDisableMenu.jsx';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
 
 const PAGE_SIZE = 20;
+
+const EMPTY_FILTERS = { hotel: null, mealPlan: '', roomType: '', activeOn: '' };
+const FILTER_FIELDS = [
+  { key: 'hotel', label: 'Hotel', type: 'async', loadOptions: (s) => hotelsApi.list({ search: s }).then((r) => r.data) },
+  { key: 'mealPlan', label: 'Meal Plan', type: 'async', loadOptions: (s) => optionsApi.search('mealPlan', s).then((l) => l.map((o) => ({ _id: o.value, name: o.value }))) },
+  { key: 'roomType', label: 'Room Type', type: 'text', placeholder: 'e.g. Deluxe (2P)' },
+  { key: 'activeOn', label: 'Price Active On Date', type: 'date' },
+];
+
+function filterParams(f) {
+  const p = {};
+  if (f.hotel) p.hotel = f.hotel._id;
+  if (f.mealPlan) p.mealPlan = f.mealPlan.name || f.mealPlan;
+  if (f.roomType?.trim()) p.roomType = f.roomType.trim();
+  if (f.activeOn) p.activeOn = f.activeOn;
+  return p;
+}
 
 function PricesKebab() {
   const [open, setOpen] = useState(false);
@@ -40,15 +59,17 @@ export default function HotelPricesPage() {
   const [search, setSearch] = useState('');
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
   // Reset to the first page whenever search/filters change.
-  useEffect(() => { setPage(1); }, [debounced, hotelFilter, disabledOnly]);
+  useEffect(() => { setPage(1); }, [debounced, hotelFilter, disabledOnly, filters]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hotel-prices', debounced, hotelFilter, disabledOnly, page],
-    queryFn: () => hotelPricesApi.list({ search: debounced, hotel: hotelFilter, isActive: !disabledOnly, page, limit: PAGE_SIZE }),
+    queryKey: ['hotel-prices', debounced, hotelFilter, disabledOnly, page, filters],
+    queryFn: () => hotelPricesApi.list({ search: debounced, hotel: hotelFilter, isActive: !disabledOnly, page, limit: PAGE_SIZE, ...filterParams(filters) }),
     keepPreviousData: true,
   });
 
@@ -87,6 +108,8 @@ export default function HotelPricesPage() {
       rangeStart={rangeStart}
       rangeEnd={rangeEnd}
       onRefresh={refresh}
+      onFilterClick={() => setShowFilters(true)}
+      filterCount={countFilters(filters)}
       actions={
         <>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
@@ -99,6 +122,7 @@ export default function HotelPricesPage() {
     >
       <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No prices yet." />
       <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

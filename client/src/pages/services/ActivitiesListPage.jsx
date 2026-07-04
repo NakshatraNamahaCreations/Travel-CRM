@@ -5,10 +5,22 @@ import { Plus, Ticket, MoreVertical, Download, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { activitiesApi } from '../../api/services.js';
+import { destinationsApi } from '../../api/masterData.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
+
+const EMPTY_FILTERS = { destinations: [], disabledOnly: false };
+const FILTER_FIELDS = [
+  { key: 'destinations', label: 'Destinations', type: 'async', isMulti: true, loadOptions: (s) => destinationsApi.search(s) },
+  { key: 'disabledOnly', label: 'Disabled Only', type: 'checkbox' },
+];
+const filterParams = (f) => ({
+  ...(f.destinations?.length ? { destinations: f.destinations.map((d) => d._id).join(',') } : {}),
+  ...(f.disabledOnly ? { isActive: 'false' } : {}),
+});
 
 function ToolsMenu({ onDownload, onBulkDisable }) {
   const [open, setOpen] = useState(false);
@@ -38,13 +50,15 @@ function ToolsMenu({ onDownload, onBulkDisable }) {
 
 export default function ActivitiesListPage() {
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
   const confirm = useConfirm();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['activities', debounced],
-    queryFn: () => activitiesApi.list({ search: debounced, limit: 50 }),
+    queryKey: ['activities', debounced, filters],
+    queryFn: () => activitiesApi.list({ search: debounced, limit: 50, ...filterParams(filters) }),
   });
   const rows = data?.data || [];
 
@@ -95,6 +109,8 @@ export default function ActivitiesListPage() {
       onSearch={setSearch}
       total={data?.meta?.total}
       onRefresh={() => qc.invalidateQueries({ queryKey: ['activities'] })}
+      onFilterClick={() => setShowFilters(true)}
+      filterCount={countFilters(filters)}
       actions={
         <div className="flex gap-2">
           <Link to="/services/activity-prices" className="btn-secondary">Prices</Link>
@@ -104,6 +120,7 @@ export default function ActivitiesListPage() {
       }
     >
       <DataTable columns={columns} rows={rows} loading={isLoading} emptyLabel="No activities yet." />
+      <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
     </ServiceShell>
   );
 }

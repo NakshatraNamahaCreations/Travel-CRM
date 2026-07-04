@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Calendar, Users, Phone, Mail, Tag as TagIcon, MessageSquare,
   User as UserIcon, MoreVertical, Pencil, Ban, Plus, FileText, CheckCircle2, Clock, Circle, Trash2, ListChecks, Share2,
-  Bed, Bus, CreditCard, History, ChevronRight, Sparkles,
+  Bed, Bus, CreditCard, History, ChevronRight, ChevronDown, Sparkles, CalendarDays, ScrollText,
 } from 'lucide-react';
 import { queriesApi } from '../../api/queries.js';
 import { bookingsApi } from '../../api/bookings.js';
@@ -17,6 +17,7 @@ import { activityLogApi } from '../../api/activities.js';
 import { usersApi } from '../../api/masterData.js';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
+import { company } from '../../config/company.js';
 import Modal from '../../components/ui/Modal.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
@@ -498,7 +499,10 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
   // Default selection: the converted (accepted) quote, else the latest.
   const acceptedId = quotes.find((x) => x.status === 'accepted')?._id;
   const [selId, setSelId] = useState(null);
+  const [editIncl, setEditIncl] = useState(false);
+  const [showTnc, setShowTnc] = useState(false);
   const activeId = selId && quotes.some((x) => x._id === selId) ? selId : (acceptedId || quotes[0]?._id);
+  const qc = useQueryClient();
 
   const { data: sel } = useQuery({ queryKey: ['quote-full', activeId], queryFn: () => quotesApi.get(activeId), enabled: !!activeId });
 
@@ -515,7 +519,7 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
   const hotelTotal = (pkg?.hotels || []).reduce((s, h) => s + (h.amount || 0), 0);
   const startDate = sel?.startDate ? new Date(sel.startDate) : null;
 
-  // Transports grouped by day number for the day-wise listing.
+  // Transports + activities grouped by day number for the day-wise listing.
   const byDay = new Map();
   (pkg?.transports || []).forEach((t) => {
     const dayNos = Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1];
@@ -524,7 +528,18 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
       byDay.get(d).push(t);
     });
   });
+  (pkg?.activities || []).forEach((a) => {
+    const dayNos = Array.isArray(a.days) && a.days.length ? a.days : [1];
+    dayNos.forEach((d) => {
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push({ ...a, _isActivity: true });
+    });
+  });
   const dayGroups = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
+
+  // Effective inclusion/exclusion lists: quote-specific if set, else company defaults.
+  const inclusions = sel?.inclusions?.length ? sel.inclusions : company.defaultInclusions;
+  const exclusions = sel?.exclusions?.length ? sel.exclusions : company.defaultExclusions;
 
   return (
     <div className="flex items-start gap-5">
@@ -677,11 +692,13 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                           return (
                             <div key={i} className="flex items-start justify-between gap-4 px-4 py-3">
                               <div className="min-w-0">
-                                <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
-                                {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
+                                <p className="font-medium text-gray-900">{(t._isActivity ? t.name : t.serviceLocation) || 'Service'}</p>
+                                {t._isActivity
+                                  ? (t.ticketType || t.slot) && <p className="text-xs text-gray-500">{[t.ticketType, t.slot].filter(Boolean).join(' · ')}</p>
+                                  : t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
                               </div>
                               <div className="shrink-0 text-right">
-                                <p className="text-sm text-gray-700">{(t.items || []).map((it) => `${it.qty || 1}-${it.type || 'Vehicle'}`).join(', ') || '—'}</p>
+                                <p className="text-sm text-gray-700">{(t.items || []).map((it) => `${it.qty || 1} ${it.type || (t._isActivity ? 'Ticket' : 'Vehicle')}`).join(', ') || '—'}</p>
                                 <p className="text-xs font-semibold text-gray-900">{amt ? `₹${amt.toLocaleString('en-IN')}` : <span className="font-normal text-gray-400">N/A</span>}</p>
                               </div>
                             </div>
@@ -727,10 +744,168 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
             {!pkg?.hotels?.length && !dayGroups.length && !pkg?.inclusions?.length && !pkg?.extras?.length && (
               <div className="card mt-3 p-8 text-center text-sm text-gray-400">No services added to this quote yet.</div>
             )}
+
+            {/* Inclusions / Exclusions — quote-specific if set, else company defaults */}
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><CheckCircle2 size={15} className="text-brand-600" /></span>
+                  <h4 className="font-semibold text-gray-900">Inclusions/Exclusions</h4>
+                  {!sel?.inclusions?.length && !sel?.exclusions?.length && (
+                    <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10.5px] font-medium text-gray-400">Default</span>
+                  )}
+                </div>
+                <button onClick={() => setEditIncl(true)} className="btn-secondary text-xs"><Pencil size={12} /> Edit Inclusions/Exclusions</button>
+              </div>
+              <div className="card grid gap-6 p-5 sm:grid-cols-2">
+                <div>
+                  <p className="mb-2 border-b border-gray-100 pb-1 text-xs font-semibold text-brand-700">Inclusions</p>
+                  <ul className="space-y-1.5">
+                    {inclusions.map((x, i) => (
+                      <li key={i} className="flex gap-2 text-[13px] text-gray-700">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" /> {x}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-2 border-b border-gray-100 pb-1 text-xs font-semibold text-red-600">Exclusions</p>
+                  <ul className="space-y-1.5">
+                    {exclusions.map((x, i) => (
+                      <li key={i} className="flex gap-2 text-[13px] text-gray-700">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" /> {x}
+                      </li>
+                    ))}
+                    <li className="flex gap-2 pt-1 text-[12px] font-medium text-amber-700">Anything not in inclusions is Excluded</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Day-wise Schedule */}
+            {sel?.days?.length > 0 && (
+              <div className="mt-6">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><CalendarDays size={15} className="text-brand-600" /></span>
+                  <h4 className="font-semibold text-gray-900">Day-wise Schedule</h4>
+                </div>
+                <div className="card divide-y divide-gray-100 p-0">
+                  {sel.days.map((d) => {
+                    const dt = startDate ? addDays(startDate, (d.dayNumber || 1) - 1) : null;
+                    return (
+                      <div key={d._id || d.dayNumber} className="flex gap-4 px-5 py-4">
+                        <div className="w-24 shrink-0 rounded-lg border border-sky-100 bg-sky-50/60 px-2 py-2.5 text-center">
+                          <p className="text-xs font-bold tracking-wide text-sky-800">{ord(d.dayNumber)} Day</p>
+                          {dt && (
+                            <>
+                              <p className="mt-1 text-[11px] text-gray-500">{format(dt, 'EEEE')}</p>
+                              <p className="text-xs font-semibold text-gray-800">{format(dt, 'd MMM')}</p>
+                              <p className="text-[10.5px] text-gray-400">{format(dt, 'yyyy')}</p>
+                            </>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1 pt-1">
+                          <p className="font-semibold text-gray-900">{d.title || `Day ${d.dayNumber}`}</p>
+                          {d.description ? (
+                            <div className="mt-1 space-y-0.5">
+                              {String(d.description).split('\n').filter(Boolean).map((line, li) => (
+                                <p key={li} className="text-sm text-gray-600">- {line}</p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-sm text-gray-400">Leisure day — no services scheduled.</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Terms and Conditions (collapsible) */}
+            <div className="mt-6">
+              <button onClick={() => setShowTnc((s) => !s)} className="mb-2 flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><ScrollText size={15} className="text-brand-600" /></span>
+                <h4 className="font-semibold text-gray-900">Terms and Conditions</h4>
+                <ChevronDown size={15} className={cn('text-gray-400 transition-transform', showTnc && 'rotate-180')} />
+              </button>
+              {showTnc && (
+                <div className="card space-y-4 p-5">
+                  {(company.termsAndConditions || []).map((s) => (
+                    <div key={s.heading}>
+                      <p className="mb-1.5 text-[12.5px] font-bold uppercase tracking-wide text-gray-800">{s.heading}</p>
+                      <ul className="space-y-1">
+                        {s.items.map((x, i) => {
+                          const idx = x.indexOf(': ');
+                          return (
+                            <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-gray-600">
+                              <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-gray-300" />
+                              <span>
+                                {idx > 0 && idx <= 45
+                                  ? <><b className="text-gray-800">{x.slice(0, idx + 1)}</b> {x.slice(idx + 2)}</>
+                                  : x}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {editIncl && sel && (
+              <EditInclusionsModal
+                quote={sel}
+                defaults={{ inclusions, exclusions }}
+                onClose={() => setEditIncl(false)}
+                onSaved={() => {
+                  setEditIncl(false);
+                  qc.invalidateQueries({ queryKey: ['quote-full', activeId] });
+                  qc.invalidateQueries({ queryKey: ['quotes', id] });
+                }}
+              />
+            )}
           </>
         )}
       </div>
     </div>
+  );
+}
+
+// Edit the quote's inclusion/exclusion lists (one item per line). Saving a
+// customized list stores it on the quote; the PDF and share views use it too.
+function EditInclusionsModal({ quote, defaults, onClose, onSaved }) {
+  const [incText, setIncText] = useState(defaults.inclusions.join('\n'));
+  const [excText, setExcText] = useState(defaults.exclusions.join('\n'));
+  const lines = (t) => t.split('\n').map((s) => s.trim()).filter(Boolean);
+
+  const saveMut = useMutation({
+    mutationFn: () => quotesApi.update(quote._id, { inclusions: lines(incText), exclusions: lines(excText) }),
+    onSuccess: () => { toast.success('Inclusions/Exclusions updated'); onSaved(); },
+    onError: (e) => toast.error(e.message || 'Could not save'),
+  });
+
+  return (
+    <Modal open onClose={onClose} title="Edit Inclusions/Exclusions" width="max-w-3xl">
+      <p className="mb-3 text-xs text-gray-400">One item per line. These are pre-filled with the standard list — add, edit or remove lines; the customized list is saved on this quote and used in the shared package &amp; PDF.</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label">Inclusions</label>
+          <textarea rows={12} className="input text-[13px]" value={incText} onChange={(e) => setIncText(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Exclusions</label>
+          <textarea rows={12} className="input text-[13px]" value={excText} onChange={(e) => setExcText(e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="btn-secondary">Cancel</button>
+        <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="btn-primary">{saveMut.isPending ? 'Saving…' : 'Save'}</button>
+      </div>
+    </Modal>
   );
 }
 

@@ -164,11 +164,47 @@ export const company = {
     ],
   },
 
+  // Static ferry departure/arrival fallbacks for the quotation PDF, used when a
+  // transfer has no start time entered. Matched by keyword in the service name +
+  // sector code (PB = Port Blair, HL = Havelock, NL = Neil). Times are 24h "HH:MM".
+  ferrySchedule: [
+    { match: 'itt majestic', times: { 'PB>HL': ['08:30', '10:00'], 'HL>NL': ['10:45', '11:45'], 'NL>PB': ['11:45', '13:05'], 'HL>PB': ['14:00', '15:30'] } },
+    { match: 'green ocean', times: { 'PB>HL': ['06:30', '08:45'], 'HL>NL': ['09:15', '10:30'], 'NL>PB': ['12:30', '14:15'], 'HL>PB': ['12:45', '14:30'] } },
+    { match: 'makruzz', times: { 'PB>HL': ['08:00', '09:30'], 'HL>NL': ['10:30', '11:30'], 'NL>PB': ['12:00', '13:30'], 'HL>PB': ['16:00', '17:30'] } },
+    { match: 'nautika', times: { 'PB>HL': ['07:45', '09:15'], 'HL>NL': ['12:00', '13:00'], 'NL>PB': ['13:30', '15:00'], 'HL>PB': ['16:30', '18:00'] } },
+    { match: 'sea link', times: { 'PB>HL': ['09:00', '11:00'], 'HL>NL': ['11:30', '12:30'], 'NL>PB': ['13:00', '14:45'], 'HL>PB': ['15:00', '17:00'] } },
+  ],
+
+  // Full-width hero photo on the quotation cover page.
+  heroImage: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=1400&q=80',
+
+  // Upsell grid on the quotation PDF. Set to [] to hide the section.
+  optionalActivities: [
+    { name: 'Scuba Diving', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500&q=80' },
+    { name: 'Sea Walk', adult: 3800, child: 3800, image: 'https://images.unsplash.com/photo-1682687982501-1e58ab814714?w=500&q=80' },
+    { name: 'Parasailing', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1677126578070-6f1afdf453e3?w=500&q=80' },
+    { name: 'Bioluminescence Kayaking', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1465310477141-6fb93167a273?w=500&q=80' },
+    { name: 'Glass Bottom Boat', adult: 1500, child: 1500, image: 'https://images.unsplash.com/photo-1470218091926-22a08a325802?w=500&q=80' },
+    { name: 'Jet Ski Ride', adult: 900, child: 900, image: 'https://images.unsplash.com/photo-1755566981084-00c579a061a5?w=500&q=80' },
+  ],
+
+  emergencyContacts: [
+    { name: 'Reservations', phone: '+91 89009 12121', email: 'bookings@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
+    { name: 'Operations', phone: '+91 94742 07541', email: 'info@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
+  ],
+
+  social: [
+    { label: 'Facebook', short: 'f', color: '#1877f2', url: 'https://facebook.com/andamantravelcare' },
+    { label: 'Instagram', short: 'IG', color: '#d6249f', url: 'https://instagram.com/andamantravelcare' },
+    { label: 'Youtube', short: '&#9654;', color: '#ff0000', url: 'https://youtube.com/@andamantravelcare' },
+    { label: 'Website', short: 'W', color: '#1577bd', url: 'https://www.andamantravelcare.com' },
+  ],
+
   galleryImages: [
     'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=400&q=80',
     'https://images.unsplash.com/photo-1544551763-77ef2d0cfc6c?w=400&q=80',
     'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80',
-    'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=400&q=80',
+    'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80',
     'https://images.unsplash.com/photo-1596895111956-bf1cf0599ce5?w=400&q=80',
     'https://images.unsplash.com/photo-1559494007-9f5847c49d94?w=400&q=80',
   ],

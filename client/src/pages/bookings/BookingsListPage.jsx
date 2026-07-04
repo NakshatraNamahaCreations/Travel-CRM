@@ -9,6 +9,14 @@ import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { money } from '../../lib/pricing.js';
 import { cn } from '../../lib/cn.js';
+import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
+
+const EMPTY_FILTERS = { createdAfter: '', createdBefore: '', startAfter: '', startBefore: '' };
+const FILTER_FIELDS = [
+  { fromKey: 'createdAfter', toKey: 'createdBefore', label: 'Booked Between', type: 'dateRange' },
+  { fromKey: 'startAfter', toKey: 'startBefore', label: 'Trip Start Between', type: 'dateRange' },
+];
+const filterParams = (f) => Object.fromEntries(Object.entries(f).filter(([, v]) => v));
 
 const TABS = [
   { value: 'all', label: 'All' },
@@ -26,11 +34,13 @@ export default function BookingsListPage() {
   const [params, setParams] = useSearchParams();
   const status = params.get('status') || 'all';
   const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['bookings', status, debounced],
-    queryFn: () => bookingsApi.list({ status, search: debounced, limit: 50 }),
+    queryKey: ['bookings', status, debounced, filters],
+    queryFn: () => bookingsApi.list({ status, search: debounced, limit: 50, ...filterParams(filters) }),
   });
 
   const columns = [
@@ -59,8 +69,10 @@ export default function BookingsListPage() {
           </button>
         ))}
       </div>
-      <ServiceShell title="Bookings" search={search} onSearch={setSearch} total={data?.meta?.total}>
+      <ServiceShell title="Bookings" search={search} onSearch={setSearch} total={data?.meta?.total}
+        onFilterClick={() => setShowFilters(true)} filterCount={countFilters(filters)}>
         <DataTable columns={columns} rows={data?.data || []} loading={isLoading} emptyLabel="No bookings yet. Accept a quote and convert it to a booking." />
+        <FilterDrawer open={showFilters} onClose={() => setShowFilters(false)} fields={FILTER_FIELDS} initial={filters} empty={EMPTY_FILTERS} onApply={setFilters} />
       </ServiceShell>
     </div>
   );
