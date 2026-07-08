@@ -178,6 +178,22 @@ export const company = {
   // Full-width hero photo on the quotation cover page.
   heroImage: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=1400&q=80',
 
+  // Day-wise itinerary photos: first entry whose keyword (|-separated) appears
+  // in the service name wins. Set to [] to render the itinerary text-only.
+  itineraryImages: [
+    { match: 'scuba|dive', image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500&q=80' },
+    { match: 'snorkel|sea walk', image: 'https://images.unsplash.com/photo-1682687982501-1e58ab814714?w=500&q=80' },
+    { match: 'kayak', image: 'https://images.unsplash.com/photo-1465310477141-6fb93167a273?w=500&q=80' },
+    { match: 'jet ski', image: 'https://images.unsplash.com/photo-1755566981084-00c579a061a5?w=500&q=80' },
+    { match: 'parasail', image: 'https://images.unsplash.com/photo-1677126578070-6f1afdf453e3?w=500&q=80' },
+    { match: 'jail|light & sound|light and sound', image: 'https://images.unsplash.com/photo-1678810982243-2d309522e93e?w=500&q=80' },
+    { match: 'ross island|north bay|glass|boat|jetty|baratang|limestone', image: 'https://images.unsplash.com/photo-1470218091926-22a08a325802?w=500&q=80' },
+    { match: 'sunset|laxmanpur', image: 'https://images.unsplash.com/photo-1559494007-9f5847c49d94?w=500&q=80' },
+    { match: 'cruise|ferry|makruzz|nautika|green ocean|itt|sea link', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&q=80' },
+    { match: 'radhanagar|kalapathar|elephant|bharatpur|corbyn|beach|chidiya', image: 'https://images.unsplash.com/photo-1586359716568-3e1907e4cf9f?w=500&q=80' },
+    { match: 'arrival|airport|leisure|havelock|neil', image: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=500&q=80' },
+  ],
+
   // Upsell grid on the quotation PDF. Set to [] to hide the section.
   optionalActivities: [
     { name: 'Scuba Diving', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500&q=80' },

@@ -172,7 +172,8 @@ async function loadFullQuote(id) {
     .populate(POPULATE)
     .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } })
     .populate({ path: 'packages.hotels.hotel', select: 'name imageUrl detailsLink address notes stars' })
-    .populate({ path: 'packages.transports.service', select: 'startCity endCity items.name items.description' });
+    .populate({ path: 'packages.transports.service', select: 'startCity endCity imageUrl items.name items.description items.imageUrl' })
+    .populate({ path: 'packages.activities.activity', select: 'name imageUrl details ticketTypes.name ticketTypes.details' });
   if (!quote) throw ApiError.notFound('Quote not found');
   return quote;
 }

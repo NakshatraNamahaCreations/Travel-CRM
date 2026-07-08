@@ -218,6 +218,17 @@ export function quotationHtml(q) {
 
   // ---- Day wise itinerary (full-width day bands + hotel strip) ----
   const normName = (s) => String(s || '').trim().toLowerCase();
+  // Photo for a service, matched by keyword against company.itineraryImages.
+  const svcImage = (text) => {
+    const s = String(text || '').toLowerCase();
+    const hit = (company.itineraryImages || []).find((e) => String(e.match).split('|').some((k) => k && s.includes(k)));
+    return hit?.image || '';
+  };
+  const activities = pkg.activities || [];
+  // Key for matching an auto-built description line ("Cellular Jail Visit ·
+  // 09:00") back to the service/activity it came from: drop the time and any
+  // trailing separators before comparing.
+  const lineKey = (l) => normName(String(l).replace(/\d{1,2}:\d{2}.*$/, '').replace(/[\s·•|–—-]+$/g, ''));
   const dayBlocks = (q.days || []).map((d) => {
     const n = d.dayNumber || 1;
     const date = d.date || (start ? addDays(start, n - 1) : null);
@@ -228,24 +239,58 @@ export function quotationHtml(q) {
       const master = t.service && typeof t.service === 'object' ? t.service : null;
       const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
       const desc = stripHtml(item?.description || '');
-      if (!desc) return '';
+      // Photo for the sightseeing/service (Cellular Jail, Light & Sound show,
+      // Radhanagar...) — item image first, route master image, then the
+      // keyword-matched stock photo from company.itineraryImages.
+      const photo = item?.imageUrl || master?.imageUrl || svcImage(`${t.serviceType} ${t.serviceLocation}`);
+      if (!desc && !photo) return '';
       const paras = desc.split('\n').filter(Boolean)
         .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
-      return `<div class="svcblk"><div class="dwtitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}</div>`;
+      const body = photo
+        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}</div></div>`
+        : paras;
+      return `<div class="svcblk"><div class="dwtitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${body}</div>`;
     }).filter(Boolean).join('');
-    const describedTypes = new Set(dayTs
-      .filter((t) => {
-        const master = t.service && typeof t.service === 'object' ? t.service : null;
-        const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
-        return stripHtml(item?.description || '');
-      })
-      .map((t) => normName(t.serviceType)));
+    // Activity blocks (scuba, ferry tickets...) — photo from the activity
+    // master + details from the matching ticket type (or activity-level).
+    const dayActs = activities.filter((a) => (Array.isArray(a.days) && a.days.length ? a.days : [1]).includes(n));
+    const actBlocks = dayActs.map((a) => {
+      const master = a.activity && typeof a.activity === 'object' ? a.activity : null;
+      const tk = (master?.ticketTypes || []).find((t2) => normName(t2.name) === normName(a.ticketType));
+      const desc = stripHtml(tk?.details || master?.details || '');
+      const photo = master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
+      if (!desc && !photo) return '';
+      const title2 = [a.name, a.ticketType].filter(Boolean).join(' — ');
+      const paras = desc.split('\n').filter(Boolean)
+        .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
+      const body = photo
+        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}</div></div>`
+        : paras;
+      return `<div class="svcblk"><div class="dwtitle">${esc(title2)}</div>${body}</div>`;
+    }).filter(Boolean).join('');
+    const richBlocks = svcBlocks + actBlocks;
+    const describedKeys = new Set([
+      ...dayTs
+        .filter((t) => {
+          const master = t.service && typeof t.service === 'object' ? t.service : null;
+          const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
+          return stripHtml(item?.description || '') || item?.imageUrl || master?.imageUrl || svcImage(`${t.serviceType} ${t.serviceLocation}`);
+        })
+        .map((t) => normName(t.serviceType)),
+      ...dayActs
+        .filter((a) => {
+          const master = a.activity && typeof a.activity === 'object' ? a.activity : null;
+          const tk = (master?.ticketTypes || []).find((t2) => normName(t2.name) === normName(a.ticketType));
+          return stripHtml(tk?.details || master?.details || '') || master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
+        })
+        .flatMap((a) => [normName(a.name), normName([a.name, a.ticketType].filter(Boolean).join(' — '))]),
+    ]);
     const lines = String(d.description || '').split(/\n|·|•/).filter((x) => x.trim())
-      .filter((l) => !describedTypes.has(normName(l.replace(/\d{1,2}:\d{2}.*$/, ''))))
-      .filter((l) => !(svcBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
+      .filter((l) => !describedKeys.has(lineKey(l)))
+      .filter((l) => !(richBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
       .map((l) => `<div class="ditem">&bull;&nbsp; ${esc(l.trim())}</div>`).join('')
-      || (svcBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
-    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) && !svcBlocks ? `<div class="dwtitle">${esc(d.title)}</div>` : '';
+      || (richBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
+    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) && !richBlocks ? `<div class="dwtitle">${esc(d.title)}</div>` : '';
     const nightHotels = hotels.filter((h) => (h.nights || []).includes(n));
     const strips = nightHotels.map((h) => {
       const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
@@ -264,7 +309,7 @@ export function quotationHtml(q) {
     }).join('');
     return `<div class="dayblk">
       <div class="dwband">Day ${n} ${esc(cityOfDay(n))} &nbsp;&#124;&nbsp; ${date ? fmtDateWD(date) : ''}</div>
-      <div class="dwbody">${title}${svcBlocks}${lines}${strips}</div>
+      <div class="dwbody">${title}${richBlocks}${lines}${strips}</div>
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
 
@@ -363,9 +408,16 @@ export function quotationHtml(q) {
   /* ---- tables ---- */
   .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #fff; }
   .tbl table { width: 100%; border-collapse: collapse; }
-  .tbl thead th { background: var(--blue); color: #fff; padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 700; border-right: 1px solid rgba(255,255,255,0.28); }
+  .tbl thead th { background: #eaf3fb; color: var(--navy); padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 800; border-right: 1px solid #d8e7f5; }
   .tbl thead th:last-child { border-right: 0; }
-  .tbl td { padding: 7.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px solid #e3ecf4; }
+  .tbl td { padding: 7.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px dashed #cddcea; }
+
+  /* ---- section cards (summary page) ---- */
+  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 10px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 7px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
+  .sechead .sicon { font-size: 14px; }
+  .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
+  .tbl.flat.sep { border-top: 1px solid var(--line); }
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
   .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 6px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
@@ -436,6 +488,11 @@ export function quotationHtml(q) {
   .svcblk { margin-bottom: 8px; }
   .svcblk + .svcblk { border-top: 1px dashed #d5e0ea; padding-top: 8px; }
   .ddesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 3px; }
+  /* service photo + description row (photo left, text right — like the hotel strip) */
+  .svcrow { display: flex; align-items: flex-start; gap: 13px; margin-top: 5px; }
+  .dphoto { width: 172px; height: 112px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+  .svctext { flex: 1; min-width: 0; }
+  .svctext .ddesc:first-child { margin-top: 0; }
   .hstrip { display: flex; align-items: center; gap: 13px; border-top: 1px dashed #c9d8e5; margin-top: 10px; padding-top: 10px; }
   .hthumb { width: 88px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
   .hsname { font-weight: 800; font-size: 13px; color: var(--blue-dark); margin-bottom: 4px; }
@@ -570,35 +627,41 @@ export function quotationHtml(q) {
     </div>
   </div>
 
-  <div class="h1">Cruise and Hotel Information:</div>
-  ${transferRows ? `<div class="tbl"><table>
-    <thead><tr><th style="width:32%">Name</th><th style="width:28%">Ferry Sector</th><th>Departure Timings</th><th>Arrival Timings</th></tr></thead>
-    <tbody>${transferRows}</tbody></table>
-    ${ferryLegend ? `<div class="legend">${ferryLegend}</div>` : ''}
+  ${transferRows ? `<div class="seccard">
+    <div class="sechead"><span class="sicon">&#9972;</span> Cruise &amp; Ferry Information</div>
+    <div class="tbl flat"><table>
+      <thead><tr><th style="width:32%">Name</th><th style="width:28%">Ferry Sector</th><th>Departure Timings</th><th>Arrival Timings</th></tr></thead>
+      <tbody>${transferRows}</tbody></table>
+      ${ferryLegend ? `<div class="legend">${ferryLegend}</div>` : ''}
+    </div>
   </div>` : ''}
 
-  <div class="tbl"><table>
-    <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
-    <tbody>${hotelRows}</tbody></table>
-    ${hotelLegend ? `<div class="legend">${hotelLegend}</div>` : ''}
+  <div class="seccard">
+    <div class="sechead"><span class="sicon">&#127976;</span> Hotel Information</div>
+    <div class="tbl flat"><table>
+      <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
+      <tbody>${hotelRows}</tbody></table>
+      ${hotelLegend ? `<div class="legend">${hotelLegend}</div>` : ''}
+    </div>
   </div>
 
-  <div class="h1">Transparent Breakage of all Costs:</div>
-  <div class="tbl"><table>
-    <thead><tr><th>Hotel Cost</th><th>Tour Cost</th><th>Permits &amp; Boat Cost</th><th>Ferry Cost</th><th>Misc Cost</th></tr></thead>
-    <tbody><tr>
-      <td class="dkcell">${inr(cats.hotel, 2)}</td><td class="dkcell">${inr(cats.tour, 2)}</td>
-      <td class="dkcell">${inr(cats.permits, 2)}</td><td class="dkcell">${inr(cats.ferry, 2)}</td><td class="dkcell">${cats.misc ? inr(cats.misc, 2) : ''}</td>
-    </tr></tbody></table>
-  </div>
-
-  <div class="tbl"><table>
-    <thead><tr><th>Package Cost</th><th>Discount</th><th>Total</th><th>Service<br/>Charge</th><th>Taxable Amount</th><th>GST</th><th>Total<br/>Tax</th><th style="width:24%">Final Payable Amount</th></tr></thead>
-    <tbody><tr>
-      <td class="dkcell">${inr(p.subtotal, 2)}</td><td class="dkcell">${p.discount ? inr(p.discount, 2) : ''}</td><td class="dkcell">${inr(p.subtotal, 2)}</td>
-      <td class="dkcell">${servicePct}%</td><td class="dkcell">${inr(taxable)}</td><td class="dkcell">${gstPct}%</td>
-      <td class="dkcell">${inr(p.tax, 2)}</td><td class="hl">${inr(p.total, 2)}</td>
-    </tr></tbody></table>
+  <div class="seccard">
+    <div class="sechead"><span class="sicon">&#128181;</span> Transparent Breakage of all Costs</div>
+    <div class="tbl flat"><table>
+      <thead><tr><th>Hotel Cost</th><th>Tour Cost</th><th>Permits &amp; Boat Cost</th><th>Ferry Cost</th><th>Misc Cost</th></tr></thead>
+      <tbody><tr>
+        <td class="dkcell">${inr(cats.hotel, 2)}</td><td class="dkcell">${inr(cats.tour, 2)}</td>
+        <td class="dkcell">${inr(cats.permits, 2)}</td><td class="dkcell">${inr(cats.ferry, 2)}</td><td class="dkcell">${cats.misc ? inr(cats.misc, 2) : ''}</td>
+      </tr></tbody></table>
+    </div>
+    <div class="tbl flat sep"><table>
+      <thead><tr><th>Package Cost</th><th>Discount</th><th>Total</th><th>Service<br/>Charge</th><th>Taxable Amount</th><th>GST</th><th>Total<br/>Tax</th><th style="width:24%">Final Payable Amount</th></tr></thead>
+      <tbody><tr>
+        <td class="dkcell">${inr(p.subtotal, 2)}</td><td class="dkcell">${p.discount ? inr(p.discount, 2) : ''}</td><td class="dkcell">${inr(p.subtotal, 2)}</td>
+        <td class="dkcell">${servicePct}%</td><td class="dkcell">${inr(taxable)}</td><td class="dkcell">${gstPct}%</td>
+        <td class="dkcell">${inr(p.tax, 2)}</td><td class="hl">${inr(p.total, 2)}</td>
+      </tr></tbody></table>
+    </div>
   </div>
 
   <div class="breakrow">
