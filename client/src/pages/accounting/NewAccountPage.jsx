@@ -47,7 +47,7 @@ export default function NewAccountPage() {
         <span className="text-slate-500">New</span>
       </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="px-6 py-8">
         <div className="card p-6">
           {step === 1 ? (
             <>

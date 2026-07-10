@@ -152,7 +152,7 @@ export default function ActivityDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-6 py-6">
+      <div className="px-6 py-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div className="flex-1">

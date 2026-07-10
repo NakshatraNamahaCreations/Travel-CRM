@@ -1,5 +1,6 @@
 import { Quote } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
+import { InclusionExclusion } from '../models/InclusionExclusion.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created } from '../utils/apiResponse.js';
@@ -137,7 +138,7 @@ export const updateQuote = asyncHandler(async (req, res) => {
   const fields = [
     'title', 'currency', 'startDate', 'nights', 'pax', 'days', 'costItems',
     'markupType', 'markupValue', 'taxPercent', 'inclusions', 'exclusions', 'terms', 'status',
-    'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex',
+    'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex', 'daysCustomized',
   ];
   for (const f of fields) if (req.body[f] !== undefined) quote[f] = req.body[f];
   await quote.save();
@@ -175,6 +176,15 @@ async function loadFullQuote(id) {
     .populate({ path: 'packages.transports.service', select: 'startCity endCity imageUrl items.name items.description items.imageUrl' })
     .populate({ path: 'packages.activities.activity', select: 'name imageUrl details ticketTypes.name ticketTypes.details' });
   if (!quote) throw ApiError.notFound('Quote not found');
+  // Fill dynamic defaults from the Inclusions/Exclusions master when the quote
+  // has no lists of its own (config defaults remain the last-resort fallback).
+  if (!quote.inclusions?.length || !quote.exclusions?.length) {
+    const items = await InclusionExclusion.find({ isActive: { $ne: false } }).sort('order createdAt').lean();
+    if (items.length) {
+      if (!quote.inclusions?.length) quote.inclusions = items.filter((i) => i.type === 'inclusion').map((i) => i.text);
+      if (!quote.exclusions?.length) quote.exclusions = items.filter((i) => i.type === 'exclusion').map((i) => i.text);
+    }
+  }
   return quote;
 }
 

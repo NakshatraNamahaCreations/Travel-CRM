@@ -58,7 +58,7 @@ export default function MergeHotelsPage() {
         <h1 className="text-lg font-bold text-slate-900">Merge Hotels</h1>
       </div>
 
-      <div className="mx-auto max-w-2xl">
+      <div className="max-w-none">
         <h2 className="text-lg font-bold text-slate-900">Merge Duplicate Hotels</h2>
 
         <div className="mt-4">

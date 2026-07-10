@@ -27,8 +27,23 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
   /* ----- Hotels ----- */
   const setHotel = (i, patch) => update({ hotels: pkg.hotels.map((h, idx) => (idx === i ? { ...h, ...patch } : h)) });
-  const addHotel = () => update({ hotels: [...(pkg.hotels || []), emptyHotel()] });
-  const dupHotel = (i) => update({ hotels: [...pkg.hotels, { ...pkg.hotels[i] }] });
+  // New rows start on the first night nobody has claimed yet (empty if all taken).
+  const addHotel = () => {
+    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    const free = Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).find((n) => !used.has(n));
+    update({ hotels: [...(pkg.hotels || []), { ...emptyHotel(), nights: free ? [free] : [] }] });
+  };
+  // Nights already assigned to OTHER hotel rows — one hotel per night.
+  const nightsTakenByOthers = (i) => (pkg.hotels || []).flatMap((x, idx) => (idx === i ? [] : (x.nights || [])));
+  // Duplicate copies the config but not the nights (each night belongs to one row).
+  const dupHotel = (i) => update({ hotels: [...pkg.hotels, { ...pkg.hotels[i], nights: [] }] });
+  // Next Night: same hotel/config on the first night nobody has claimed yet.
+  const nextNight = (i) => {
+    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    const free = Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).find((n) => !used.has(n));
+    if (!free) return toast.error('All nights are already assigned to a hotel');
+    update({ hotels: [...pkg.hotels, { ...pkg.hotels[i], nights: [free] }] });
+  };
   const rmHotel = async (i) => { if (await confirm({ title: 'Remove this hotel?', message: `${pkg.hotels[i]?.hotelName || 'This hotel'} will be removed from the package.`, confirmLabel: 'Remove' })) update({ hotels: pkg.hotels.filter((_, idx) => idx !== i) }); };
   const pickHotel = (i, h) => setHotel(i, { hotel: h, hotelName: h?.name || '', city: h?.location?.city || '', mealPlan: '', roomType: '', ratePerNight: 0 });
 
@@ -42,6 +57,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
   const toggleNight = (i, n) => {
     const cur = pkg.hotels[i].nights || [];
+    if (!cur.includes(n) && nightsTakenByOthers(i).includes(n)) {
+      return toast.error(`${ordinal(n)} night is already assigned to another hotel`);
+    }
     setHotel(i, { nights: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort((a, b) => a - b) });
   };
 
@@ -96,7 +114,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       const r = await lookupApi.transportRate({ service: serviceId, config: type, date });
       if (r) {
         while (updated.length <= ii) updated.push({ type: '', qty: 1, rate: 0, given: 0 });
-        updated[ii] = { ...updated[ii], rate: r.price };
+        // Given follows the fetched rate unless the user already customised it.
+        const keepGiven = updated[ii].given && updated[ii].given !== updated[ii].rate;
+        updated[ii] = { ...updated[ii], rate: r.price, given: keepGiven ? updated[ii].given : r.price };
         hits++;
       }
     }
@@ -111,6 +131,46 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const setActItem = (ai, ii, patch) => setAct(ai, { items: (pkg.activities[ai].items || []).map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
   const addActItem = (ai) => setAct(ai, { items: [...(pkg.activities[ai].items || []), { type: '', qty: 1, rate: 0, given: 0 }] });
   const rmActItem = (ai, ii) => setAct(ai, { items: (pkg.activities[ai].items || []).filter((_, idx) => idx !== ii) });
+
+  /* ----- Day groups: transports + activities sharing the same day(s) render
+     inside ONE card, Sembark-style, with a single Days panel per group. ----- */
+  const daysKey = (days, fb = [1]) => (Array.isArray(days) && days.length ? [...days] : fb).sort((a, b) => a - b).join(',');
+  const dayGroups = (() => {
+    const map = new Map();
+    const groupFor = (key) => {
+      if (!map.has(key)) map.set(key, { key, days: key.split(',').map(Number), tIdx: [], aIdx: [] });
+      return map.get(key);
+    };
+    (pkg.transports || []).forEach((t, ti) => groupFor(daysKey(t.days, [t.day || 1])).tIdx.push(ti));
+    (pkg.activities || []).forEach((a, ai) => groupFor(daysKey(a.days)).aIdx.push(ai));
+    return [...map.values()].sort((x, y) => x.days[0] - y.days[0]);
+  })();
+  const dayOptionsAll = Array.from({ length: nights || 1 }, (_, i) => ({
+    n: i + 1,
+    label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
+  }));
+  const setGroupDays = (g, n) => {
+    let next = g.days.includes(n) ? g.days.filter((d) => d !== n) : [...g.days, n].sort((a, b) => a - b);
+    if (!next.length) next = [n];
+    update({
+      transports: (pkg.transports || []).map((t, ti) => (g.tIdx.includes(ti) ? { ...t, days: next } : t)),
+      activities: (pkg.activities || []).map((a, ai) => (g.aIdx.includes(ai) ? { ...a, days: next } : a)),
+    });
+  };
+  const addTrToGroup = (days) => update({ transports: [...(pkg.transports || []), emptyTransport([...days])] });
+  const removeGroup = async (g) => {
+    if (await confirm({ title: 'Remove this day?', message: 'All transport services and activities of this day will be removed from the package.', confirmLabel: 'Remove' })) {
+      update({
+        transports: (pkg.transports || []).filter((_, ti) => !g.tIdx.includes(ti)),
+        activities: (pkg.activities || []).filter((_, ai) => !g.aIdx.includes(ai)),
+      });
+    }
+  };
+  const nextDayGroup = () => {
+    const usedDays = new Set([...(pkg.transports || []), ...(pkg.activities || [])].flatMap((x) => (Array.isArray(x.days) && x.days.length ? x.days : [x.day || 1])));
+    const nextDay = Array.from({ length: nights || 1 }, (_, i) => i + 1).find((d) => !usedDays.has(d)) || ((pkg.transports?.length || 0) + 1);
+    update({ transports: [...(pkg.transports || []), emptyTransport([nextDay])] });
+  };
 
   const actDate = (a) => {
     const dayNo = (Array.isArray(a.days) && a.days[0]) || 1;
@@ -130,7 +190,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       // eslint-disable-next-line no-await-in-loop
       const r = await lookupApi.activityRate({ activity: actId, service: name, config: cfg, date: actDate(a) }).catch(() => null);
       if (r) hits++;
-      items.push({ type: cfg, qty: 1, rate: r?.price || 0, given: 0 });
+      items.push({ type: cfg, qty: 1, rate: r?.price || 0, given: r?.price || 0 });
     }
     setAct(ai, { ticketType: name, items });
     if (hits) toast.success(`Fetched ${hits} rate(s) from the activity price list`);
@@ -149,7 +209,11 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       if (!items[ii].type) continue;
       // eslint-disable-next-line no-await-in-loop
       const r = await lookupApi.activityRate({ activity: actId, service: a.ticketType, config: items[ii].type, date: actDate(a) }).catch(() => null);
-      if (r) { items[ii] = { ...items[ii], rate: r.price }; hits++; }
+      if (r) {
+        const keepGiven = items[ii].given && items[ii].given !== items[ii].rate;
+        items[ii] = { ...items[ii], rate: r.price, given: keepGiven ? items[ii].given : r.price };
+        hits++;
+      }
     }
     if (hits) { setAct(ai, { items }); toast.success(`Fetched ${hits} rate(s) from price list`); }
     else toast('No matching rate — enter manually', { icon: '✏️' });
@@ -177,100 +241,102 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         <div className="space-y-4">
           {(pkg.hotels || []).map((h, i) => (
             <div key={i} className="rounded-xl border border-slate-200 p-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <label className="label">Stay Nights</label>
-                  <NightSelect nights={nights} startDate={startDate} value={h.nights || []} onToggle={(n) => toggleNight(i, n)} />
-                </div>
-                <div>
-                  <label className="label">Hotel</label>
-                  <AsyncSelect
-                    loadOptions={(s) => hotelsApi.list({ search: s }).then((r) => r.data)}
-                    value={h.hotel ? { _id: h.hotel._id || h.hotel, name: h.hotel.name || h.hotelName || '' } : null}
-                    onChange={(v) => pickHotel(i, v)}
-                    placeholder="Type to search..."
-                  />
-                  {!h.hotel && <RequiredHint>Hotel field is required</RequiredHint>}
-                </div>
-                <div>
-                  <label className="label">Meal Plan</label>
-                  <CreatableSelect category="mealPlan" value={h.mealPlan} onChange={(v) => setHotel(i, { mealPlan: v })} placeholder="Type to search..." />
-                  {!h.mealPlan && <RequiredHint>Meal Plan field is required</RequiredHint>}
-                </div>
-                <div>
-                  <label className="label">Room Type</label>
-                  <AsyncSelect
-                    loadOptions={async (s) => {
-                      // After a reload h.hotel is just an id — fetch the master for its room types.
-                      let hotel = h.hotel;
-                      const hid = hotel?._id || hotel;
-                      if (hotel && !hotel.roomTypes && hid) hotel = await hotelsApi.get(hid).catch(() => null);
-                      return (hotel?.roomTypes || []).filter((r) => r.name.toLowerCase().includes(s.toLowerCase())).map((r) => ({ _id: r.name, name: r.name }));
-                    }}
-                    value={h.roomType ? { _id: h.roomType, name: h.roomType } : null}
-                    onChange={(v) => setHotel(i, { roomType: v ? v._id : '' })}
-                    creatable
-                    onCreate={async (name) => ({ _id: name, name })}
-                    placeholder="Type to search..."
-                  />
-                  {!h.roomType && <RequiredHint>Room type field is required</RequiredHint>}
-                </div>
-              </div>
+              <div className="grid gap-5 lg:grid-cols-[1fr_330px]">
+                {/* ---- Left: hotel details ---- */}
+                <div className="lg:border-r lg:border-slate-100 lg:pr-5">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <label className="label">Stay Nights</label>
+                      <NightSelect nights={nights} startDate={startDate} value={h.nights || []} onToggle={(n) => toggleNight(i, n)} disabledNights={nightsTakenByOthers(i)} />
+                    </div>
+                    <div>
+                      <label className="label">Hotel</label>
+                      <div className="flex gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <AsyncSelect
+                            loadOptions={(s) => hotelsApi.list({ search: s }).then((r) => r.data)}
+                            value={h.hotel ? { _id: h.hotel._id || h.hotel, name: h.hotel.name || h.hotelName || '' } : null}
+                            onChange={(v) => pickHotel(i, v)}
+                            placeholder="Type to search..."
+                          />
+                        </div>
+                        <button type="button" onClick={() => autoRate(i)} title="Auto-fetch rate from the price master" className="btn-secondary shrink-0 px-2.5"><Sparkles size={14} /></button>
+                      </div>
+                      {!h.hotel && <RequiredHint>Hotel field is required</RequiredHint>}
+                    </div>
+                    <div>
+                      <label className="label">Meal Plan</label>
+                      <CreatableSelect category="mealPlan" value={h.mealPlan} onChange={(v) => setHotel(i, { mealPlan: v })} placeholder="Type to search..." />
+                      {!h.mealPlan && <RequiredHint>Meal Plan field is required</RequiredHint>}
+                    </div>
+                    <div>
+                      <label className="label">Room Type</label>
+                      <AsyncSelect
+                        loadOptions={async (s) => {
+                          // After a reload h.hotel is just an id — fetch the master for its room types.
+                          let hotel = h.hotel;
+                          const hid = hotel?._id || hotel;
+                          if (hotel && !hotel.roomTypes && hid) hotel = await hotelsApi.get(hid).catch(() => null);
+                          return (hotel?.roomTypes || []).filter((r) => r.name.toLowerCase().includes(s.toLowerCase())).map((r) => ({ _id: r.name, name: r.name }));
+                        }}
+                        value={h.roomType ? { _id: h.roomType, name: h.roomType } : null}
+                        onChange={(v) => setHotel(i, { roomType: v ? v._id : '' })}
+                        creatable
+                        onCreate={async (name) => ({ _id: name, name })}
+                        placeholder="Type to search..."
+                      />
+                      {!h.roomType && <RequiredHint>Room type field is required</RequiredHint>}
+                    </div>
+                  </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
-                <Num label="Pax/room (WoEB)" value={h.paxPerRoom} onChange={(v) => setHotel(i, { paxPerRoom: v })} />
-                {/* Extra beds only make sense inside rooms — zero & lock them until rooms ≥ 1. */}
-                <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, v > 0 ? { rooms: v } : { rooms: v, aweb: 0, cweb: 0, cnb: 0 })} />
-                <Num label="AWEB" value={h.aweb} onChange={(v) => setHotel(i, { aweb: v })} disabled={!(Number(h.rooms) > 0)} />
-                <Num label="CWEB" value={h.cweb} onChange={(v) => setHotel(i, { cweb: v })} disabled={!(Number(h.rooms) > 0)} />
-                <Num label="CNB" value={h.cnb} onChange={(v) => setHotel(i, { cnb: v })} disabled={!(Number(h.rooms) > 0)} />
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <Num label="Pax/room (WoEB)" value={h.paxPerRoom} onChange={(v) => setHotel(i, { paxPerRoom: v })} />
+                    {/* Extra beds only make sense inside rooms — zero & lock them until rooms ≥ 1. */}
+                    <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, v > 0 ? { rooms: v } : { rooms: v, aweb: 0, cweb: 0, cnb: 0 })} />
+                    <Num label="AWEB" value={h.aweb} onChange={(v) => setHotel(i, { aweb: v })} disabled={!(Number(h.rooms) > 0)} />
+                    <Num label="CWEB" value={h.cweb} onChange={(v) => setHotel(i, { cweb: v })} disabled={!(Number(h.rooms) > 0)} />
+                    <Num label="CNB" value={h.cnb} onChange={(v) => setHotel(i, { cnb: v })} disabled={!(Number(h.rooms) > 0)} />
+                  </div>
+                </div>
+
+                {/* ---- Right: prices per night + row actions ---- */}
                 <div>
-                  <label className="label">Comp Child</label>
-                  <p className="pt-2.5 text-sm text-slate-600">Upto {h.hotel?.childEbAge?.from ?? 5}y</p>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-800">Prices</p>
+                    <button type="button" onClick={() => autoRate(i)} title="Refresh rates" className="text-slate-400 hover:text-brand-600"><RefreshCw size={13} /></button>
+                  </div>
+                  <div className="card card-flush overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
+                        <tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Rate</th><th className="px-3 py-2.5">Given</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(h.nights || []).map((n) => {
+                          const dt = startDate ? addDays(new Date(startDate), n - 1) : null;
+                          const given = hotelPerNight(h);
+                          return (
+                            <tr key={n}>
+                              <td className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
+                              <td className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
+                              <td className="px-3 py-2.5">
+                                <button type="button" onClick={() => setGivenIdx(i)} className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold tabular-nums ${given > 0 ? 'bg-brand-50 text-brand-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {given > 0 ? null : <AlertTriangle size={12} />} {money(given, currency)}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {!(h.nights || []).length && <tr><td colSpan={3} className="px-3 py-3 text-center text-slate-400">Select stay night(s)</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <button type="button" onClick={() => nextNight(i)} className="btn-secondary text-xs text-brand-700"><Plus size={13} /> Next Night</button>
+                    <button type="button" onClick={() => dupHotel(i)} className="btn-secondary text-xs text-brand-700"><Copy size={12} /> Duplicate</button>
+                    <button type="button" onClick={() => rmHotel(i)} className="btn-ghost ml-auto text-xs text-slate-500 hover:text-red-600"><Trash2 size={12} /> Remove</button>
+                  </div>
+                  <p className="mt-1.5 text-right text-xs"><span className="text-slate-400">Hotel cost: </span><span className="font-semibold text-slate-700 tabular-nums">{money(hotelRowCost(h), currency)}</span></p>
                 </div>
-              </div>
-
-              <div className="mt-3 flex items-center gap-3">
-                <button type="button" onClick={() => autoRate(i)} className="btn-secondary text-xs"><Sparkles size={13} /> Auto rate</button>
-                <button type="button" onClick={() => dupHotel(i)} className="btn-ghost text-xs text-brand-700"><Plus size={12} /> Add Similar Hotels</button>
-              </div>
-
-              {/* Prices per night */}
-              <div className="mt-3">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-700">Prices</p>
-                  <button type="button" onClick={() => autoRate(i)} title="Refresh rates" className="text-slate-400 hover:text-brand-600"><RefreshCw size={13} /></button>
-                </div>
-                <div className="card card-flush overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
-                      <tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Rate <span className="font-normal text-slate-400">(cost)</span></th><th className="px-3 py-2.5">Given <span className="font-normal text-slate-400">(selling)</span></th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(h.nights || []).map((n) => {
-                        const dt = startDate ? addDays(new Date(startDate), n - 1) : null;
-                        const given = hotelPerNight(h);
-                        return (
-                          <tr key={n}>
-                            <td className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
-                            <td className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
-                            <td className="px-3 py-2.5">
-                              <button type="button" onClick={() => setGivenIdx(i)} className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold tabular-nums ${given > 0 ? 'bg-brand-50 text-brand-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {given > 0 ? null : <AlertTriangle size={12} />} {money(given, currency)}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {!(h.nights || []).length && <tr><td colSpan={3} className="px-3 py-3 text-center text-slate-400">Select stay night(s) above</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-                <p className="text-sm"><span className="text-slate-500">Hotel cost: </span><span className="font-semibold text-slate-900 tabular-nums">{money(hotelRowCost(h), currency)}</span></p>
-                <button type="button" onClick={() => rmHotel(i)} className="btn-secondary text-xs text-red-600"><Trash2 size={12} /> Remove</button>
               </div>
             </div>
           ))}
@@ -396,52 +462,45 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         )}
 
         <div className="space-y-4">
-          {(pkg.transports || []).map((t, ti) => {
-            const tDays = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : [1]);
-            const dayOptions = Array.from({ length: nights || 1 }, (_, i) => ({
-              n: i + 1,
-              label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
-            }));
-            const cabItems = pkg.sameCabType ? sharedItems : (t.items || []);
-            const firstDay = tDays[0] || 1;
-            const firstDate = startDate ? format(addDays(new Date(startDate), firstDay - 1), 'EEEE, d MMM') : `Day ${firstDay}`;
-
-            return (
-              <div key={ti} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                {/* Card label */}
-                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                  <Bus size={14} className="text-brand-500" />
-                  <span className="text-xs font-semibold text-brand-600">Transport Service</span>
+          {dayGroups.map((g) => (
+            <div key={g.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <div className="flex gap-0 divide-x divide-gray-100">
+                {/* LEFT: Days — applies to every service in this group */}
+                <div className="w-44 shrink-0 p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {dayOptionsAll.map(({ n, label }) => (
+                      <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', g.days.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
+                          checked={g.days.includes(n)}
+                          onChange={() => setGroupDays(g, n)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="flex gap-0 divide-x divide-gray-100">
-                  {/* LEFT: Days */}
-                  <div className="w-44 shrink-0 p-4">
-                    <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
-                    {dayOptions.length ? (
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                        {dayOptions.map(({ n, label }) => (
-                          <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', tDays.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
-                              checked={tDays.includes(n)}
-                              onChange={() => {
-                                const next = tDays.includes(n) ? tDays.filter((d) => d !== n) : [...tDays, n].sort((a, b) => a - b);
-                                setTr(ti, { days: next.length ? next : [n] });
-                              }}
-                            />
-                            {label}
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">Select day(s)…</p>
-                    )}
-                  </div>
-
-                  {/* MIDDLE: Service details */}
-                  <div className="flex-1 p-4 space-y-3">
+                {/* RIGHT: the day's services stacked inside one card */}
+                <div className="flex-1 divide-y divide-gray-100">
+                  {g.tIdx.map((ti) => {
+                    const t = pkg.transports[ti];
+                    const tDays = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : [1]);
+                    const cabItems = pkg.sameCabType ? sharedItems : (t.items || []);
+                    const firstDay = tDays[0] || 1;
+                    const firstDate = startDate ? format(addDays(new Date(startDate), firstDay - 1), 'EEEE, d MMM') : `Day ${firstDay}`;
+                    return (
+                      <div key={`t-${ti}`}>
+                        <div className="flex items-center gap-2 px-4 pt-3">
+                          <Bus size={14} className="text-brand-500" />
+                          <span className="text-xs font-semibold text-brand-600">Transport Service</span>
+                          <button type="button" onClick={() => rmTr(ti)} title="Remove this service" className="ml-auto text-xs font-medium text-slate-300 hover:text-red-500">&#10005;</button>
+                        </div>
+                        <div className="flex gap-0">
+                          {/* Service details */}
+                          <div className="flex-1 p-4 space-y-3">
                     <div>
                       <label className="label">Service Locations</label>
                       <AsyncSelect
@@ -481,15 +540,10 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <input type="number" className="input" placeholder="60 Mins" value={t.durationMins} onChange={(e) => setTr(ti, { durationMins: Number(e.target.value) })} />
                       </div>
                     </div>
-                    {/* sub-actions */}
-                    <div className="flex gap-2 pt-1">
-                      <button type="button" onClick={addTr} className="btn-secondary text-xs"><Plus size={12} /> Transport Service</button>
-                      <button type="button" onClick={() => addAct(tDays)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
-                    </div>
-                  </div>
+                          </div>
 
-                  {/* RIGHT: Transportation and Prices */}
-                  <div className="w-80 shrink-0 p-4">
+                          {/* Transportation and Prices */}
+                          <div className="w-80 shrink-0 border-l border-gray-100 p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-xs font-semibold text-gray-700">Transportation and Prices{firstDate ? ` — ${firstDate}` : ''}</p>
                       <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
@@ -498,6 +552,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500">
                           <th className="pb-1 text-left font-semibold">Transportation</th>
+                          <th className="pb-1 text-left font-semibold w-14">Date</th>
                           <th className="pb-1 text-left font-semibold w-16">Rate</th>
                           <th className="pb-1 text-left font-semibold w-16">Given</th>
                           <th className="w-5" />
@@ -522,13 +577,22 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                   />
                                 )}
                               </td>
+                              <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
+                                {tDays.map((d) => (
+                                  <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
+                                ))}
+                              </td>
                               <td className="py-1.5 pr-1">
                                 <input
                                   type="number"
                                   className="input w-16 text-xs"
                                   placeholder="0"
                                   value={priceIt.rate ?? ''}
-                                  onChange={(e) => setTrItem(ti, ii, { rate: Number(e.target.value) })}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    const keepGiven = priceIt.given && priceIt.given !== priceIt.rate;
+                                    setTrItem(ti, ii, keepGiven ? { rate: v } : { rate: v, given: v });
+                                  }}
                                 />
                               </td>
                               <td className="py-1.5">
@@ -539,6 +603,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                   value={priceIt.given ?? ''}
                                   onChange={(e) => setTrItem(ti, ii, { given: Number(e.target.value) })}
                                 />
+                                {tDays.length > 1 && Number(priceIt.given) > 0 && (
+                                  <div className="mt-0.5 text-[10px] text-slate-400">× {tDays.length}d = {((Number(priceIt.given) || 0) * (Number(priceIt.qty) || 1) * tDays.length).toLocaleString('en-IN')}</div>
+                                )}
                               </td>
                               <td className="py-1.5 pl-1 text-center">
                                 {!pkg.sameCabType && (t.items || []).length > 1 && (
@@ -553,66 +620,26 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     {!pkg.sameCabType && (
                       <button type="button" onClick={() => addTrItem(ti)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
                     )}
-                  </div>
-                </div>
-
-                {/* Card footer */}
-                <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const usedDays = new Set((pkg.transports || []).flatMap((tr) => Array.isArray(tr.days) ? tr.days : [tr.day || 1]));
-                      const nextDay = Array.from({ length: nights || 1 }, (_, i) => i + 1).find((d) => !usedDays.has(d)) || ((pkg.transports?.length || 0) + 1);
-                      update({ transports: [...(pkg.transports || []), emptyTransport([nextDay])] });
-                    }}
-                    className="btn-secondary text-xs"
-                  >
-                    <Plus size={12} /> Next Day
-                  </button>
-                  <button type="button" onClick={() => rmTr(ti)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
-                </div>
-              </div>
-            );
-          })}
-          {/* Activity / Ticket cards */}
-          {(pkg.activities || []).map((a, ai) => {
-            const aDays = Array.isArray(a.days) && a.days.length ? a.days : [1];
-            const dayOptions = Array.from({ length: nights || 1 }, (_, i) => ({
-              n: i + 1,
-              label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
-            }));
-            const configOptions = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
-            return (
-              <div key={`act-${ai}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                  <Ticket size={14} className="text-brand-500" />
-                  <span className="text-xs font-semibold text-brand-600">Activity/Ticket</span>
-                </div>
-
-                <div className="flex gap-0 divide-x divide-gray-100">
-                  {/* LEFT: Days */}
-                  <div className="w-44 shrink-0 p-4">
-                    <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
-                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                      {dayOptions.map(({ n, label }) => (
-                        <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', aDays.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
-                            checked={aDays.includes(n)}
-                            onChange={() => {
-                              const next = aDays.includes(n) ? aDays.filter((d) => d !== n) : [...aDays, n].sort((x, y) => x - y);
-                              setAct(ai, { days: next.length ? next : [n] });
-                            }}
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* MIDDLE: Activity details */}
-                  <div className="flex-1 p-4 space-y-3">
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Activity / Ticket sub-blocks of this day */}
+                  {g.aIdx.map((ai) => {
+                    const a = pkg.activities[ai];
+                    const aDays = Array.isArray(a.days) && a.days.length ? a.days : [1];
+                    const configOptions = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
+                    return (
+                      <div key={`a-${ai}`}>
+                        <div className="flex items-center gap-2 px-4 pt-3">
+                          <Ticket size={14} className="text-brand-500" />
+                          <span className="text-xs font-semibold text-brand-600">Activity/Ticket</span>
+                          <button type="button" onClick={() => rmAct(ai)} title="Remove this activity" className="ml-auto text-xs font-medium text-slate-300 hover:text-red-500">&#10005;</button>
+                        </div>
+                        <div className="flex gap-0">
+                          {/* Activity details */}
+                          <div className="flex-1 p-4 space-y-3">
                     <div>
                       <label className="label">Name</label>
                       <AsyncSelect
@@ -651,13 +678,10 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <input type="number" className="input" placeholder="60 Mins" value={a.durationMins ?? ''} onChange={(e) => setAct(ai, { durationMins: Number(e.target.value) })} />
                       </div>
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      <button type="button" onClick={() => addAct(aDays)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
-                    </div>
-                  </div>
+                          </div>
 
-                  {/* RIGHT: Tickets and Prices */}
-                  <div className="w-96 shrink-0 p-4">
+                          {/* Tickets and Prices */}
+                          <div className="w-96 shrink-0 border-l border-gray-100 p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-xs font-semibold text-gray-700">Tickets and Prices</p>
                       <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
@@ -667,6 +691,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <tr className="border-b border-slate-200 text-slate-500">
                           <th className="pb-1 text-left font-semibold">Type</th>
                           <th className="pb-1 text-left font-semibold w-10">Qty.</th>
+                          <th className="pb-1 text-left font-semibold w-14">Date</th>
                           <th className="pb-1 text-left font-semibold w-14">Rate</th>
                           <th className="pb-1 text-left font-semibold w-14">Given</th>
                           <th className="w-6" />
@@ -687,11 +712,23 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                             <td className="py-1.5 pr-1">
                               <input type="number" className="input w-full px-1 text-center text-xs" value={it.qty ?? ''} onChange={(e) => setActItem(ai, ii, { qty: Number(e.target.value) })} />
                             </td>
+                            <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
+                              {aDays.map((d) => (
+                                <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
+                              ))}
+                            </td>
                             <td className="py-1.5 pr-1">
-                              <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.rate ?? ''} onChange={(e) => setActItem(ai, ii, { rate: Number(e.target.value) })} />
+                              <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.rate ?? ''} onChange={(e) => {
+                                const v = Number(e.target.value);
+                                const keepGiven = it.given && it.given !== it.rate;
+                                setActItem(ai, ii, keepGiven ? { rate: v } : { rate: v, given: v });
+                              }} />
                             </td>
                             <td className="py-1.5">
                               <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.given ?? ''} onChange={(e) => setActItem(ai, ii, { given: Number(e.target.value) })} />
+                              {Number(it.given) > 0 && ((Number(it.qty) || 1) > 1 || aDays.length > 1) && (
+                                <div className="mt-0.5 text-[10px] text-slate-400">× {it.qty || 1}{aDays.length > 1 ? ` × ${aDays.length}d` : ''} = {((Number(it.given) || 0) * (Number(it.qty) || 1) * aDays.length).toLocaleString('en-IN')}</div>
+                              )}
                             </td>
                             <td className="py-1.5 pl-1 text-center">
                               <button type="button" onClick={() => rmActItem(ai, ii)} title="Remove row" className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
@@ -704,20 +741,30 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       </tbody>
                     </table>
                     <button type="button" onClick={() => addActItem(ai)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Add more services to this day */}
+                  <div className="flex gap-2 p-4">
+                    <button type="button" onClick={() => addTrToGroup(g.days)} className="btn-secondary text-xs"><Plus size={12} /> Transport Service</button>
+                    <button type="button" onClick={() => addAct(g.days)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
                   </div>
                 </div>
-
-                {/* Card footer */}
-                <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
-                  <button type="button" onClick={() => rmAct(ai)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
-                </div>
               </div>
-            );
-          })}
+
+              {/* Card footer */}
+              <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
+                <button type="button" onClick={nextDayGroup} className="btn-secondary text-xs"><Plus size={12} /> Next Day</button>
+                <button type="button" onClick={() => removeGroup(g)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
+              </div>
+            </div>
+          ))}
 
           <div className="flex gap-2">
-            <button type="button" onClick={addTr} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
-            <button type="button" onClick={() => addAct()} className="btn-secondary text-sm"><Plus size={14} /> Add Activity/Ticket</button>
+            <button type="button" onClick={nextDayGroup} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
           </div>
         </div>
       </Section>
@@ -905,7 +952,7 @@ function GivenPriceModal({ hotel, currency, onClose, onSave }) {
 }
 
 // Multi-select dropdown of nights with dated labels — "1st N (Thu 25 Jun)".
-function NightSelect({ nights, startDate, value, onToggle }) {
+function NightSelect({ nights, startDate, value, onToggle, disabledNights = [] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -914,22 +961,38 @@ function NightSelect({ nights, startDate, value, onToggle }) {
     return () => document.removeEventListener('mousedown', close);
   }, []);
   const opts = Array.from({ length: Math.max(1, nights) }, (_, i) => i + 1);
+  const taken = new Set(disabledNights);
   const label = (n) => {
     if (startDate) { const dt = addDays(new Date(startDate), n - 1); return `${ordinal(n)} N (${format(dt, 'EEE d MMM')})`; }
     return `${ordinal(n)} N`;
   };
-  const summary = value.length ? value.map((n) => `${ordinal(n)} N`).join(', ') : '';
   return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-200">
-        <span className={summary ? 'truncate text-slate-800' : 'text-slate-400'}>{summary || 'Select night(s)...'}</span>
-        <ChevronDown size={16} className="shrink-0 text-slate-400" />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 max-h-56 w-full animate-scale-in overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-          {opts.map((n) => (
-            <label key={n} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-              <input type="checkbox" checked={value.includes(n)} onChange={() => onToggle(n)} />
+    <div ref={ref}>
+      <div className="relative">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-200">
+          <span className="text-slate-400">Select night(s)...</span>
+          <ChevronDown size={16} className="shrink-0 text-slate-400" />
+        </button>
+        {open && (
+          <div className="absolute z-50 mt-1 max-h-56 w-full animate-scale-in overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            {opts.map((n) => {
+              const isTaken = taken.has(n) && !value.includes(n);
+              return (
+                <label key={n} className={`flex items-center gap-2 px-3 py-2 text-sm ${isTaken ? 'cursor-not-allowed text-slate-300' : 'cursor-pointer text-slate-700 hover:bg-slate-50'}`}>
+                  <input type="checkbox" disabled={isTaken} checked={value.includes(n)} onChange={() => onToggle(n)} />
+                  {label(n)}
+                  {isTaken && <span className="ml-auto text-[10px] font-medium text-slate-300">already selected</span>}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {value.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {value.map((n) => (
+            <label key={n} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-2 py-1 text-xs font-medium text-brand-700" title="Untick to remove">
+              <input type="checkbox" checked onChange={() => onToggle(n)} className="h-3.5 w-3.5 rounded border-brand-300 text-brand-600 focus:ring-brand-500" />
               {label(n)}
             </label>
           ))}

@@ -54,7 +54,7 @@
     @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-800 shadow-xs outline-none transition-all duration-100 placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-200/70;
   }
   .label {
-    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+    @apply mb-1.5 block text-[13px] font-bold text-slate-900;
   }
   .label-optional {
     @apply font-medium normal-case tracking-normal text-slate-400;
@@ -114,7 +114,7 @@
     @apply text-h4 text-slate-900;
   }
   .page-container {
-    @apply mx-auto max-w-[1600px] px-6;
+    @apply w-full px-6;
   }
   .kbd {
     @apply inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-500;

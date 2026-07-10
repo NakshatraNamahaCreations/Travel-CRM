@@ -301,7 +301,7 @@ export default function HotelDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-6 py-6">
+      <div className="px-6 py-6">
         <div className="grid gap-6 md:grid-cols-[1fr_280px]">
           <div>
             <div className="flex items-center gap-2">

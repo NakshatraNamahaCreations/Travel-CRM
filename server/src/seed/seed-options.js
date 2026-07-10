@@ -13,7 +13,7 @@ const DEFAULTS = {
   state: ['Andaman and Nicobar Islands'],
   country: ['India'],
   mealPlan: ['Room only', 'CP', 'MAP', 'AP', 'CP MAP'],
-  salutation: ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'M/s'],
+  salutation: ['Mr.', 'Mrs.', 'Ms.'],
   currency: ['INR', 'USD', 'EUR', 'GBP', 'AED', 'THB'],
   paymentMode: ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque'],
   vehicleType: [

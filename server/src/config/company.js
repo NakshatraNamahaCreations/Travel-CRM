@@ -175,6 +175,11 @@ export const company = {
     { match: 'sea link', times: { 'PB>HL': ['09:00', '11:00'], 'HL>NL': ['11:30', '12:30'], 'NL>PB': ['13:00', '14:45'], 'HL>PB': ['15:00', '17:00'] } },
   ],
 
+  // "Recognised by" badge images on the quotation cover: filenames under
+  // server/src/assets (embedded into the PDF) or full http(s) URLs. Leave empty
+  // to use the built-in AATO / Andamans / Google Reviews badges.
+  recognisedBy: ['1.jpeg', '2.jpeg'],
+
   // Full-width hero photo on the quotation cover page.
   heroImage: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=1400&q=80',
 

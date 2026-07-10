@@ -15,6 +15,9 @@ const getLabel = (o) => o?.name ?? o?.label ?? String(o);
  * @param {boolean}  [props.isMulti]
  * @param {boolean}  [props.creatable]  show "Add '<term>'" when no exact match
  * @param {function} [props.onCreate]   (term) => Promise<option>
+ * @param {boolean}  [props.checklist]  multi only (default on): keep the search box
+ *                                      clean and render selections as checkbox chips
+ *                                      below it. Pass false for inline pills.
  */
 export default function AsyncSelect({
   loadOptions,
@@ -23,6 +26,7 @@ export default function AsyncSelect({
   isMulti = false,
   creatable = false,
   onCreate,
+  checklist = true,
   placeholder = 'Type to search...',
 }) {
   const [open, setOpen] = useState(false);
@@ -99,7 +103,7 @@ export default function AsyncSelect({
         )}
         onClick={() => setOpen(true)}
       >
-        {isMulti &&
+        {isMulti && !checklist &&
           selected.map((opt) => (
             <span
               key={getId(opt)}
@@ -149,6 +153,26 @@ export default function AsyncSelect({
         </span>
       </div>
 
+      {checklist && isMulti && selected.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {selected.map((opt) => (
+            <label
+              key={getId(opt)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-2.5 py-1 text-[12.5px] font-medium text-brand-700 transition hover:border-brand-300"
+              title="Untick to remove"
+            >
+              <input
+                type="checkbox"
+                checked
+                onChange={() => remove(opt)}
+                className="h-3.5 w-3.5 rounded border-brand-300 text-brand-600 focus:ring-brand-500"
+              />
+              {getLabel(opt)}
+            </label>
+          ))}
+        </div>
+      )}
+
       {open && (
         <div className="absolute z-50 mt-1 max-h-64 w-full animate-scale-in overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
           {loading && (
@@ -165,8 +189,9 @@ export default function AsyncSelect({
                 type="button"
                 key={getId(opt)}
                 onClick={() => pick(opt)}
-                className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
               >
+                {checklist && isMulti && <span className="h-3.5 w-3.5 shrink-0 rounded border border-slate-300 bg-white" />}
                 {getLabel(opt)}
               </button>
             ))}

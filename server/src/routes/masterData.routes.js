@@ -1,6 +1,7 @@
 import { Destination } from '../models/Destination.js';
 import { QuerySource } from '../models/QuerySource.js';
 import { Tag } from '../models/Tag.js';
+import { InclusionExclusion } from '../models/InclusionExclusion.js';
 import { crudFactory } from '../utils/crudFactory.js';
 import { makeCrudRouter } from './_crudRouter.js';
 
@@ -17,4 +18,9 @@ export const querySourceRoutes = makeCrudRouter(crudFactory(QuerySource), openWr
 export const tagRoutes = makeCrudRouter(
   crudFactory(Tag, { beforeWrite: (body) => ({ ...body, name: String(body.name).toLowerCase().trim() }) }),
   openWrite
+);
+
+export const inclusionExclusionRoutes = makeCrudRouter(
+  crudFactory(InclusionExclusion, { searchFields: ['text'], filterFields: ['type'], sort: '-type order createdAt' }),
+  { writeRoles: ['admin', 'manager', 'sales', 'operations'] }
 );

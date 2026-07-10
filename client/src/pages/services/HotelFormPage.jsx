@@ -149,7 +149,7 @@ export default function HotelFormPage() {
         )}
       </div>
 
-      <form onSubmit={submit} className="mx-auto max-w-5xl px-6 py-6">
+      <form onSubmit={submit} className="px-6 py-6">
         <div className="card px-6">
           <div className="flex justify-end pt-4">
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm">

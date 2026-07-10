@@ -1,4 +1,17 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { company } from '../config/company.js';
+
+// Local files under server/src/assets embedded as data URIs (badges, logos...).
+const ASSETS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets');
+const assetUri = (rel) => {
+  try {
+    const p = path.resolve(ASSETS_DIR, rel);
+    const ext = path.extname(p).slice(1).toLowerCase();
+    return `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${fs.readFileSync(p).toString('base64')}`;
+  } catch { return ''; }
+};
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pad4 = (n) => { const s = String(n ?? '').trim(); return /^\d+$/.test(s) ? s.padStart(4, '0') : s; };
@@ -123,20 +136,38 @@ export function quotationHtml(q) {
   };
   const pillCls = (i) => 'pl' + (i % 3);
   const transports = pkg.transports || [];
-  const transferRows = transports.map((t, i) => {
-    const days = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : []);
-    const dayLabel = days.length > 0 ? `Day ${days.join(', ')}` : '—';
-    const sched = staticTimes(t.serviceType, t.serviceLocation);
-    const dep = fmtTime(t.startTime) || (sched ? fmtTime(sched[0]) : '') || esc(t.startTime) || '&mdash;';
-    const arr = arrTime(t.startTime, t.durationMins) || (sched ? fmtTime(sched[1]) : '') || '&mdash;';
+  // Ferries/cruises are authored as Activities (name = sector, ticket type =
+  // "Makruzz Ferry : Premium"), and occasionally as ferry-named transports.
+  // Cab pickups and land transfers do NOT belong in this table.
+  const FERRY_RX = /ferry|cruise|makruzz|nautika|green ocean|itt|sea ?link|catamaran/i;
+  const splitCategory = (s) => {
+    const [name, ...rest] = String(s || '').split(':');
+    return [name.trim(), rest.join(':').trim()];
+  };
+  const ferries = [];
+  (pkg.activities || []).forEach((a) => {
+    if (!FERRY_RX.test(`${a.name} ${a.ticketType}`)) return;
+    const [fname, category] = splitCategory(a.ticketType);
+    ferries.push({ name: fname || a.name, sector: a.name, category, start: a.slot, dur: a.durationMins });
+  });
+  transports.forEach((t) => {
+    if (!FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`)) return;
+    const [fname, category] = splitCategory(t.serviceType);
+    ferries.push({ name: fname || t.serviceLocation, sector: t.serviceLocation, category, start: t.startTime, dur: t.durationMins });
+  });
+  const transferRows = ferries.map((f, i) => {
+    const sched = staticTimes(`${f.name} ${f.category}`, f.sector);
+    const dep = fmtTime(f.start) || (sched ? fmtTime(sched[0]) : '') || '&mdash;';
+    const arr = arrTime(f.start, f.dur) || (sched ? fmtTime(sched[1]) : '') || '&mdash;';
     return `<tr>
-      <td class="bcell">${esc(t.serviceType || t.serviceLocation || dayLabel)}</td>
-      <td><span class="pill ${pillCls(i)}">${esc(t.serviceLocation || dayLabel)}</span></td>
+      <td class="bcell">${esc(f.name)}</td>
+      <td><span class="pill ${pillCls(i)}">${esc(f.sector)}</span></td>
+      <td>${esc(f.category) || '&mdash;'}</td>
       <td>${dep}</td>
       <td>${arr}</td>
     </tr>`;
   }).join('');
-  const ferryLegend = transports.map((t) => esc(t.serviceLocation)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
+  const ferryLegend = ferries.map((f) => esc(f.sector)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
   // ---- Hotels table (page 1 — compact, with star rating under the name) ----
   const hotels = pkg.hotels || [];
@@ -225,6 +256,16 @@ export function quotationHtml(q) {
     return hit?.image || '';
   };
   const activities = pkg.activities || [];
+  // "Sightseeing" heading + place chips inside a day block (from the day's
+  // sightseeing field, comma-separated — authored on the itinerary page).
+  const sightBlock = (d) => {
+    const places = String(d.sightseeing || '').split(/,|•|\n/).map((s) => s.trim()).filter(Boolean);
+    if (!places.length) return '';
+    return `<div class="dwsight">
+      <p class="dwsighthead">Sightseeing</p>
+      <div>${places.map((s) => `<span class="spill">${esc(s)}</span>`).join('')}</div>
+    </div>`;
+  };
   // Key for matching an auto-built description line ("Cellular Jail Visit ·
   // 09:00") back to the service/activity it came from: drop the time and any
   // trailing separators before comparing.
@@ -246,9 +287,15 @@ export function quotationHtml(q) {
       if (!desc && !photo) return '';
       const paras = desc.split('\n').filter(Boolean)
         .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
+      // Key details fill the text column even when no long description exists.
+      const meta = [
+        t.serviceLocation && `<div class="dmeta"><span class="mk">Route</span>${esc(t.serviceLocation)}</div>`,
+        fmtTime(t.startTime) && `<div class="dmeta"><span class="mk">Start Time</span>${fmtTime(t.startTime)}</div>`,
+        t.durationMins && `<div class="dmeta"><span class="mk">Duration</span>${t.durationMins} mins</div>`,
+      ].filter(Boolean).join('');
       const body = photo
-        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}</div></div>`
-        : paras;
+        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}${meta}</div></div>`
+        : `${paras}${meta}`;
       return `<div class="svcblk"><div class="dwtitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${body}</div>`;
     }).filter(Boolean).join('');
     // Activity blocks (scuba, ferry tickets...) — photo from the activity
@@ -263,9 +310,14 @@ export function quotationHtml(q) {
       const title2 = [a.name, a.ticketType].filter(Boolean).join(' — ');
       const paras = desc.split('\n').filter(Boolean)
         .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
+      const meta = [
+        a.ticketType && `<div class="dmeta"><span class="mk">Ticket / Package</span>${esc(a.ticketType)}</div>`,
+        fmtTime(a.slot) && `<div class="dmeta"><span class="mk">Slot</span>${fmtTime(a.slot)}</div>`,
+        a.durationMins && `<div class="dmeta"><span class="mk">Duration</span>${a.durationMins} mins</div>`,
+      ].filter(Boolean).join('');
       const body = photo
-        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}</div></div>`
-        : paras;
+        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}${meta}</div></div>`
+        : `${paras}${meta}`;
       return `<div class="svcblk"><div class="dwtitle">${esc(title2)}</div>${body}</div>`;
     }).filter(Boolean).join('');
     const richBlocks = svcBlocks + actBlocks;
@@ -295,21 +347,23 @@ export function quotationHtml(q) {
     const strips = nightHotels.map((h) => {
       const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
       const st = Math.min(master.stars || 3, 5);
+      // Same layout as the service blocks: big photo left, labelled details right.
+      const meta = `
+        <div class="dmeta"><span class="mk">Category</span><span class="cardstars">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></span></div>
+        <div class="dmeta"><span class="mk">Room Type</span>${esc(h.roomType || '—')}</div>
+        <div class="dmeta"><span class="mk">Meal Plan</span>${esc(h.mealPlan || '—')}</div>
+        <div class="dmeta"><span class="mk">Rooms</span>${h.rooms || 1} room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</div>`;
       return `<div class="hstrip">
-        ${master.imageUrl ? `<img class="hthumb" src="${esc(master.imageUrl)}" alt=""/>` : ''}
-        <div class="hsmain">
-          <div class="hsname">Hotel &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
-          <div class="hscols">
-            <div><p class="k">CATEGORY</p><p class="v"><span class="tstars">${'&#9733;'.repeat(st)}</span></p></div>
-            <div><p class="k">ROOM TYPE</p><p class="v">${esc(h.roomType || '—')}</p></div>
-            <div><p class="k">MEAL PLAN</p><p class="v">${esc(h.mealPlan || '—')}</p></div>
-          </div>
+        <div class="dwtitle" style="color:var(--blue-dark)">Hotel &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
+        <div class="svcrow">
+          ${master.imageUrl ? `<img class="dphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
+          <div class="svctext">${meta}</div>
         </div>
       </div>`;
     }).join('');
     return `<div class="dayblk">
       <div class="dwband">Day ${n} ${esc(cityOfDay(n))} &nbsp;&#124;&nbsp; ${date ? fmtDateWD(date) : ''}</div>
-      <div class="dwbody">${title}${richBlocks}${lines}${strips}</div>
+      <div class="dwbody">${title}${richBlocks}${lines}${sightBlock(d)}${strips}</div>
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
 
@@ -381,12 +435,12 @@ export function quotationHtml(q) {
   .grow { flex: 1; }
 
   /* ---- letterhead: brand + Address | Email | Phone columns ---- */
-  .lh { display: flex; align-items: center; margin-bottom: 10px; }
+  .lh { display: flex; align-items: center; margin-bottom: 6px; }
   .brand { display: flex; align-items: center; gap: 9px; width: 29%; flex-shrink: 0; padding-right: 10px; }
-  .logo { width: 42px; height: 42px; border-radius: 10px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 21px; flex-shrink: 0; }
+  .logo { width: 38px; height: 38px; border-radius: 10px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
   .bn { font-size: 14.5px; font-weight: 800; color: var(--blue); line-height: 1.2; white-space: nowrap; }
   .bsub { font-size: 7.5px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
-  .lh-col { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center; border-left: 1px solid #c9d4df; padding: 4px 8px; font-size: 10.5px; color: #445468; line-height: 1.5; }
+  .lh-col { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center; border-left: 1px solid #c9d4df; padding: 2px 8px; font-size: 10.5px; color: #445468; line-height: 1.4; }
   .lh-col.wide { flex: 1.25; }
   .lh-col b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 3px; }
 
@@ -394,10 +448,10 @@ export function quotationHtml(q) {
   .band { background: var(--blue); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 17px; border-radius: 5px; margin-bottom: 14px; }
 
   /* ---- page-1 quotation panels ---- */
-  .panels { display: flex; justify-content: space-between; gap: 56px; margin: 4px 0 6px; }
+  .panels { display: flex; justify-content: space-between; gap: 56px; margin: 2px 0 4px; }
   .panel { flex: 1; border: 1.5px solid var(--blue-dark); border-radius: 10px; overflow: hidden; }
   .ph { background: var(--blue); color: #fff; padding: 8px 14px; font-weight: 700; font-size: 14px; }
-  .pc { background: var(--lblue); padding: 9px 14px 10px; min-height: 56px; }
+  .pc { background: var(--lblue); padding: 8px 14px 9px; min-height: 48px; }
   .pill { display: inline-block; border-radius: 999px; padding: 2.5px 11px; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; }
   .pill.navy { background: var(--navy); }
   .pill.pl0 { background: #3565d6; } .pill.pl1 { background: #8b3fd1; } .pill.pl2 { background: #0e6b50; }
@@ -410,17 +464,25 @@ export function quotationHtml(q) {
   .tbl table { width: 100%; border-collapse: collapse; }
   .tbl thead th { background: #eaf3fb; color: var(--navy); padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 800; border-right: 1px solid #d8e7f5; }
   .tbl thead th:last-child { border-right: 0; }
-  .tbl td { padding: 7.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px dashed #cddcea; }
+  .tbl td { padding: 6.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px dashed #cddcea; }
 
   /* ---- section cards (summary page) ---- */
-  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 10px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
-  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 7px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
+  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
   .sechead .sicon { font-size: 14px; }
   .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
   .tbl.flat.sep { border-top: 1px solid var(--line); }
+
+  /* ---- fare summary ---- */
+  .fare { width: 100%; border-collapse: collapse; }
+  .fare td { padding: 4.5px 16px; font-size: 12.5px; border-top: 1px dashed #cddcea; color: #2c3d51; }
+  .fare tr:first-child td { border-top: 0; }
+  .fare td.k { font-weight: 700; color: var(--ink); }
+  .fare td.v { text-align: right; font-weight: 700; color: var(--blue-dark); }
+  .fare tr.final td { background: var(--yellow); border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); font-size: 14px; }
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
-  .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 6px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
+  .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 4.5px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
   .tbl td.hl { background: var(--yellow); color: var(--ink); font-weight: 800; font-size: 14px; }
   .muted { color: #94a3b8; text-align: center; padding: 8px; font-weight: 500; }
   .tbl td.hcell { text-align: left; }
@@ -456,10 +518,10 @@ export function quotationHtml(q) {
   .cb .v { flex: 1; background: var(--yellow); border-left: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13.5px; }
   .cb .row { min-height: 26px; }
   .cb .v.tv { background: #e4f6ea; color: #0e7a38; font-weight: 800; }
-  .confirm { display: flex; margin-top: 10px; border-radius: 9px; overflow: hidden; }
-  .confirm .lab { flex: 1; background: var(--blue); color: #fff; font-weight: 800; font-size: 15.5px; display: flex; align-items: center; justify-content: center; padding: 10px; }
-  .confirm .amt { background: var(--green); color: #fff; font-weight: 800; font-size: 22px; padding: 10px 36px; display: flex; align-items: center; white-space: nowrap; }
-  .notebox { margin-top: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 14px; font-size: 10.8px; color: #37475a; text-align: center; line-height: 1.6; }
+  .confirm { display: flex; margin-top: 8px; border-radius: 9px; overflow: hidden; }
+  .confirm .lab { flex: 1; background: var(--blue); color: #fff; font-weight: 800; font-size: 15.5px; display: flex; align-items: center; justify-content: center; padding: 8px; }
+  .confirm .amt { background: var(--green); color: #fff; font-weight: 800; font-size: 22px; padding: 8px 36px; display: flex; align-items: center; white-space: nowrap; }
+  .notebox { margin-top: 6px; border: 1px solid var(--line); border-radius: 9px; padding: 5px 14px; font-size: 10.5px; color: #37475a; text-align: center; line-height: 1.5; }
 
   /* ---- cover page ---- */
   .hero { border-radius: 12px; overflow: hidden; height: 118mm; }
@@ -472,6 +534,24 @@ export function quotationHtml(q) {
   .destcov { text-align: center; margin-top: 26px; }
   .destcov .sk { font-size: 12.5px; color: #46566a; letter-spacing: 0.04em; }
   .destcov .sv { font-size: 14px; margin-top: 6px; color: var(--ink); }
+  .stat .ss { font-size: 10.5px; color: #64748b; margin-top: 2px; }
+
+  /* ---- "Recognised by" badges on the cover ---- */
+  .recog { margin-top: 30px; text-align: center; }
+  .recogpill { display: inline-block; background: #f6b93b; color: #123a63; font-weight: 800; font-size: 13px; letter-spacing: 0.08em; padding: 6px 26px; border-radius: 999px; }
+  .recogrow { margin-top: 14px; display: flex; justify-content: center; align-items: stretch; gap: 18px; }
+  .rbadge { min-width: 140px; max-width: 220px; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px 14px; box-shadow: 0 1px 3px rgba(15,45,80,0.08); }
+  .rbadge img { max-width: 100%; max-height: 120px; object-fit: contain; }
+  .aato { text-align: center; }
+  .aatoring { display: inline-block; border: 3px double #1577bd; border-radius: 50%; color: #1577bd; font-weight: 800; font-size: 17px; letter-spacing: 0.14em; padding: 9px 20px; }
+  .aatosub { margin-top: 4px; font-size: 6.8px; font-weight: 700; letter-spacing: 0.06em; color: #2c5f8a; line-height: 1.4; }
+  .andmn { text-align: center; }
+  .andmn .a1 { font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 23px; color: #1577bd; line-height: 1.1; }
+  .andmn .a2 { margin-top: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #0e8a4e; }
+  .goog { text-align: center; }
+  .goog .g1 { font-size: 21px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; }
+  .goog .g2 { font-size: 12px; font-weight: 800; color: var(--ink); margin-top: 2px; }
+  .goog .g3 { color: #f5a623; font-size: 13px; letter-spacing: 2px; margin-top: 1px; }
   .destcov .pin { font-size: 11px; }
 
   /* ---- itinerary introduction ---- */
@@ -489,11 +569,20 @@ export function quotationHtml(q) {
   .svcblk + .svcblk { border-top: 1px dashed #d5e0ea; padding-top: 8px; }
   .ddesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 3px; }
   /* service photo + description row (photo left, text right — like the hotel strip) */
-  .svcrow { display: flex; align-items: flex-start; gap: 13px; margin-top: 5px; }
-  .dphoto { width: 172px; height: 112px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+  .svcrow { display: flex; align-items: flex-start; gap: 16px; margin-top: 7px; }
+  .dphoto { width: 236px; height: 156px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.18); }
   .svctext { flex: 1; min-width: 0; }
+  .svctext .ddesc { font-size: 12.5px; line-height: 1.75; }
   .svctext .ddesc:first-child { margin-top: 0; }
-  .hstrip { display: flex; align-items: center; gap: 13px; border-top: 1px dashed #c9d8e5; margin-top: 10px; padding-top: 10px; }
+  .dmeta { font-size: 12px; color: #2c3d51; margin-top: 6px; }
+  .dmeta .mk { display: inline-block; min-width: 108px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #8fa0b3; }
+  .ddesc + .dmeta { margin-top: 10px; }
+  .svctext .dmeta:first-child { margin-top: 0; }
+  .dwsight { border-top: 1px dashed #d5e0ea; margin-top: 9px; padding-top: 8px; }
+  .dwsighthead { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); margin-bottom: 4px; }
+  .spill { display: inline-block; background: #eaf3fb; color: var(--blue-dark); border: 1px solid #cfe2f1; border-radius: 999px; padding: 2.5px 11px; font-size: 10.5px; font-weight: 700; margin: 0 5px 4px 0; }
+  .hstrip { border-top: 1px dashed #c9d8e5; margin-top: 10px; padding-top: 10px; }
+  .hstrip .dwtitle { margin-bottom: 7px; }
   .hthumb { width: 88px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
   .hsname { font-weight: 800; font-size: 13px; color: var(--blue-dark); margin-bottom: 4px; }
   .hscols { display: flex; gap: 30px; }
@@ -596,11 +685,48 @@ export function quotationHtml(q) {
     <span>Query ID:- &nbsp;M${esc(pad4(q.query?.queryNumber))}</span>
   </div>
   <div class="stats">
+    <div class="stat">
+      <div class="sk">GUEST</div>
+      <div class="sv">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')}</div>
+      ${guest.phones?.[0] ? `<div class="ss">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
+    </div>
     <div class="stat"><div class="sk">Tour Start Date</div><div class="sv">${fmtDate(start)}</div></div>
     <div class="stat"><div class="sk">DURATION</div><div class="sv">${q.nights} Nights / ${(q.nights || 0) + 1} Days</div></div>
-    <div class="stat"><div class="sk">TRAVELLERS</div><div class="sv">${pax} Pax${paxChildren ? ` (${paxAdults} Adult + ${paxChildren} Child)` : ''}</div></div>
+    <div class="stat">
+      <div class="sk">TRAVELLERS</div>
+      <div class="sv">${paxAdults} Adult${paxAdults === 1 ? '' : 's'}${paxChildren ? `, ${paxChildren} Child${paxChildren === 1 ? '' : 'ren'}` : ''}</div>
+      <div class="ss">${pax} Pax total</div>
+    </div>
   </div>
   ${destCovered ? `<div class="destcov"><div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div></div>` : ''}
+
+  <div class="recog">
+    <span class="recogpill">RECOGNISED BY</span>
+    <div class="recogrow">
+      ${(company.recognisedBy || []).length
+        ? company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')
+        : `
+      <div class="rbadge">
+        <div class="aato">
+          <div class="aatoring">AATO</div>
+          <p class="aatosub">ANDAMAN ASSOCIATION<br/>OF TOUR OPERATORS</p>
+        </div>
+      </div>
+      <div class="rbadge">
+        <div class="andmn">
+          <p class="a1">andamans</p>
+          <p class="a2">Emerald. Blue. And You.</p>
+        </div>
+      </div>
+      <div class="rbadge">
+        <div class="goog">
+          <p class="g1"><span style="color:#4285F4">G</span><span style="color:#EA4335">o</span><span style="color:#FBBC05">o</span><span style="color:#4285F4">g</span><span style="color:#34A853">l</span><span style="color:#EA4335">e</span></p>
+          <p class="g2">Customer Reviews</p>
+          <p class="g3">&#9733;&#9733;&#9733;&#9733;&#9733;</p>
+        </div>
+      </div>`}
+    </div>
+  </div>
   ${BOTTOMBAR}
 </div>
 
@@ -630,7 +756,7 @@ export function quotationHtml(q) {
   ${transferRows ? `<div class="seccard">
     <div class="sechead"><span class="sicon">&#9972;</span> Cruise &amp; Ferry Information</div>
     <div class="tbl flat"><table>
-      <thead><tr><th style="width:32%">Name</th><th style="width:28%">Ferry Sector</th><th>Departure Timings</th><th>Arrival Timings</th></tr></thead>
+      <thead><tr><th style="width:24%">Ferry</th><th style="width:26%">Ferry Sector</th><th style="width:16%">Category</th><th>Departure</th><th>Arrival</th></tr></thead>
       <tbody>${transferRows}</tbody></table>
       ${ferryLegend ? `<div class="legend">${ferryLegend}</div>` : ''}
     </div>
@@ -654,27 +780,20 @@ export function quotationHtml(q) {
         <td class="dkcell">${inr(cats.permits, 2)}</td><td class="dkcell">${inr(cats.ferry, 2)}</td><td class="dkcell">${cats.misc ? inr(cats.misc, 2) : ''}</td>
       </tr></tbody></table>
     </div>
-    <div class="tbl flat sep"><table>
-      <thead><tr><th>Package Cost</th><th>Discount</th><th>Total</th><th>Service<br/>Charge</th><th>Taxable Amount</th><th>GST</th><th>Total<br/>Tax</th><th style="width:24%">Final Payable Amount</th></tr></thead>
-      <tbody><tr>
-        <td class="dkcell">${inr(p.subtotal, 2)}</td><td class="dkcell">${p.discount ? inr(p.discount, 2) : ''}</td><td class="dkcell">${inr(p.subtotal, 2)}</td>
-        <td class="dkcell">${servicePct}%</td><td class="dkcell">${inr(taxable)}</td><td class="dkcell">${gstPct}%</td>
-        <td class="dkcell">${inr(p.tax, 2)}</td><td class="hl">${inr(p.total, 2)}</td>
-      </tr></tbody></table>
-    </div>
   </div>
 
-  <div class="breakrow">
-    <div class="cb">
-      <div class="l">COST<br/>BREAKAGE:</div>
-      <div class="rows">
-        <div class="row"><div class="k">PAX:</div><div class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</div></div>
-        <div class="row"><div class="k">TOUR COST PER PERSON:</div><div class="v">${inr(perPerson)}</div></div>
-        ${paxAdults ? `<div class="row"><div class="k">ADULTS &nbsp;(${paxAdults} &times; ${inr(perPerson)}):</div><div class="v">${inr(paxAdults * perPerson)}</div></div>` : ''}
-        ${paxChildren ? `<div class="row"><div class="k">CHILDREN &nbsp;(${paxChildren} &times; ${inr(perPerson)}):</div><div class="v">${inr(paxChildren * perPerson)}</div></div>` : ''}
-        <div class="row"><div class="k">TOTAL PACKAGE COST:</div><div class="v tv">${inr(p.total)}</div></div>
-      </div>
-    </div>
+  <div class="seccard">
+    <div class="sechead"><span class="sicon">&#128181;</span> Fare Summary</div>
+    <table class="fare">
+      <tr><td class="k">Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
+      <tr><td class="k">Total Cost (without tax)</td><td class="v">${inr(taxable, 2)}</td></tr>
+      <tr><td class="k">Discount</td><td class="v">${p.discount ? `&minus; ${inr(p.discount, 2)}` : inr(0)}</td></tr>
+      <tr><td class="k">Tour Cost After Discount</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
+      <tr><td class="k">No. of Travellers</td><td class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</td></tr>
+      <tr><td class="k">Tour Total Cost</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
+      <tr><td class="k">GST (${gstPct}%)</td><td class="v">${inr(p.tax, 2)}</td></tr>
+      <tr class="final"><td class="k">Final Cost</td><td class="v">${inr(p.total, 2)}</td></tr>
+    </table>
   </div>
 
   <div class="confirm">
@@ -683,8 +802,7 @@ export function quotationHtml(q) {
   </div>
 
   <div class="notebox">
-    <div>Please note that costing here is just for your reference, the GST invoice will be provided after tour completion.</div>
-    <div>Misc Cost includes CNB, Water Sports or any additional service requested. Please check the &quot;Extra Inclusions&quot; section below the Daywise Itinerary for more information.</div>
+    <div>Costing here is for your reference; the GST invoice is provided after tour completion. Misc Cost covers CNB, water sports or any additional requested service.</div>
     <div><b>BOOKING TERMS:</b>&nbsp; ${esc(company.bookingTerms)}</div>
   </div>
   ${BOTTOMBAR}

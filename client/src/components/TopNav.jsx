@@ -53,6 +53,7 @@ const GROUPS = [
       { label: 'Destinations', to: '/settings/destinations' },
       { label: 'Cities / Towns', to: '/settings/cities' },
       { label: 'States / Regions', to: '/settings/states' },
+      { label: 'Inclusions & Exclusions', to: '/settings/inclusions-exclusions' },
     ],
   },
 ];

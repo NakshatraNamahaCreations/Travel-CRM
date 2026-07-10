@@ -92,7 +92,7 @@ async function run() {
   // Generic option lists for user-extensible dropdowns
   const OPTION_DEFAULTS = {
     mealPlan: ['Room only', 'CP', 'MAP', 'AP', 'CP MAP'],
-    salutation: ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'M/s'],
+    salutation: ['Mr.', 'Mrs.', 'Ms.'],
     currency: ['INR', 'USD', 'EUR', 'GBP', 'AED', 'THB'],
     paymentMode: ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque'],
     vehicleType: ['Sedan (Dzire/Etios)', 'SUV (Xylo/Ertiga)', '17 Seater Tempo Traveller', '26 Seater Tempo Traveller'],

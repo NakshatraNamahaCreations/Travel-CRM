@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bed, Star, Calendar, Users, Plus, X, AlertTriangle, Share2 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, addDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
 import { queriesApi } from '../../api/queries.js';
@@ -47,14 +47,34 @@ export default function ConversionPage() {
     }
   }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setRow = (i, patch) => setRows((prev) => prev.map((r, idx) => {
-    if (idx !== i) return r;
-    const next = { ...r, ...patch };
-    if (patch.amount !== undefined) next.percent = total ? +((Number(patch.amount) / total) * 100).toFixed(1) : 0;
-    if (patch.percent !== undefined) next.amount = Math.round((total * Number(patch.percent)) / 100);
+  const pct = (amount) => (total ? +((Number(amount) / total) * 100).toFixed(1) : 0);
+  const setRow = (i, patch) => setRows((prev) => {
+    const next = prev.map((r, idx) => {
+      if (idx !== i) return r;
+      const n = { ...r, ...patch };
+      if (patch.amount !== undefined) n.percent = pct(patch.amount);
+      if (patch.percent !== undefined) n.amount = Math.round((total * Number(patch.percent)) / 100);
+      return n;
+    });
+    // Auto-balance: after editing an amount, the following instalment absorbs
+    // the remaining balance and its due date lands 3 days after this one.
+    if ((patch.amount !== undefined || patch.percent !== undefined) && i + 1 < next.length) {
+      const othersSum = next.reduce((s, r, idx) => (idx === i + 1 ? s : s + (Number(r.amount) || 0)), 0);
+      const remain = Math.max(0, total - othersSum);
+      const baseDate = next[i].dueDate ? new Date(next[i].dueDate) : new Date();
+      next[i + 1] = { ...next[i + 1], amount: remain, percent: pct(remain), dueDate: format(addDays(baseDate, 3), 'yyyy-MM-dd') };
+    }
     return next;
-  }));
-  const addRow = () => setRows((prev) => [...prev, { amount: 0, percent: 0, dueDate: '' }]);
+  });
+  // New instalments start prefilled with the remaining balance, due 3 days
+  // after the previous instalment.
+  const addRow = () => setRows((prev) => {
+    const sum = prev.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const remain = Math.max(0, total - sum);
+    const last = prev[prev.length - 1];
+    const baseDate = last?.dueDate ? new Date(last.dueDate) : new Date();
+    return [...prev, { amount: remain, percent: pct(remain), dueDate: format(addDays(baseDate, 3), 'yyyy-MM-dd') }];
+  });
   const rmRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));
 
   const convertMut = useMutation({
@@ -99,7 +119,7 @@ export default function ConversionPage() {
         <span className="text-slate-500">Quote #{quote.quoteNumber}</span>
       </div>
 
-      <div className="mx-auto max-w-5xl space-y-8 px-6 py-6">
+      <div className="space-y-8 px-6 py-6">
         {/* ---- Quote Used ---- */}
         <Section title="Quote Used" hint="Here are the quote details used in the process.">
           <div className="card p-5">

@@ -113,6 +113,12 @@ export default function NewQueryPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // A trip can't start in the past (existing trips keep their original date).
+    const today = new Date().toISOString().slice(0, 10);
+    const origStart = existing?.startDate ? existing.startDate.slice(0, 10) : '';
+    if (form.startDate && form.startDate < today && form.startDate !== origStart) {
+      return toast.error('Start date cannot be in the past');
+    }
     setSaving(true);
     try {
       const payload = {
@@ -171,7 +177,7 @@ export default function NewQueryPage() {
         </Link>
       </div>
 
-      <form onSubmit={handleSubmit} className="mx-auto max-w-5xl px-6 py-6">
+      <form onSubmit={handleSubmit} className="px-6 py-6">
         <div className="card px-6">
           {/* Query Source */}
           <FormSection
@@ -233,7 +239,7 @@ export default function NewQueryPage() {
               </div>
               <div>
                 <label className="label">Start Date</label>
-                <input type="date" className="input" value={form.startDate} onChange={setEvt('startDate')} />
+                <input type="date" className="input" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={setEvt('startDate')} />
               </div>
               <div>
                 <label className="label">No. of Nights</label>

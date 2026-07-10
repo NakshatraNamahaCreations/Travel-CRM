@@ -55,7 +55,7 @@ export default function UploadQueriesPage() {
         <span className="text-slate-500">Upload CSV</span>
       </div>
 
-      <div className="mx-auto max-w-5xl px-6 py-7">
+      <div className="px-6 py-7">
         {/* File */}
         <label className="label">Select a CSV file</label>
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">

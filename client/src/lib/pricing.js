@@ -38,8 +38,15 @@ export function computePackage(pkg) {
   let cost = 0;
   (pkg.hotels || []).forEach((h) => { cost += hotelRowCost(h); });
   (pkg.inclusions || []).forEach((i) => { cost += Number(i.price) || 0; });
-  (pkg.transports || []).forEach((t) => (t.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0); }));
-  (pkg.activities || []).forEach((a) => (a.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0); }));
+  // A service selected on N days is charged for each of those days.
+  (pkg.transports || []).forEach((t) => {
+    const dc = Math.max(1, (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]).length);
+    (t.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0) * dc; });
+  });
+  (pkg.activities || []).forEach((a) => {
+    const dc = Math.max(1, (Array.isArray(a.days) && a.days.length ? a.days : [1]).length);
+    (a.items || []).forEach((it) => { cost += (Number(it.qty) || 0) * (Number(it.rate) || 0) * dc; });
+  });
   (pkg.extras || []).forEach((e) => { cost += Number(e.price) || 0; });
   (pkg.flights || []).forEach((f) => { cost += Number(f.cost) || 0; });
   cost = r2(cost);

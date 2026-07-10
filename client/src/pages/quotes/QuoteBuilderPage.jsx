@@ -9,13 +9,14 @@ import { quotesApi } from '../../api/quotes.js';
 import { computePackage, packageWarnings, money } from '../../lib/pricing.js';
 import { tripNo } from '../../lib/format.js';
 import PackageEditor from './PackageEditor.jsx';
+import InclusionExclusionEditor from './InclusionExclusionEditor.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import { cn } from '../../lib/cn.js';
 
 const newPackage = (name) => ({
   name, hotels: [], inclusions: [], transports: [], extras: [], flights: [],
   sameCabType: false, sharedCabItems: [{ type: '', qty: 1 }],
-  markupType: 'percent', markupValue: 0, taxName: 'GST', taxApplied: false, taxPercent: 5, taxOn: 'cost_markup', rounding: 1,
+  markupType: 'percent', markupValue: 0, taxName: 'GST', taxApplied: true, taxPercent: 5, taxOn: 'cost_markup', rounding: 1,
   internalComments: '', customerRemarks: '',
 });
 
@@ -31,6 +32,7 @@ export default function QuoteBuilderPage({ mode }) {
     title: '', currency: 'INR', startDate: '', nights: 1, pax: { adults: 1, children: [] },
     pricingStrategy: 'overall', totalFoc: 0, selectedPackageIndex: 0,
     packages: [newPackage('Deluxe Package')],
+    inclusions: [], exclusions: [],
   });
 
   const { data: query } = useQuery({ queryKey: ['query', queryId], queryFn: () => queriesApi.get(queryId), enabled: !isEdit && !!queryId });
@@ -54,12 +56,24 @@ export default function QuoteBuilderPage({ mode }) {
       pax: existing.pax || { adults: 1, children: [] }, pricingStrategy: existing.pricingStrategy || 'overall',
       totalFoc: existing.totalFoc || 0, selectedPackageIndex: existing.selectedPackageIndex || 0,
       packages: existing.packages?.length ? existing.packages.map((p) => ({ ...p })) : [newPackage('Deluxe Package')],
+      inclusions: existing.inclusions || [], exclusions: existing.exclusions || [],
     });
   }, [existing]);
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const setPkg = (i, pkg) => set('packages')(form.packages.map((p, idx) => (idx === i ? pkg : p)));
-  const addPkg = () => { set('packages')([...form.packages, newPackage(`Package ${form.packages.length + 1}`)]); setActive(form.packages.length); };
+  // New options reuse the active package's transports/activities/cab & pricing
+  // setup — typically only the hotels differ between package options.
+  const addPkg = () => {
+    const base = form.packages[active] || form.packages[0];
+    const stripIds = (v) => JSON.parse(JSON.stringify(v, (k, val) => (k === '_id' ? undefined : val)));
+    // hotels + hotel-tied special inclusions reset; everything else carries over.
+    const clone = base
+      ? { ...stripIds(base), name: `Package ${form.packages.length + 1}`, hotels: [], inclusions: [] }
+      : newPackage(`Package ${form.packages.length + 1}`);
+    set('packages')([...form.packages, clone]);
+    setActive(form.packages.length);
+  };
   const rmPkg = (i) => { const next = form.packages.filter((_, idx) => idx !== i); set('packages')(next.length ? next : [newPackage('Package 1')]); setActive(0); };
   const renamePkg = (i, name) => setPkg(i, { ...form.packages[i], name });
 
@@ -74,10 +88,19 @@ export default function QuoteBuilderPage({ mode }) {
         title: form.title, currency: form.currency, startDate: form.startDate || undefined,
         nights: Number(form.nights), pax: form.pax, pricingStrategy: form.pricingStrategy,
         totalFoc: Number(form.totalFoc) || 0, selectedPackageIndex: form.selectedPackageIndex, packages: form.packages,
+        inclusions: form.inclusions.map((t) => t.trim()).filter(Boolean),
+        exclusions: form.exclusions.map((t) => t.trim()).filter(Boolean),
       };
       const saved = isEdit ? await quotesApi.update(id, payload) : await quotesApi.create(payload);
       toast.success(isEdit ? 'Quote updated' : 'Quote created');
-      navigate(`/quotes/${saved._id}`);
+      // A fresh quote continues to the Create Itinerary step; edits return to
+      // the trip's quotes tab (Sembark flow — no standalone quote page between).
+      if (isEdit) {
+        const tripId = existing?.query?._id || saved.query;
+        navigate(tripId ? `/trips/${tripId}` : `/quotes/${saved._id}`);
+      } else {
+        navigate(`/quotes/${saved._id}/itinerary`);
+      }
     } catch (err) { toast.error(err.message || 'Failed to save quote'); }
     finally { setSaving(false); }
   };
@@ -106,7 +129,7 @@ export default function QuoteBuilderPage({ mode }) {
         )}
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-6 py-6">
+      <div className="space-y-6 px-6 py-6">
         {/* Basic Details */}
         <div className="card p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -134,7 +157,7 @@ export default function QuoteBuilderPage({ mode }) {
             <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2"><label className="label">Quote Title</label><input className="input" value={form.title} onChange={(e) => set('title')(e.target.value)} /></div>
-                <div><label className="label">Start Date</label><input type="date" className="input" value={form.startDate} onChange={(e) => set('startDate')(e.target.value)} /></div>
+                <div><label className="label">Start Date</label><input type="date" className="input" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={(e) => set('startDate')(e.target.value)} /></div>
                 <div><label className="label">Nights</label><input type="number" className="input" value={form.nights} onChange={(e) => set('nights')(Number(e.target.value))} /></div>
                 <div><label className="label">Adults</label><input type="number" className="input" value={form.pax.adults} onChange={(e) => set('pax')({ ...form.pax, adults: Number(e.target.value) })} /></div>
                 <div><label className="label">Currency</label><CreatableSelect category="currency" value={form.currency} onChange={set('currency')} /></div>
@@ -180,6 +203,13 @@ export default function QuoteBuilderPage({ mode }) {
         </div>
 
         <PackageEditor pkg={form.packages[active]} onChange={(p) => setPkg(active, p)} nights={form.nights} startDate={form.startDate} currency={form.currency} />
+
+        {/* Inclusion / Exclusion */}
+        <InclusionExclusionEditor
+          inclusions={form.inclusions}
+          exclusions={form.exclusions}
+          onChange={({ inclusions, exclusions }) => setForm((f) => ({ ...f, inclusions, exclusions }))}
+        />
 
         {/* Summary */}
         <div className="card p-5 sm:p-6">
@@ -250,7 +280,7 @@ export default function QuoteBuilderPage({ mode }) {
 
       {/* Sticky action bar */}
       <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{selPkg?.name || 'Package'} — Final Price</p>
             <p className="text-lg font-bold tabular-nums text-slate-900">{money(selComputed?.sellingPrice || 0, form.currency)}</p>

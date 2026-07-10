@@ -168,7 +168,7 @@ export default function TransportDetailPage() {
         <span className="text-gray-500">{t.name}</span>
       </div>
 
-      <div className="mx-auto max-w-5xl px-6 py-6">
+      <div className="px-6 py-6">
         {/* Header */}
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>

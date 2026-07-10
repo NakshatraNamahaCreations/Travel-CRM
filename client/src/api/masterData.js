@@ -16,6 +16,14 @@ export const querySourcesApi = resource('query-sources');
 export const tagsApi = resource('tags');
 export const teamsApi = resource('teams');
 
+// Inclusions / Exclusions master (defaults shown on quotations).
+export const inclusionExclusionApi = {
+  list: (params) => api.get('/inclusion-exclusions', { params }).then((r) => r.data),
+  create: (payload) => api.post('/inclusion-exclusions', payload).then((r) => r.data.data),
+  update: (id, payload) => api.put(`/inclusion-exclusions/${id}`, payload).then((r) => r.data.data),
+  remove: (id) => api.delete(`/inclusion-exclusions/${id}`).then((r) => r.data.data),
+};
+
 export const usersApi = {
   search: (search = '', limit = 20) =>
     api.get('/users', { params: { search, limit } }).then((r) => r.data.data),

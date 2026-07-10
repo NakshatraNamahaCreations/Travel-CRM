@@ -6,6 +6,7 @@ import {
   destinationRoutes,
   querySourceRoutes,
   tagRoutes,
+  inclusionExclusionRoutes,
 } from './masterData.routes.js';
 import queryRoutes from './query.routes.js';
 import quoteRoutes from './quote.routes.js';
@@ -46,6 +47,7 @@ router.use('/teams', teamRoutes);
 router.use('/destinations', destinationRoutes);
 router.use('/query-sources', querySourceRoutes);
 router.use('/tags', tagRoutes);
+router.use('/inclusion-exclusions', inclusionExclusionRoutes);
 router.use('/queries', queryRoutes);
 router.use('/quotes', quoteRoutes);
 router.use('/comments', commentRoutes);

@@ -115,8 +115,8 @@ const packageSchema = new mongoose.Schema(
     markupType: { type: String, enum: ['percent', 'flat'], default: 'percent' },
     markupValue: { type: Number, default: 0 },
     taxName: { type: String, default: 'GST' },
-    taxPercent: { type: Number, default: 0 },
-    taxApplied: { type: Boolean, default: false },
+    taxPercent: { type: Number, default: 5 },
+    taxApplied: { type: Boolean, default: true },
     taxOn: { type: String, enum: ['cost_markup', 'markup'], default: 'cost_markup' },
     rounding: { type: Number, default: 1 },
 
@@ -134,7 +134,7 @@ const packageSchema = new mongoose.Schema(
 
 /* ---------- Legacy flat sub-schemas (kept for booking/invoice/report compat) ---------- */
 const itineraryDaySchema = new mongoose.Schema(
-  { dayNumber: Number, date: Date, destination: { type: mongoose.Schema.Types.ObjectId, ref: 'Destination' }, title: String, description: String },
+  { dayNumber: Number, date: Date, destination: { type: mongoose.Schema.Types.ObjectId, ref: 'Destination' }, title: String, description: String, sightseeing: String },
   { _id: true }
 );
 const costItemSchema = new mongoose.Schema(
@@ -175,6 +175,9 @@ const quoteSchema = new mongoose.Schema(
     inclusions: [{ type: String }],
     exclusions: [{ type: String }],
     terms: { type: String, trim: true },
+    // Set when the day-wise schedule was hand-edited on the itinerary page —
+    // stops the pre-validate hook from rebuilding days from the packages.
+    daysCustomized: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
@@ -199,14 +202,17 @@ function computePackage(pkg) {
   }
   for (const inc of pkg.inclusions || []) cost += inc.price || 0;
   for (const t of pkg.transports || []) {
+    // A service selected on N days is charged for each of those days.
+    const daysCount = Math.max(1, (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]).length);
     for (const it of t.items || []) {
-      it.amount = round((it.qty || 0) * (it.rate || 0));
+      it.amount = round((it.qty || 0) * (it.rate || 0) * daysCount);
       cost += it.amount;
     }
   }
   for (const a of pkg.activities || []) {
+    const daysCount = Math.max(1, (Array.isArray(a.days) && a.days.length ? a.days : [1]).length);
     for (const it of a.items || []) {
-      it.amount = round((it.qty || 0) * (it.rate || 0));
+      it.amount = round((it.qty || 0) * (it.rate || 0) * daysCount);
       cost += it.amount;
     }
   }
@@ -237,15 +243,21 @@ function flattenSelected(doc) {
     });
   }
   for (const inc of pkg.inclusions || []) items.push({ category: 'other', label: inc.service || 'Inclusion', meta: inc.hotelName, qty: 1, rate: inc.price || 0, amount: inc.price || 0 });
-  for (const t of pkg.transports || []) for (const it of t.items || []) items.push({ category: 'transport', label: `${t.serviceLocation || ''} — ${it.type || 'Transport'}`.trim(), meta: t.serviceType, qty: it.qty || 1, rate: it.rate || 0, amount: it.amount || 0 });
-  for (const a of pkg.activities || []) for (const it of a.items || []) items.push({ category: 'activity', refId: a.activity, label: `${a.name || 'Activity'}${a.ticketType ? ` — ${a.ticketType}` : ''} (${it.type || 'Ticket'})`, meta: a.slot, qty: it.qty || 1, rate: it.rate || 0, amount: it.amount || 0 });
+  for (const t of pkg.transports || []) {
+    const daysCount = Math.max(1, (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]).length);
+    for (const it of t.items || []) items.push({ category: 'transport', label: `${t.serviceLocation || ''} — ${it.type || 'Transport'}`.trim(), meta: [t.serviceType, daysCount > 1 ? `${daysCount} day(s)` : ''].filter(Boolean).join(' · '), qty: (it.qty || 1) * daysCount, rate: it.rate || 0, amount: it.amount || 0 });
+  }
+  for (const a of pkg.activities || []) {
+    const daysCount = Math.max(1, (Array.isArray(a.days) && a.days.length ? a.days : [1]).length);
+    for (const it of a.items || []) items.push({ category: 'activity', refId: a.activity, label: `${a.name || 'Activity'}${a.ticketType ? ` — ${a.ticketType}` : ''} (${it.type || 'Ticket'})`, meta: [a.slot, daysCount > 1 ? `${daysCount} day(s)` : ''].filter(Boolean).join(' · '), qty: (it.qty || 1) * daysCount, rate: it.rate || 0, amount: it.amount || 0 });
+  }
   for (const e of pkg.extras || []) items.push({ category: 'other', label: e.label || 'Service', qty: 1, rate: e.price || 0, amount: e.price || 0 });
   for (const f of pkg.flights || []) items.push({ category: 'other', label: f.label || 'Flight', qty: 1, rate: f.cost || 0, amount: f.cost || 0 });
   doc.costItems = items;
 
   // Build the day-wise itinerary from transports + activities, covering EVERY
-  // day of the trip (packages are the only authoring UI, so always rebuild).
-  {
+  // day of the trip — unless the schedule was hand-edited (daysCustomized).
+  if (!doc.daysCustomized) {
     const byDay = new Map(); // dayNo -> { title, lines[] }
     const push = (dayNo, title, line) => {
       if (!byDay.has(dayNo)) byDay.set(dayNo, { title: '', lines: [] });

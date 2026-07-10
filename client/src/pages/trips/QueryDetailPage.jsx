@@ -14,7 +14,7 @@ import { quotesApi } from '../../api/quotes.js';
 import { commentsApi } from '../../api/comments.js';
 import { installmentsApi } from '../../api/installments.js';
 import { activityLogApi } from '../../api/activities.js';
-import { usersApi } from '../../api/masterData.js';
+import { usersApi, inclusionExclusionApi } from '../../api/masterData.js';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
 import { company } from '../../config/company.js';
@@ -56,6 +56,52 @@ function KebabMenu({ status, onEdit, onDrop, onCancel }) {
           <button onClick={() => { setOpen(false); onEdit(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil size={14} /> Edit Details</button>
           {canDrop && <button onClick={() => { setOpen(false); onDrop(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"><Ban size={14} /> Drop Query</button>}
           {canCancel && <button onClick={() => { setOpen(false); onCancel(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"><Ban size={14} /> Cancel Trip</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 3-dot menu on a quote panel: Download PDF / open quotation / edit itinerary.
+function QuoteMenu({ quote }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const downloadPdf = async () => {
+    setBusy(true);
+    try {
+      const blob = await quotesApi.pdf(quote._id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Quotation-${quote.quoteNumber || quote._id}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setOpen(false);
+    } catch { toast.error('Could not generate the PDF'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} className="btn-secondary px-2 text-sm" title="More options"><MoreVertical size={16} /></button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+          <button onClick={downloadPdf} disabled={busy} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+            <FileText size={15} className="text-slate-400" /> {busy ? 'Generating PDF…' : 'Download PDF'}
+          </button>
+          <Link to={`/quotes/${quote._id}/quotation`} onClick={() => setOpen(false)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+            <ScrollText size={15} className="text-slate-400" /> View Quotation
+          </Link>
+          <Link to={`/quotes/${quote._id}/itinerary`} onClick={() => setOpen(false)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+            <CalendarDays size={15} className="text-slate-400" /> Edit Itinerary
+          </Link>
         </div>
       )}
     </div>
@@ -505,6 +551,15 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
   const qc = useQueryClient();
 
   const { data: sel } = useQuery({ queryKey: ['quote-full', activeId], queryFn: () => quotesApi.get(activeId), enabled: !!activeId });
+  // Dynamic default inclusion/exclusion lines from the master (Settings page).
+  const { data: incExcData } = useQuery({
+    queryKey: ['inclusion-exclusions', 'defaults'],
+    queryFn: () => inclusionExclusionApi.list({ limit: 200 }),
+    staleTime: 60_000,
+  });
+  const incExcItems = (incExcData?.data || []).filter((i) => i.isActive !== false);
+  const defaultInclusions = incExcItems.filter((i) => i.type === 'inclusion').map((i) => i.text);
+  const defaultExclusions = incExcItems.filter((i) => i.type === 'exclusion').map((i) => i.text);
 
   if (!quotes.length) {
     return (
@@ -538,8 +593,10 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
   const dayGroups = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
 
   // Effective inclusion/exclusion lists: quote-specific if set, else company defaults.
-  const inclusions = sel?.inclusions?.length ? sel.inclusions : company.defaultInclusions;
-  const exclusions = sel?.exclusions?.length ? sel.exclusions : company.defaultExclusions;
+  const inclusions = sel?.inclusions?.length ? sel.inclusions
+    : (defaultInclusions.length ? defaultInclusions : company.defaultInclusions);
+  const exclusions = sel?.exclusions?.length ? sel.exclusions
+    : (defaultExclusions.length ? defaultExclusions : company.defaultExclusions);
 
   return (
     <div className="flex items-start gap-5">
@@ -584,6 +641,7 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
               <div className="flex items-center gap-2">
                 <Link to={`/quotes/${sel._id}/edit`} className="btn-primary text-sm"><Pencil size={14} /> Edit Quote</Link>
                 <button onClick={() => onShare(sel._id)} className="btn-secondary text-sm"><Share2 size={14} /> Share</button>
+                <QuoteMenu quote={sel} />
               </div>
             </div>
 
@@ -932,7 +990,7 @@ function NewQuoteTab({ id }) {
   });
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="w-full">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-sm font-semibold text-slate-800">To create a quote you can start with the below suggestions.</p>
         <input

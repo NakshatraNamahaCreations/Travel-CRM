@@ -23,7 +23,7 @@ export default function ProfilePage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
+    <div className="px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600"><UserIcon size={22} /></div>
         <div>

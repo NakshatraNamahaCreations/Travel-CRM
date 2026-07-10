@@ -13,6 +13,7 @@ import UploadQueriesPage from './pages/trips/UploadQueriesPage.jsx';
 import QueryDetailPage from './pages/trips/QueryDetailPage.jsx';
 import QuoteBuilderPage from './pages/quotes/QuoteBuilderPage.jsx';
 import QuoteViewPage from './pages/quotes/QuoteViewPage.jsx';
+import CreateItineraryPage from './pages/quotes/CreateItineraryPage.jsx';
 import ConversionPage from './pages/quotes/ConversionPage.jsx';
 import QuotationDocument from './pages/quotes/QuotationDocument.jsx';
 import SalesReportPage from './pages/reports/SalesReportPage.jsx';
@@ -33,6 +34,7 @@ import TripCheckInOutReportPage from './pages/accounting/TripCheckInOutReportPag
 import UsersPage from './pages/settings/UsersPage.jsx';
 import OrganizationPage from './pages/settings/OrganizationPage.jsx';
 import ProfilePage from './pages/settings/ProfilePage.jsx';
+import InclusionsExclusionsPage from './pages/settings/InclusionsExclusionsPage.jsx';
 import HotelsListPage from './pages/services/HotelsListPage.jsx';
 import HotelDetailPage from './pages/services/HotelDetailPage.jsx';
 import HotelFormPage from './pages/services/HotelFormPage.jsx';
@@ -87,6 +89,7 @@ export default function App() {
         <Route path="/trips/:queryId/convert/:quoteId" element={<ConversionPage />} />
         <Route path="/quotes/:id" element={<QuoteViewPage />} />
         <Route path="/quotes/:id/edit" element={<QuoteBuilderPage mode="edit" />} />
+        <Route path="/quotes/:id/itinerary" element={<CreateItineraryPage />} />
         <Route path="/sales-reports" element={<SalesReportPage />} />
         <Route path="/reports/:view" element={<OperationsReportPage />} />
         <Route path="/bookings" element={<BookingsListPage />} />
@@ -145,6 +148,7 @@ export default function App() {
         <Route path="/settings/destinations" element={<ProtectedRoute roles={['admin', 'manager']}><DestinationsPage /></ProtectedRoute>} />
         <Route path="/settings/cities" element={<ProtectedRoute roles={['admin', 'manager']}><CitiesPage /></ProtectedRoute>} />
         <Route path="/settings/states" element={<ProtectedRoute roles={['admin', 'manager']}><StatesPage /></ProtectedRoute>} />
+        <Route path="/settings/inclusions-exclusions" element={<ProtectedRoute roles={['admin', 'manager']}><InclusionsExclusionsPage /></ProtectedRoute>} />
         <Route path="/settings/profile" element={<ProfilePage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />

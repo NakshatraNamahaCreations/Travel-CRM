@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ArrowLeft, Pencil, CalendarCheck, FileText, Share2 } from 'lucide-react';
+import { ArrowLeft, Pencil, CalendarCheck, CalendarDays, FileText, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
@@ -48,13 +48,14 @@ export default function QuoteViewPage() {
         <div className="flex items-center gap-2">
           <span className={cn('rounded px-2 py-1 text-xs font-medium', STATUS_BADGE[q.status])}>{q.status}</span>
           <Link to={`/quotes/${id}/edit`} className="btn-secondary text-sm"><Pencil size={14} /> Edit</Link>
+          <Link to={`/quotes/${id}/itinerary`} className="btn-secondary text-sm"><CalendarDays size={14} /> Itinerary</Link>
           <button onClick={() => setShareOpen(true)} className="btn-secondary text-sm"><Share2 size={14} /> Share</button>
           <Link to={`/quotes/${id}/quotation`} className="btn-primary text-sm"><FileText size={14} /> Quotation PDF</Link>
           <button onClick={() => bookingMut.mutate()} className="btn-primary text-sm" disabled={bookingMut.isPending}><CalendarCheck size={14} /> {bookingMut.isPending ? 'Converting…' : 'Convert to Booking'}</button>
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="px-6 py-8">
         {/* Letterhead */}
         <div className="flex items-start justify-between border-b border-gray-200 pb-6">
           <div>

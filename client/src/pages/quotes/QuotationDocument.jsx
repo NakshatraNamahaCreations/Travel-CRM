@@ -5,6 +5,7 @@ import { addDays, format } from 'date-fns';
 import { ArrowLeft, Printer, Download, Send, Palmtree, Phone, Mail, ShieldCheck, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
+import { inclusionExclusionApi } from '../../api/masterData.js';
 import { company } from '../../config/company.js';
 import { tripNo } from '../../lib/format.js';
 import Modal from '../../components/ui/Modal.jsx';
@@ -100,6 +101,12 @@ export default function QuotationDocument() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { data: q, isLoading } = useQuery({ queryKey: ['quote', id], queryFn: () => quotesApi.get(id) });
+  // Dynamic default inclusion/exclusion lines from the master (Settings page).
+  const { data: incExcData } = useQuery({
+    queryKey: ['inclusion-exclusions', 'defaults'],
+    queryFn: () => inclusionExclusionApi.list({ limit: 200 }),
+    staleTime: 60_000,
+  });
   const [emailOpen, setEmailOpen] = useState(false);
   const [toEmail, setToEmail] = useState('');
 
@@ -152,8 +159,11 @@ export default function QuotationDocument() {
   const perPerson = pax ? Math.round((p.total || 0) / pax) : 0;
   const advance = Math.round(((p.total || 0) * company.advancePercent) / 100);
 
-  const inclusions = q.inclusions?.length ? q.inclusions : company.defaultInclusions;
-  const exclusions = q.exclusions?.length ? q.exclusions : company.defaultExclusions;
+  const incExcItems = (incExcData?.data || []).filter((i) => i.isActive !== false);
+  const dynInclusions = incExcItems.filter((i) => i.type === 'inclusion').map((i) => i.text);
+  const dynExclusions = incExcItems.filter((i) => i.type === 'exclusion').map((i) => i.text);
+  const inclusions = q.inclusions?.length ? q.inclusions : (dynInclusions.length ? dynInclusions : company.defaultInclusions);
+  const exclusions = q.exclusions?.length ? q.exclusions : (dynExclusions.length ? dynExclusions : company.defaultExclusions);
   const tcSections = Array.isArray(company.termsAndConditions) ? company.termsAndConditions : [];
   const whyUs = company.whyUs || {};
   const gallery = company.galleryImages || [];

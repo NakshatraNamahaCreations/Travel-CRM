@@ -36,7 +36,7 @@ export default function ImportPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <div className="px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Import / Upload Inventory</h1>
         <p className="mt-1 text-sm text-slate-500">Upload the client's Excel rate sheets to load Hotels, Transport & Activities into the CRM. Re-uploading a file refreshes that supplier's prices.</p>
