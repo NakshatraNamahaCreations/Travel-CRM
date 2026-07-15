@@ -202,7 +202,7 @@ export default function QuoteBuilderPage({ mode }) {
           </label>
         </div>
 
-        <PackageEditor pkg={form.packages[active]} onChange={(p) => setPkg(active, p)} nights={form.nights} startDate={form.startDate} currency={form.currency} />
+        <PackageEditor pkg={form.packages[active]} onChange={(p) => setPkg(active, p)} nights={form.nights} startDate={form.startDate} currency={form.currency} pax={form.pax} />
 
         {/* Inclusion / Exclusion */}
         <InclusionExclusionEditor

@@ -18,7 +18,7 @@ const emptyTransport = (days = [1]) => ({ days, serviceLocation: '', serviceType
 const emptyActivity = (days = [1]) => ({ days, activity: null, name: '', ticketType: '', slot: '', durationMins: 60, items: [] });
 const emptySharedItem = () => ({ type: '', qty: 1 });
 
-export default function PackageEditor({ pkg, onChange, nights, startDate, currency }) {
+export default function PackageEditor({ pkg, onChange, nights, startDate, currency, pax }) {
   const update = (patch) => onChange({ ...pkg, ...patch });
   const confirm = useConfirm();
   const [givenIdx, setGivenIdx] = useState(null);
@@ -35,6 +35,11 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   };
   // Nights already assigned to OTHER hotel rows — one hotel per night.
   const nightsTakenByOthers = (i) => (pkg.hotels || []).flatMap((x, idx) => (idx === i ? [] : (x.nights || [])));
+  // Every night of the trip already belongs to a hotel row — no more rows needed.
+  const allNightsTaken = (() => {
+    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    return Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).every((n) => used.has(n));
+  })();
   // Duplicate copies the config but not the nights (each night belongs to one row).
   const dupHotel = (i) => update({ hotels: [...pkg.hotels, { ...pkg.hotels[i], nights: [] }] });
   // Next Night: same hotel/config on the first night nobody has claimed yet.
@@ -145,7 +150,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     (pkg.activities || []).forEach((a, ai) => groupFor(daysKey(a.days)).aIdx.push(ai));
     return [...map.values()].sort((x, y) => x.days[0] - y.days[0]);
   })();
-  const dayOptionsAll = Array.from({ length: nights || 1 }, (_, i) => ({
+  // Days = nights + 1 (a 4N trip has 5 days incl. the departure day).
+  const dayOptionsAll = Array.from({ length: (Number(nights) || 1) + 1 }, (_, i) => ({
     n: i + 1,
     label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
   }));
@@ -166,9 +172,15 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       });
     }
   };
+  // Every day of the trip (1..nights+1) is already covered by a service — no new day group needed.
+  const allDaysTaken = (() => {
+    const usedDays = new Set([...(pkg.transports || []), ...(pkg.activities || [])].flatMap((x) => (Array.isArray(x.days) && x.days.length ? x.days : [x.day || 1])));
+    return Array.from({ length: (Number(nights) || 1) + 1 }, (_, i) => i + 1).every((d) => usedDays.has(d));
+  })();
   const nextDayGroup = () => {
     const usedDays = new Set([...(pkg.transports || []), ...(pkg.activities || [])].flatMap((x) => (Array.isArray(x.days) && x.days.length ? x.days : [x.day || 1])));
-    const nextDay = Array.from({ length: nights || 1 }, (_, i) => i + 1).find((d) => !usedDays.has(d)) || ((pkg.transports?.length || 0) + 1);
+    const nextDay = Array.from({ length: (Number(nights) || 1) + 1 }, (_, i) => i + 1).find((d) => !usedDays.has(d));
+    if (!nextDay) return toast.error('All days already have services');
     update({ transports: [...(pkg.transports || []), emptyTransport([nextDay])] });
   };
 
@@ -183,7 +195,10 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const a = pkg.activities[ai];
     const actId = a.activity?._id || a.activity;
     if (!name || !actId) return setAct(ai, { ticketType: name || '' });
-    const configs = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
+    // Child/infant ticket rows only when the trip actually has children.
+    const hasChildren = (pax?.children?.length || 0) > 0;
+    const configs = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean)
+      .filter((cfg) => hasChildren || !/child|infant|kid/i.test(cfg));
     const items = [];
     let hits = 0;
     for (const cfg of configs) {
@@ -331,8 +346,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     </table>
                   </div>
                   <div className="mt-2.5 flex items-center gap-2">
-                    <button type="button" onClick={() => nextNight(i)} className="btn-secondary text-xs text-brand-700"><Plus size={13} /> Next Night</button>
-                    <button type="button" onClick={() => dupHotel(i)} className="btn-secondary text-xs text-brand-700"><Copy size={12} /> Duplicate</button>
+                    <button type="button" onClick={() => nextNight(i)} disabled={allNightsTaken} title={allNightsTaken ? 'All nights are already assigned to a hotel' : undefined} className="btn-secondary text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={13} /> Next Night</button>
+                    <button type="button" onClick={() => dupHotel(i)} disabled={allNightsTaken} title={allNightsTaken ? 'All nights are already assigned to a hotel' : undefined} className="btn-secondary text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={12} /> Duplicate</button>
                     <button type="button" onClick={() => rmHotel(i)} className="btn-ghost ml-auto text-xs text-slate-500 hover:text-red-600"><Trash2 size={12} /> Remove</button>
                   </div>
                   <p className="mt-1.5 text-right text-xs"><span className="text-slate-400">Hotel cost: </span><span className="font-semibold text-slate-700 tabular-nums">{money(hotelRowCost(h), currency)}</span></p>
@@ -345,7 +360,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
             <GivenPriceModal hotel={pkg.hotels[givenIdx]} currency={currency} onClose={() => setGivenIdx(null)}
               onSave={(patch) => { setHotel(givenIdx, patch); setGivenIdx(null); }} />
           )}
-          <button type="button" onClick={addHotel} className="btn-primary text-sm"><Plus size={14} /> Add Hotel</button>
+          <button type="button" onClick={addHotel} disabled={allNightsTaken} title={allNightsTaken ? 'All nights are already assigned to a hotel' : undefined} className="btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-40"><Plus size={14} /> Add Hotel</button>
         </div>
 
         {/* Inclusions */}
@@ -757,14 +772,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
               {/* Card footer */}
               <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-2">
-                <button type="button" onClick={nextDayGroup} className="btn-secondary text-xs"><Plus size={12} /> Next Day</button>
+                <button type="button" onClick={nextDayGroup} disabled={allDaysTaken} title={allDaysTaken ? 'All days already have services' : undefined} className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-40"><Plus size={12} /> Next Day</button>
                 <button type="button" onClick={() => removeGroup(g)} className="text-xs font-medium text-red-500 hover:text-red-700">✕ Remove</button>
               </div>
             </div>
           ))}
 
           <div className="flex gap-2">
-            <button type="button" onClick={nextDayGroup} className="btn-primary text-sm"><Plus size={14} /> Add Day / Service</button>
+            <button type="button" onClick={nextDayGroup} disabled={allDaysTaken} title={allDaysTaken ? 'All days already have services' : undefined} className="btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-40"><Plus size={14} /> Add Day / Service</button>
           </div>
         </div>
       </Section>

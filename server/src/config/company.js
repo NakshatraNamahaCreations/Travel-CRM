@@ -176,8 +176,8 @@ export const company = {
   ],
 
   // "Recognised by" badge images on the quotation cover: filenames under
-  // server/src/assets (embedded into the PDF) or full http(s) URLs. Leave empty
-  // to use the built-in AATO / Andamans / Google Reviews badges.
+  // server/src/assets (embedded into the PDF) or full http(s) URLs. Shown on the
+  // cover under the AWARDED pill, next to the ratings card.
   recognisedBy: ['1.jpeg', '2.jpeg'],
 
   // Full-width hero photo on the quotation cover page.

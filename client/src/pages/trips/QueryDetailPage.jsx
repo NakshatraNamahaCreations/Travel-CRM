@@ -299,6 +299,8 @@ const lostMut = useMutation({
         {activeTab === 'basic' && (
           <BasicDetailsTab
             q={q} quote={fullQuote} comments={comments}
+            canConvert={BEFORE_CONVERT.includes(q.status)}
+            onShare={setShareQuoteId}
             onAddComment={() => setCommentOpen(true)}
             onToggleResolve={(cid, isResolved) => toggleResolve.mutate({ cid, isResolved })}
             onDeleteComment={askDeleteComment}
@@ -306,7 +308,7 @@ const lostMut = useMutation({
           />
         )}
         {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} canConvert={BEFORE_CONVERT.includes(q.status)} />}
-        {activeTab === 'new_quote' && <NewQuoteTab id={id} />}
+        {activeTab === 'new_quote' && <NewQuoteTab id={id} nights={q.nights} />}
         {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} />}
         {activeTab === 'accounting' && <AccountingTab id={id} />}
         {activeTab === 'docs' && <DocsTab quotes={quotes} />}
@@ -321,48 +323,129 @@ const lostMut = useMutation({
 }
 
 /* ----------------------------- Basic Details ----------------------------- */
-function BasicDetailsTab({ q, quote, comments, onAddComment, onToggleResolve, onDeleteComment, onSaved }) {
+function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment, onToggleResolve, onDeleteComment, onSaved }) {
   const pkg = pkgOf(quote);
   const openTasks = comments.filter((c) => c.isActionable && !c.isResolved);
+  const options = quote?.packages?.length ? quote.packages : [];
+  const multi = options.length > 1;
+  const startDate = quote?.startDate ? new Date(quote.startDate) : (q.startDate ? new Date(q.startDate) : null);
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <div className="space-y-6">
         {!quote ? (
-          <div className="card p-8 text-center text-sm text-gray-400">No quote yet — <Link to={`/trips/${q._id}/quote/new`} className="font-medium text-brand-600 hover:underline">create the first quote</Link> to see the itinerary here.</div>
+          /* No quote yet — offer Sembark-style suggested quotations to copy from. */
+          <NewQuoteTab id={q._id} nights={q.nights} />
         ) : (
           <>
             <div className="card p-5">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
                 <h3 className="font-semibold text-gray-900">Latest Quote</h3>
-                <Link to={`/quotes/${quote._id}`} className="btn-secondary text-sm"><Pencil size={14} /> Edit Quote</Link>
+                <div className="flex items-center gap-2">
+                  <Link to={`/quotes/${quote._id}/edit`} className="btn-primary text-sm"><Pencil size={14} /> Edit Quote</Link>
+                  <button onClick={() => onShare(quote._id)} className="btn-secondary text-sm"><Share2 size={14} /> Share</button>
+                  <QuoteMenu quote={quote} />
+                </div>
               </div>
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                <span className="text-xs font-semibold text-green-700">Package Quote Price</span>
-                <p className="mt-0.5"><span className="text-lg font-bold text-gray-900">INR {(quote.pricing?.total || 0).toLocaleString('en-IN')}</span> <span className="text-xs text-gray-500">(exc. GST)</span></p>
+              <p className="mt-3 text-sm font-semibold text-gray-500">Package Quote Price</p>
+
+              {/* Sembark-style option price blocks */}
+              <div className="mt-3 flex flex-wrap gap-x-14 gap-y-4">
+                {!options.length ? (
+                  <p className="flex items-baseline gap-1.5">
+                    <span className="text-[11px] font-bold text-brand-600">INR</span>
+                    <span className="text-2xl font-bold leading-none text-brand-700">{(quote.pricing?.total || 0).toLocaleString('en-IN')}</span>
+                  </p>
+                ) : options.map((p, i) => {
+                  const isDefault = i === (quote.selectedPackageIndex || 0);
+                  return (
+                    <div key={i}>
+                      <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                        <span className="underline decoration-gray-300 underline-offset-4">{multi ? `Option ${i + 1}: ` : ''}{p.name || `Package ${i + 1}`}</span>
+                        {isDefault && multi && <span className="rounded-full bg-green-600 px-2 py-0.5 text-[10px] font-semibold text-white">Default</span>}
+                      </p>
+                      <p className="mt-2 flex flex-wrap items-baseline gap-1.5">
+                        <span className="text-[11px] font-bold text-brand-600">INR</span>
+                        <span className="text-2xl font-bold leading-none text-brand-700">{(p.sellingPrice || 0).toLocaleString('en-IN')}</span>
+                        <span className="text-xs font-bold text-gray-700">({p.taxApplied ? 'inc.' : 'exc.'} GST)</span>
+                        <span className="mx-1 text-gray-300">/</span>
+                        <span className="text-[10px] font-bold text-gray-400">INR</span>
+                        <span className="text-sm font-bold text-gray-700">{(p.costPrice || 0).toLocaleString('en-IN')}</span>
+                        <span className="text-xs text-gray-400">(cost price)</span>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {quote.createdAt && (
+                <p className="mt-3 text-xs text-gray-400">
+                  Created {formatDistanceToNow(new Date(quote.createdAt), { addSuffix: true })}{quote.createdBy?.name ? ` by ${quote.createdBy.name}` : ''}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-block rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-500">Latest Quote</span>
+                {canConvert && (
+                  <Link to={`/trips/${q._id}/convert/${quote._id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50">
+                    <CheckCircle2 size={13} /> Convert using Quote
+                  </Link>
+                )}
+              </div>
+
+              {/* Trip summary strip */}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700">
+                <span className="flex items-center gap-1.5"><Calendar size={14} className="text-gray-400" /> {startDate ? format(startDate, 'd MMM, yyyy') : 'Flexible'} for {(quote.nights || 0) + 1} Days</span>
+                <span className="text-gray-300">•</span>
+                <span className="flex items-center gap-1.5"><Users size={14} className="text-gray-400" /> {quote.pax?.adults || 0} Adult{(quote.pax?.adults || 0) !== 1 ? 's' : ''}{quote.pax?.children?.length ? `, ${quote.pax.children.length} Child${quote.pax.children.length !== 1 ? 'ren' : ''}` : ''}</span>
               </div>
             </div>
 
-            {/* Accommodation */}
-            {pkg?.hotels?.length > 0 && (
-              <div className="card p-5">
-                <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bed size={16} className="text-brand-500" /> Accommodation</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="text-left text-xs text-gray-400"><tr><th className="py-1.5">Night</th><th>Hotel</th><th>Meal</th><th>Rooms</th></tr></thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {pkg.hotels.map((h, i) => (
-                        <tr key={i}>
-                          <td className="py-2 pr-2 text-gray-500">{(h.nights || []).join(', ') || '—'}</td>
-                          <td className="py-2 pr-2"><span className="font-medium text-gray-900">{h.hotelName}</span>{h.city ? <span className="text-xs text-gray-400"> · {h.city}</span> : ''}</td>
-                          <td className="py-2 pr-2">{h.mealPlan || '—'}</td>
-                          <td className="py-2 text-gray-600">{h.rooms} {h.roomType || 'Room'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            <h3 className="text-base font-bold text-gray-900">Services</h3>
+
+            {/* Accommodation per option — black option pill above each table */}
+            {(options.length ? options : [pkg].filter(Boolean)).map((p, i) => (
+              <div key={i}>
+                {multi && (
+                  <span className="mb-2 inline-block rounded-lg bg-gray-900 px-4 py-2 text-sm font-bold text-white">
+                    Option {i + 1}: {p.name || `Package ${i + 1}`}
+                  </span>
+                )}
+                {p?.hotels?.length > 0 ? (
+                  <div className="card p-5">
+                    <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bed size={16} className="text-brand-500" /> Accommodation</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs text-gray-400"><tr><th className="py-1.5 font-medium">Night</th><th className="font-medium">Hotel</th><th className="font-medium">Meal</th><th className="font-medium">Rooms</th><th className="text-right font-medium">Price</th></tr></thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {p.hotels.map((h, j) => {
+                            const firstNight = (h.nights || [])[0];
+                            return (
+                              <tr key={j}>
+                                <td className="py-2.5 pr-2 align-top">
+                                  <p className="font-medium text-gray-800">{(h.nights || []).map(ord).join(', ') || '—'}</p>
+                                  {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
+                                </td>
+                                <td className="py-2.5 pr-2 align-top">
+                                  <p className="font-medium text-gray-900">{h.hotelName}</p>
+                                  <p className="text-xs text-gray-400">{[h.city, h.stars ? `${h.stars} Star` : null].filter(Boolean).join(', ')}</p>
+                                </td>
+                                <td className="py-2.5 pr-2 align-top text-gray-600">{h.mealPlan || '—'}</td>
+                                <td className="py-2.5 pr-2 align-top">
+                                  <p className="text-gray-800">{h.rooms || 1} {h.roomType || 'Room'}</p>
+                                  <p className="text-xs text-gray-400">{h.paxPerRoom || 2} Pax{h.aweb ? ` +${h.aweb} AWEB` : ''}{h.cnb ? ` +${h.cnb} CNB` : ''}</p>
+                                </td>
+                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{h.amount ? `₹${h.amount.toLocaleString('en-IN')}` : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="card p-5 text-sm text-gray-400">No hotels in this option.</div>
+                )}
               </div>
-            )}
+            ))}
 
             {/* Transportation & Activities */}
             {pkg?.transports?.length > 0 && (
@@ -969,7 +1052,7 @@ function EditInclusionsModal({ quote, defaults, onClose, onSaved }) {
 
 /* -------------------------------- New Quote ------------------------------ */
 // Start a quote from an existing one (searchable suggestions) or from scratch.
-function NewQuoteTab({ id }) {
+function NewQuoteTab({ id, nights }) {
   const navigate = useNavigate();
   const [term, setTerm] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -979,8 +1062,8 @@ function NewQuoteTab({ id }) {
   }, [term]);
 
   const { data: suggestions = [], isLoading } = useQuery({
-    queryKey: ['quote-suggestions', id, debounced],
-    queryFn: () => quotesApi.suggestions({ search: debounced || undefined, exclude: id, limit: 6 }),
+    queryKey: ['quote-suggestions', id, debounced, nights],
+    queryFn: () => quotesApi.suggestions({ search: debounced || undefined, exclude: id, nights: nights || undefined, limit: 6 }),
   });
 
   const cloneMut = useMutation({
@@ -993,27 +1076,28 @@ function NewQuoteTab({ id }) {
     <div className="w-full">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-sm font-semibold text-slate-800">To create a quote you can start with the below suggestions.</p>
-        <input
-          className="input w-72"
-          placeholder="Search by trip id or guest name"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input w-72"
+            placeholder="Search by trip id or guest name"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+          <Link to={`/trips/${id}/quote/new`} className="btn-primary inline-flex"><Plus size={15} /> Create Custom Quotation</Link>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="py-16 text-center text-slate-400">Loading suggestions…</div>
       ) : !suggestions.length ? (
-        <div className="card p-10 text-center text-sm text-slate-400">No matching quotes found. Create a custom quotation below.</div>
+        <div className="card p-10 text-center text-sm text-slate-400">
+          {debounced ? 'No matching quotes found.' : `No past quotes with the same duration (${nights || 0}N) found — search above for any quote, or create a custom quotation.`}
+        </div>
       ) : (
         suggestions.map((sq) => (
           <SuggestionCard key={sq._id} quote={sq} pending={cloneMut.isPending} onUse={() => cloneMut.mutate(sq._id)} />
         ))
       )}
-
-      <div className="mt-6 text-center">
-        <Link to={`/trips/${id}/quote/new`} className="btn-primary inline-flex px-6"><Plus size={15} /> Create Custom Quotation</Link>
-      </div>
     </div>
   );
 }

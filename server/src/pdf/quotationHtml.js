@@ -169,10 +169,11 @@ export function quotationHtml(q) {
   }).join('');
   const ferryLegend = ferries.map((f) => esc(f.sector)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
-  // ---- Hotels table (page 1 — compact, with star rating under the name) ----
+  // ---- Hotels tables (summary page) — one card per package option with the
+  // option's name + price in the heading so options compare at a glance. ----
   const hotels = pkg.hotels || [];
   const starRow = (n) => `<span class="tstars">${'&#9733;'.repeat(Math.min(n || 3, 5))}</span>`;
-  const hotelRows = hotels.map((h) => {
+  const hotelRowsOf = (list) => list.map((h) => {
     const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
     return `<tr>
       <td class="bcell hcell">
@@ -184,7 +185,21 @@ export function quotationHtml(q) {
       <td>${h.aweb || 0}</td><td>${h.cnb || 0}</td>
       <td><span class="pill navy">${esc(h.mealPlan)}</span></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="muted">No hotels added.</td></tr>';
+  }).join('');
+  const hotelOptionCards = (q.packages || [])
+    .filter((p) => (p.hotels || []).length)
+    .map((p, i, arr) => {
+      const legend = p.hotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
+      const label = arr.length > 1 ? `Option ${i + 1}: ${esc(p.name || `Package ${i + 1}`)}` : `Hotel Information &mdash; ${esc(p.name || 'Package')}`;
+      return `<div class="seccard">
+        <div class="sechead"><span class="sicon">&#127976;</span> ${label}<span class="secprice">${inr(p.sellingPrice || 0)}</span></div>
+        <div class="tbl flat"><table>
+          <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
+          <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
+          ${legend ? `<div class="legend">${legend}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
 
   // ---- Hotels / Accommodations cards (own section — image + details) ----
   const ordinalPdf = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -240,8 +255,16 @@ export function quotationHtml(q) {
   };
 
   // ---- Itinerary introduction (day list) ----
+  // Each row: day title plus that day's services, e.g. "Port Blair Arrival - Cellular Jail Visit with Sound & Light Show".
   const introRows = (q.days || []).map((d) => {
-    const headline = (d.title && !/^day\s*\d+$/i.test(d.title.trim()) && d.title)
+    const onDay = (x, fallback) => (Array.isArray(x.days) && x.days.length ? x.days : [x.day || fallback]).includes(d.dayNumber);
+    const title = (d.title && !/^day\s*\d+$/i.test(d.title.trim()) && d.title.trim()) || '';
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const svcNames = [
+      ...(pkg.transports || []).filter((t) => onDay(t, 1)).map((t) => t.serviceType),
+      ...(pkg.activities || []).filter((a) => onDay(a, 1)).map((a) => a.name),
+    ].filter(Boolean).filter((s, i, arr) => norm(s) !== norm(title) && arr.findIndex((x) => norm(x) === norm(s)) === i);
+    const headline = [title, svcNames.join(' + ')].filter(Boolean).join(' - ')
       || String(d.description || '').split(/\n|·|•/).map((x) => x.trim()).filter(Boolean).join(' + ')
       || 'Leisure day';
     return `<div class="introrow"><span class="introday">Day ${d.dayNumber}</span>${esc(headline)}</div>`;
@@ -363,7 +386,7 @@ export function quotationHtml(q) {
     }).join('');
     return `<div class="dayblk">
       <div class="dwband">Day ${n} ${esc(cityOfDay(n))} &nbsp;&#124;&nbsp; ${date ? fmtDateWD(date) : ''}</div>
-      <div class="dwbody">${title}${richBlocks}${lines}${sightBlock(d)}${strips}</div>
+      <div class="dwbody">${strips}${title}${richBlocks}${lines}${sightBlock(d)}</div>
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
 
@@ -470,6 +493,7 @@ export function quotationHtml(q) {
   .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
   .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
   .sechead .sicon { font-size: 14px; }
+  .secprice { margin-left: auto; background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2px 13px; font-size: 12.5px; font-weight: 800; letter-spacing: 0; text-transform: none; }
   .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
   .tbl.flat.sep { border-top: 1px solid var(--line); }
 
@@ -536,10 +560,20 @@ export function quotationHtml(q) {
   .destcov .sv { font-size: 14px; margin-top: 6px; color: var(--ink); }
   .stat .ss { font-size: 10.5px; color: #64748b; margin-top: 2px; }
 
-  /* ---- "Recognised by" badges on the cover ---- */
+  /* ---- Ratings + award badges on the cover ---- */
   .recog { margin-top: 30px; text-align: center; }
   .recogpill { display: inline-block; background: #f6b93b; color: #123a63; font-weight: 800; font-size: 13px; letter-spacing: 0.08em; padding: 6px 26px; border-radius: 999px; }
-  .recogrow { margin-top: 14px; display: flex; justify-content: center; align-items: stretch; gap: 18px; }
+  .recogrow { margin-top: 14px; display: flex; justify-content: center; align-items: stretch; gap: 28px; }
+  .ratecard { border: 2px dashed #cbd5e1; border-radius: 14px; background: #fff; padding: 10px 26px 12px; }
+  .ratecard .rctitle { text-align: center; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+  .rcitems { display: flex; justify-content: center; gap: 40px; margin-top: 8px; }
+  .rcitem { text-align: center; }
+  .rcitem .rclogo { height: 46px; object-fit: contain; }
+  .rccap { margin-top: 4px; font-size: 11.5px; color: #37475a; }
+  .rccap b { font-size: 12.5px; color: var(--ink); }
+  .awardrow { display: flex; justify-content: center; align-items: stretch; gap: 14px; margin-top: 8px; }
+  .awardrow .rbadge { min-width: 0; min-height: 0; border: 0; box-shadow: none; padding: 0 6px; }
+  .awardrow .rbadge img { max-height: 78px; }
   .rbadge { min-width: 140px; max-width: 220px; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px 14px; box-shadow: 0 1px 3px rgba(15,45,80,0.08); }
   .rbadge img { max-width: 100%; max-height: 120px; object-fit: contain; }
   .aato { text-align: center; }
@@ -581,7 +615,7 @@ export function quotationHtml(q) {
   .dwsight { border-top: 1px dashed #d5e0ea; margin-top: 9px; padding-top: 8px; }
   .dwsighthead { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); margin-bottom: 4px; }
   .spill { display: inline-block; background: #eaf3fb; color: var(--blue-dark); border: 1px solid #cfe2f1; border-radius: 999px; padding: 2.5px 11px; font-size: 10.5px; font-weight: 700; margin: 0 5px 4px 0; }
-  .hstrip { border-top: 1px dashed #c9d8e5; margin-top: 10px; padding-top: 10px; }
+  .hstrip { border-bottom: 1px dashed #c9d8e5; margin-bottom: 10px; padding-bottom: 10px; }
   .hstrip .dwtitle { margin-bottom: 7px; }
   .hthumb { width: 88px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
   .hsname { font-weight: 800; font-size: 13px; color: var(--blue-dark); margin-bottom: 4px; }
@@ -701,30 +735,27 @@ export function quotationHtml(q) {
   ${destCovered ? `<div class="destcov"><div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div></div>` : ''}
 
   <div class="recog">
-    <span class="recogpill">RECOGNISED BY</span>
     <div class="recogrow">
-      ${(company.recognisedBy || []).length
-        ? company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')
-        : `
-      <div class="rbadge">
-        <div class="aato">
-          <div class="aatoring">AATO</div>
-          <p class="aatosub">ANDAMAN ASSOCIATION<br/>OF TOUR OPERATORS</p>
+      <div class="ratecard">
+        <div class="rctitle">Highest Rated</div>
+        <div class="rcitems">
+          <div class="rcitem">
+            <img class="rclogo" src="${assetUri('ta-logo.png')}" alt=""/>
+            <div class="rccap"><b>4.5+</b> (200+ Reviews)</div>
+          </div>
+          <div class="rcitem">
+            <img class="rclogo" src="${assetUri('google-logo.png')}" alt=""/>
+            <div class="rccap"><b>5.0 &#9733;</b> (400+ Reviews)</div>
+          </div>
         </div>
       </div>
-      <div class="rbadge">
-        <div class="andmn">
-          <p class="a1">andamans</p>
-          <p class="a2">Emerald. Blue. And You.</p>
+      ${(company.recognisedBy || []).length ? `
+      <div class="ratecard">
+        <div class="rctitle">Awarded</div>
+        <div class="awardrow">
+          ${company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')}
         </div>
-      </div>
-      <div class="rbadge">
-        <div class="goog">
-          <p class="g1"><span style="color:#4285F4">G</span><span style="color:#EA4335">o</span><span style="color:#FBBC05">o</span><span style="color:#4285F4">g</span><span style="color:#34A853">l</span><span style="color:#EA4335">e</span></p>
-          <p class="g2">Customer Reviews</p>
-          <p class="g3">&#9733;&#9733;&#9733;&#9733;&#9733;</p>
-        </div>
-      </div>`}
+      </div>` : ''}
     </div>
   </div>
   ${BOTTOMBAR}
@@ -733,25 +764,6 @@ export function quotationHtml(q) {
 <!-- ===== PAGE 2 — Quote summary ===== -->
 <div class="page pb">
   ${LETTERHEAD}
-
-  <div class="panels">
-    <div class="panel">
-      <div class="ph">Quotation for:</div>
-      <div class="pc">
-        <div style="font-weight:800;font-size:14.5px">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')} &nbsp;&#124;&nbsp; M${esc(pad4(q.query?.queryNumber))}</div>
-        ${guest.phones?.[0] ? `<div style="font-size:12px;color:#37475a;margin-top:2px">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
-        <div style="margin-top:5px;font-size:12.5px;font-weight:700">Adults: ${paxAdults}, &nbsp;Child: ${paxChildren} &nbsp;&nbsp;<span class="pill navy">${esc(pkg.name || 'Package')}</span></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="ph">${esc(tripTitle)}:</div>
-      <div class="pc" style="text-align:right">
-        <div style="font-weight:800;font-size:12.5px">Travel Dates:</div>
-        <div style="font-size:13px;margin-top:3px">${fmtDate(start)}</div>
-        <div style="font-size:13px">${end ? fmtDate(end) : ''}</div>
-      </div>
-    </div>
-  </div>
 
   ${transferRows ? `<div class="seccard">
     <div class="sechead"><span class="sicon">&#9972;</span> Cruise &amp; Ferry Information</div>
@@ -762,31 +774,13 @@ export function quotationHtml(q) {
     </div>
   </div>` : ''}
 
-  <div class="seccard">
-    <div class="sechead"><span class="sicon">&#127976;</span> Hotel Information</div>
-    <div class="tbl flat"><table>
-      <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
-      <tbody>${hotelRows}</tbody></table>
-      ${hotelLegend ? `<div class="legend">${hotelLegend}</div>` : ''}
-    </div>
-  </div>
-
-  <div class="seccard">
-    <div class="sechead"><span class="sicon">&#128181;</span> Transparent Breakage of all Costs</div>
-    <div class="tbl flat"><table>
-      <thead><tr><th>Hotel Cost</th><th>Tour Cost</th><th>Permits &amp; Boat Cost</th><th>Ferry Cost</th><th>Misc Cost</th></tr></thead>
-      <tbody><tr>
-        <td class="dkcell">${inr(cats.hotel, 2)}</td><td class="dkcell">${inr(cats.tour, 2)}</td>
-        <td class="dkcell">${inr(cats.permits, 2)}</td><td class="dkcell">${inr(cats.ferry, 2)}</td><td class="dkcell">${cats.misc ? inr(cats.misc, 2) : ''}</td>
-      </tr></tbody></table>
-    </div>
-  </div>
+  ${hotelOptionCards}
 
   <div class="seccard">
     <div class="sechead"><span class="sicon">&#128181;</span> Fare Summary</div>
     <table class="fare">
-      <tr><td class="k">Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
       <tr><td class="k">Total Cost (without tax)</td><td class="v">${inr(taxable, 2)}</td></tr>
+      <tr><td class="k">Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
       <tr><td class="k">Discount</td><td class="v">${p.discount ? `&minus; ${inr(p.discount, 2)}` : inr(0)}</td></tr>
       <tr><td class="k">Tour Cost After Discount</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
       <tr><td class="k">No. of Travellers</td><td class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</td></tr>
@@ -806,11 +800,9 @@ export function quotationHtml(q) {
     <div><b>BOOKING TERMS:</b>&nbsp; ${esc(company.bookingTerms)}</div>
   </div>
   ${BOTTOMBAR}
-</div>
 
-<!-- ===== Itinerary Introduction + Day Wise Itinerary ===== -->
-<div class="page pb">
-  ${introRows ? `<div class="band">Itinerary Introduction</div>
+  <!-- Itinerary continues in the same flow — no forced page break -->
+  ${introRows ? `<div class="band" style="margin-top:14px">Itinerary Introduction</div>
   <div style="margin-bottom:16px">${introRows}</div>` : ''}
   <div class="band">${q.nights}N${(q.nights || 0) + 1}D Day Wise Itinerary:</div>
   <div class="grow">${dayBlocks}</div>

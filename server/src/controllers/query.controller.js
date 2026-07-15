@@ -6,6 +6,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { QUERY_STATUSES, QUERY_STATUS_VALUES } from '../constants/queryStatus.js';
+import { Quote } from '../models/Quote.js';
 import { logActivity } from './activity.controller.js';
 
 const LABEL = Object.fromEntries(QUERY_STATUSES.map((s) => [s.value, s.label]));
@@ -278,6 +279,14 @@ export const updateQuery = asyncHandler(async (req, res) => {
     runValidators: true,
   }).populate(POPULATE);
   if (!item) throw ApiError.notFound('Query not found');
+  // Keep open quotes in step with the trip's traveller count — accepted
+  // (converted) quotes keep the pax they were sold with.
+  if (req.body.pax) {
+    await Quote.updateMany(
+      { query: item._id, status: { $in: ['draft', 'sent'] } },
+      { pax: item.pax },
+    );
+  }
   return ok(res, item);
 });
 

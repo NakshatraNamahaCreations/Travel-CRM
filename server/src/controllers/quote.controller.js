@@ -43,6 +43,8 @@ export const quoteSuggestions = asyncHandler(async (req, res) => {
 
   const filter = {};
   if (exclude) filter.query = { $ne: exclude };
+  // Suggest only quotes of the same trip duration; an explicit search overrides this.
+  if (req.query.nights && !search?.trim()) filter.nights = Number(req.query.nights);
   if (search?.trim()) {
     const term = search.trim();
     const or = [{ 'guest.name': new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }];
