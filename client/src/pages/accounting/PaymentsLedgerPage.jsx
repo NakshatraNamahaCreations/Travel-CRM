@@ -152,6 +152,156 @@ function LogPaymentModal({ inst, direction, onClose, onSaved }) {
   );
 }
 
+/* Sembark-style instalment drill-down: amount + Nth instalment badge, trip
+   link, contact card, due/paid banner with Log Payment, and Comments /
+   Transactions tabs. Opened by clicking the amount in the ledger. */
+function InstalmentDetailsModal({ inst, direction, onClose, onLogPayment, onSaved }) {
+  const [tab, setTab] = useState('comments');
+  const [comments, setComments] = useState(inst.comments || []);
+  const [body, setBody] = useState('');
+
+  // Position of this instalment within its booking's schedule → "1st Instalment".
+  const { data: schedule } = useQuery({
+    queryKey: ['inst-schedule', inst.booking, direction],
+    queryFn: () => installmentsApi.list({ direction, booking: inst.booking, filter: 'all' }),
+    enabled: !!inst.booking,
+  });
+  const rows = (schedule?.data?.length ? schedule.data : [inst])
+    .slice()
+    .sort((a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0));
+  const idx = Math.max(0, rows.findIndex((r) => r._id === inst._id));
+  const ordLabel = ['1st', '2nd', '3rd'][idx] || `${idx + 1}th`;
+  const nights = inst.startDate && inst.endDate
+    ? Math.max(0, Math.round((new Date(inst.endDate) - new Date(inst.startDate)) / 86400000))
+    : null;
+
+  const commentMut = useMutation({
+    mutationFn: () => installmentsApi.addComment(inst._id, body),
+    onSuccess: (updated) => {
+      setComments(updated?.comments || [...comments, { _id: Date.now(), body, createdAt: new Date() }]);
+      setBody('');
+      toast.success('Comment added');
+      onSaved?.();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const openReceipt = async () => {
+    const t = toast.loading('Preparing receipt…');
+    try {
+      const blob = await installmentsApi.receipt(inst._id);
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch {
+      toast.error('Could not generate the receipt');
+    } finally {
+      toast.dismiss(t);
+    }
+  };
+
+  const phone = inst.guest?.phones?.[0];
+
+  return (
+    <Modal open onClose={onClose} title="Instalment Details" width="max-w-2xl">
+      <div className="space-y-4">
+        {/* Amount */}
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-slate-900">Instalment Amount ({inst.currency || 'INR'})</h3>
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">{ordLabel} Instalment</span>
+          </div>
+          <p className="mt-0.5"><span className="text-xs font-semibold text-slate-400">{inst.currency || 'INR'}</span> <span className="text-2xl font-bold text-slate-900">{Number(inst.amount).toLocaleString('en-IN')}</span>{inst.paid && inst.paidAmount ? <span className="ml-2 text-sm text-slate-400">{Number(inst.paidAmount).toLocaleString('en-IN')} paid</span> : null}</p>
+          <Link to={inst.query ? `/trips/${inst.query}` : '#'} onClick={onClose} className="mt-1 inline-block text-sm font-semibold text-brand-700 hover:underline">
+            For Trip {tripNo(inst.tripId)}{inst.destinations?.length ? ` • ${inst.destinations.join(', ')}` : ''}{nights != null ? ` • ${nights}N, ${nights + 1}D` : ''}
+          </Link>
+        </div>
+
+        {/* Contact card */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60">
+          <div className="flex items-center justify-between px-4 pt-3">
+            <p className="font-bold text-slate-900">Contact Details</p>
+            <span className="rounded border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">{direction === 'incoming' ? 'Guest' : 'Supplier'}</span>
+          </div>
+          <p className="px-4 py-1.5 text-sm text-slate-800">{direction === 'incoming' ? guestLabel(inst.guest) : inst.supplierName || 'Supplier'}</p>
+          <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+            {[
+              phone ? `+${phone.countryCode || '91'} ${phone.number}` : null,
+              inst.destinations?.join(', ') || null,
+              inst.startDate ? `${format(new Date(inst.startDate), 'd MMM')}${inst.endDate ? ` – ${format(new Date(inst.endDate), 'd MMM yyyy')}` : ''}` : null,
+            ].filter(Boolean).join(' • ') || '—'}
+          </div>
+        </div>
+
+        {/* Status banner */}
+        {inst.paid ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-green-800"><Check size={15} /> Paid {inst.paidOn ? `on ${format(new Date(inst.paidOn), 'd MMM, yyyy')}` : ''}{inst.reference ? ` · Ref: ${inst.reference}` : ''}</p>
+            {direction === 'incoming' && (
+              <button onClick={openReceipt} className="rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"><FileText size={12} className="mr-1 inline" /> Receipt</button>
+            )}
+          </div>
+        ) : (
+          <div className={cn('rounded-xl border px-4 py-3', inst.status === 'overdue' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50')}>
+            <p className={cn('text-sm font-medium', inst.status === 'overdue' ? 'text-rose-800' : 'text-slate-700')}>
+              🕐 Payment {inst.status === 'overdue' ? 'Overdue' : 'Due'} {inst.dueDate ? format(new Date(inst.dueDate), 'd MMM, yyyy') : ''}
+            </p>
+            <button onClick={onLogPayment} className="btn-primary mt-2 text-sm"><FileText size={13} /> Log Payment</button>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div>
+          <div className="flex gap-6 border-b border-slate-200">
+            {[['comments', 'Comments'], ['transactions', 'Transactions']].map(([k, label]) => (
+              <button key={k} onClick={() => setTab(k)} className={cn('border-b-2 pb-2 text-sm font-semibold', tab === k ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>{label}</button>
+            ))}
+          </div>
+
+          {tab === 'comments' && (
+            <div className="pt-3">
+              {comments.length ? (
+                <div className="mb-3 max-h-44 space-y-2 overflow-y-auto">
+                  {comments.map((c) => (
+                    <div key={c._id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {c.body}
+                      {c.createdAt && <span className="ml-2 text-xs text-slate-400">{rel(c.createdAt)}</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-3 py-4 text-center text-sm text-slate-400">No comments added!</p>
+              )}
+              <div className="flex gap-2">
+                <input className="input flex-1" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a comment about this payment…" />
+                <button onClick={() => body.trim() && commentMut.mutate()} disabled={commentMut.isPending} className="btn-secondary">{commentMut.isPending ? 'Saving…' : 'Add'}</button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'transactions' && (
+            <div className="pt-3">
+              {inst.paid ? (
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs text-slate-400"><tr><th className="py-1.5">Paid On</th><th>Amount ({inst.currency})</th><th>Debit → Credit</th><th>Reference</th></tr></thead>
+                  <tbody>
+                    <tr className="border-t border-slate-100">
+                      <td className="py-2">{inst.paidOn ? format(new Date(inst.paidOn), 'd MMM, yyyy h:mm a') : '—'}</td>
+                      <td className="font-semibold tabular-nums">{Number(inst.paidAmount || inst.amount).toLocaleString('en-IN')}</td>
+                      <td className="text-xs text-slate-500">{[inst.debitAccount, inst.creditAccount].filter(Boolean).join(' → ') || '—'}</td>
+                      <td className="text-slate-500">{inst.reference || '—'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : (
+                <p className="py-4 text-center text-sm text-slate-400">No transactions yet — payment hasn't been logged.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function CommentModal({ inst, onClose, onSaved }) {
   const [body, setBody] = useState('');
   const mut = useMutation({
@@ -180,6 +330,7 @@ export default function PaymentsLedgerPage({ direction }) {
   const [search, setSearch] = useState('');
   const [logFor, setLogFor] = useState(null);
   const [commentFor, setCommentFor] = useState(null);
+  const [detailsFor, setDetailsFor] = useState(null);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
 
@@ -273,7 +424,9 @@ export default function PaymentsLedgerPage({ direction }) {
                 ) : items.map((i) => (
                   <tr key={i._id} className="align-top hover:bg-slate-50">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900"><span className="text-xs text-slate-400">{i.currency} </span>{Number(i.amount).toLocaleString('en-IN')}</div>
+                      <button onClick={() => setDetailsFor(i)} title="View instalment details" className="text-left">
+                        <div className="font-semibold text-slate-900 hover:text-brand-700 hover:underline"><span className="text-xs text-slate-400">{i.currency} </span>{Number(i.amount).toLocaleString('en-IN')}</div>
+                      </button>
                       <div className="mt-1"><StatusBadge inst={i} /></div>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{rel(i.dueDate)}</td>
@@ -302,6 +455,15 @@ export default function PaymentsLedgerPage({ direction }) {
         </div>
       </div>
 
+      {detailsFor && (
+        <InstalmentDetailsModal
+          inst={detailsFor}
+          direction={direction}
+          onClose={() => setDetailsFor(null)}
+          onLogPayment={() => { setLogFor(detailsFor); setDetailsFor(null); }}
+          onSaved={refresh}
+        />
+      )}
       {logFor && <LogPaymentModal inst={logFor} direction={direction} onClose={() => setLogFor(null)} onSaved={() => { setLogFor(null); refresh(); }} />}
       {commentFor && <CommentModal inst={commentFor} onClose={() => setCommentFor(null)} onSaved={() => { setCommentFor(null); refresh(); }} />}
     </div>
