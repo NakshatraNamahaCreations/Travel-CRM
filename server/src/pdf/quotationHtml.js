@@ -229,11 +229,11 @@ export function quotationHtml(q, org = null) {
       const totalWithGst = p.taxApplied ? (p.sellingPrice || 0) : Math.round((p.sellingPrice || 0) * (1 + gstPct / 100));
       const payable = Math.round(totalWithGst / 2);
       return `<div class="seccard">
-        <div class="sechead"><span class="sicon">&#127976;</span> ${label}<span class="secprice">${inr(p.sellingPrice || 0)}</span></div>
+        <div class="sechead"><span class="sicon">&#127976;</span> ${label}</div>
         <div class="tbl flat"><table>
           <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
-          <div class="psrow"><span>Total Tour Cost (incl. ${gstPct}% ${esc(p.taxName || 'GST')})</span><span class="psval">${inr(totalWithGst)}</span></div>
+          <div class="psrow"><span>Total Tour Cost with these Hotels (incl. ${gstPct}% ${esc(p.taxName || 'GST')})</span><span class="psval">${inr(totalWithGst)}</span></div>
           <div class="psrow pshl"><span>Total Payable Amount to Confirm Booking (50%)</span><span class="psval">${inr(payable)}</span></div>
         </div>
       </div>`;
@@ -487,15 +487,16 @@ export function quotationHtml(q, org = null) {
   :root {
     --blue: #1577bd; --blue-dark: #0e5fa0; --navy: #14498f;
     --lblue: #d9ecf9; --lblue2: #eef6fc; --line: #cfdae5;
-    --yellow: #fdfbd8; --green: #18a24b; --ink: #16212e;
+    --yellow: #fdefad; --green: #18a24b; --ink: #16212e;
   }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
+  /* Page stays white; the soft sky tint lives INSIDE the cards/tables. */
   body { font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--ink); font-size: 13px; background: #fff; -webkit-font-smoothing: antialiased; }
 
   /* ---- page wrapper: flex column so the blue bar pins to the bottom ---- */
   .page { min-height: 272mm; display: flex; flex-direction: column; }
   .pb { page-break-after: always; }
-  .bottombar { margin-top: auto; height: 7px; background: var(--blue); border-radius: 2px; }
+  .bottombar { margin-top: auto; height: 7px; background: linear-gradient(90deg, var(--blue-dark), var(--blue) 45%, #f6a83b); border-radius: 2px; }
   .grow { flex: 1; }
 
   /* ---- letterhead: brand + Address | Email | Phone columns ---- */
@@ -511,7 +512,7 @@ export function quotationHtml(q, org = null) {
   .lh-col b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 3px; }
 
   /* ---- blue band heading ---- */
-  .band { background: var(--blue); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 17px; border-radius: 5px; margin-bottom: 14px; }
+  .band { background: linear-gradient(90deg, var(--blue-dark), var(--blue) 55%, #2f96dd); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 17px; border-radius: 5px; margin-bottom: 14px; }
 
   /* ---- page-1 quotation panels ---- */
   .panels { display: flex; justify-content: space-between; gap: 56px; margin: 2px 0 4px; }
@@ -526,16 +527,17 @@ export function quotationHtml(q, org = null) {
   .h1 { font-size: 21px; font-weight: 800; color: var(--ink); margin: 10px 0 4px; }
 
   /* ---- tables ---- */
-  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #fff; }
+  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #f8fbfe; }
   .tbl table { width: 100%; border-collapse: collapse; }
   .tbl thead th { background: #eaf3fb; color: var(--navy); padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 800; border-right: 1px solid #d8e7f5; }
   .tbl thead th:last-child { border-right: 0; }
   .tbl td { padding: 6.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px dashed #cddcea; }
+  .tbl tbody tr:nth-child(even) td { background: #ecf4fc; }
 
   /* ---- section cards (summary page) ---- */
-  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #f6faff; break-inside: avoid; page-break-inside: avoid; }
   .ordivide { border-top: 2px dashed #9fbddd; margin: 18px 0; }
-  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
+  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue), #f2f9ff 70%, #fff); border-left: 4px solid var(--blue); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
   .sechead .sicon { font-size: 14px; }
   .secprice { margin-left: auto; background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2px 13px; font-size: 12.5px; font-weight: 800; letter-spacing: 0; text-transform: none; }
   .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
@@ -547,7 +549,7 @@ export function quotationHtml(q, org = null) {
   .fare tr:first-child td { border-top: 0; }
   .fare td.k { font-weight: 700; color: var(--ink); }
   .fare td.v { text-align: right; font-weight: 700; color: var(--blue-dark); }
-  .fare tr.final td { background: var(--yellow); border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); font-size: 14px; }
+  .fare tr.final td { background: linear-gradient(90deg, #fde68a, #fdf3c0); border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); font-size: 14px; }
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
   .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 4.5px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
@@ -565,7 +567,7 @@ export function quotationHtml(q, org = null) {
   .ext { font-size: 8px; }
 
   /* ---- Hotels / Accommodations cards ---- */
-  .hcard { display: flex; align-items: stretch; gap: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
+  .hcard { display: flex; align-items: stretch; gap: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: #f8fbfe; }
   .hinfo { flex: 1; min-width: 0; }
   .nbadge { display: inline-block; border: 1.4px solid var(--blue); color: var(--blue-dark); font-weight: 800; font-size: 10.5px; border-radius: 6px; padding: 1.5px 7px; }
   .hnights { font-size: 14.5px; color: #2c3d51; margin-bottom: 2px; }
@@ -646,8 +648,8 @@ export function quotationHtml(q, org = null) {
 
   /* ---- day-wise itinerary ---- */
   .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
-  .dwband { background: var(--blue); color: #fff; font-weight: 700; font-size: 13.5px; padding: 7px 14px; border-radius: 5px 5px 0 0; }
-  .dwbody { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; background: #fff; padding: 11px 15px; }
+  .dwband { background: linear-gradient(90deg, var(--blue-dark), var(--blue) 55%, #2f96dd); color: #fff; font-weight: 700; font-size: 13.5px; padding: 7px 14px; border-radius: 5px 5px 0 0; }
+  .dwbody { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; background: #f8fbfe; padding: 11px 15px; }
   .dwtitle { font-weight: 800; font-size: 13px; color: var(--ink); text-transform: uppercase; margin-bottom: 6px; }
   .ditem { font-size: 12.5px; color: #2c3d51; line-height: 1.65; }
   .svcblk { margin-bottom: 8px; }
@@ -676,7 +678,7 @@ export function quotationHtml(q, org = null) {
 
   /* ---- optional activities ---- */
   .oagrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
-  .oacard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-align: center; padding-bottom: 10px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .oacard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-align: center; padding-bottom: 10px; background: #f8fbfe; break-inside: avoid; page-break-inside: avoid; }
   .oacard img { width: 100%; height: 108px; object-fit: cover; display: block; margin-bottom: 8px; }
   .oaname { font-weight: 800; font-size: 12.5px; color: var(--ink); text-transform: uppercase; padding: 0 8px; }
   .oacost { font-size: 11.5px; color: #2c3d51; margin-top: 3px; }
@@ -693,7 +695,7 @@ export function quotationHtml(q, org = null) {
   .extra .er { flex: 1; background: var(--blue); color: #fff; font-size: 13px; padding: 15px 16px; display: flex; align-items: center; }
 
   /* ---- info boxes (note / inclusions / exclusions) ---- */
-  .box { border: 1.2px solid var(--line); border-radius: 10px; padding: 11px 15px; margin-top: 12px; background: #fff; }
+  .box { border: 1.2px solid var(--line); border-radius: 10px; padding: 11px 15px; margin-top: 12px; background: #f8fbfe; }
   .box.g { background: #f2fbf5; border-color: #7ecf9a; }
   .box.r { background: #fef5f5; border-color: #f0a8a8; }
   .box h3 { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 6px; letter-spacing: 0.02em; }
@@ -831,7 +833,7 @@ export function quotationHtml(q, org = null) {
   ${hotelOptionCards}
 
   <div class="seccard">
-    <div class="sechead"><span class="sicon">&#128181;</span> Fare Summary</div>
+    <div class="sechead"><span class="sicon">&#128181;</span> ${pkg.name ? `${esc(pkg.name)} &mdash; ` : ''}Fare Summary</div>
     <table class="fare">
       <tr><td class="k">Total Cost (without tax)</td><td class="v">${inr(taxable, 2)}</td></tr>
       <tr><td class="k">Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
