@@ -20,7 +20,8 @@ export const listServiceBookings = asyncHandler(async (req, res) => {
 
 // Build the booking rows for one kind from the quote package.
 function rowsFromQuote(pkg, startDate) {
-  const hotels = (pkg.hotels || []).map((h, i) => {
+  // Alternative hotel options are quote-time choices — never booked as-is.
+  const hotels = (pkg.hotels || []).filter((h) => !h.isAlternative).map((h, i) => {
     const ns = (h.nights || []).slice().sort((a, b) => a - b);
     const count = Math.max(1, ns.length);
     const checkIn = startDate ? addDays(startDate, (ns[0] || 1) - 1) : null;

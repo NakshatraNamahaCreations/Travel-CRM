@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
 import { company } from '../../config/company.js';
 import { tripNo } from '../../lib/format.js';
+import { groupHotelOptions } from '../../lib/pricing.js';
 import InclusionExclusionEditor from './InclusionExclusionEditor.jsx';
 
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -97,8 +98,15 @@ export default function CreateItineraryPage() {
           <Collapse icon={Hotel} title="Hotels">
             {(pkg.hotels || []).length ? (
               <div className="space-y-1.5 text-sm text-slate-700">
-                {pkg.hotels.map((h, i) => (
-                  <p key={i}>• <b>{h.hotelName || 'Hotel'}</b> — {h.roomType || '—'}{h.mealPlan ? ` (${h.mealPlan})` : ''} · Night(s) {(h.nights || []).join(', ')}</p>
+                {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => (
+                  <p key={i}>
+                    • {opts.map((o, k) => (
+                      <span key={k}>
+                        {k > 0 && <span className="font-semibold text-amber-600"> OR </span>}
+                        <b>{o.hotelName || 'Hotel'}</b> — {o.roomType || '—'}{o.mealPlan ? ` (${o.mealPlan})` : ''}
+                      </span>
+                    ))} · Night(s) {(base.nights || []).join(', ')}
+                  </p>
                 ))}
                 <Link to={`/quotes/${id}/edit`} className="inline-block text-xs font-medium text-brand-600 hover:underline">Edit hotels in the quote builder →</Link>
               </div>
@@ -181,6 +189,8 @@ export default function CreateItineraryPage() {
               {tcSections.map((s) => (
                 <div key={s.heading} className="mb-3">
                   <p className="text-xs font-bold uppercase text-slate-700">{s.heading}</p>
+                  {s.intro && <p className="mt-1 text-xs leading-relaxed text-slate-600">{s.intro}</p>}
+                  {(s.table?.rows || []).map((r, k) => <p key={`t${k}`} className="mt-1 text-xs leading-relaxed text-slate-600">• <b>{r[0]}:</b> {r.slice(1).join(' — ')}</p>)}
                   {(s.items || []).map((it, k) => <p key={k} className="mt-1 text-xs leading-relaxed text-slate-600">• {it}</p>)}
                 </div>
               ))}

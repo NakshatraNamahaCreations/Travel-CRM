@@ -8,6 +8,7 @@ import { quotesApi } from '../../api/quotes.js';
 import { queriesApi } from '../../api/queries.js';
 import { bookingsApi } from '../../api/bookings.js';
 import { tripNo } from '../../lib/format.js';
+import { groupHotelOptions } from '../../lib/pricing.js';
 import { cn } from '../../lib/cn.js';
 
 const pkgOf = (quote) => quote?.packages?.[quote.selectedPackageIndex || 0] || quote?.packages?.[0] || null;
@@ -161,14 +162,25 @@ export default function ConversionPage() {
                   <table className="w-full text-sm">
                     <thead className="text-left text-xs text-slate-400"><tr><th className="px-3 py-2 font-medium">Night</th><th className="px-3 py-2 font-medium">Hotel</th><th className="px-3 py-2 font-medium">Meal</th><th className="px-3 py-2 text-right font-medium">Price</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {pkg.hotels.map((h, i) => (
-                        <tr key={i}>
-                          <td className="px-3 py-2 text-slate-600">{(h.nights || []).map(ord).join(', ') || '—'}</td>
-                          <td className="px-3 py-2"><span className="font-medium text-slate-900">{h.hotelName}</span>{h.city ? <span className="text-xs text-slate-400"> · {h.city}</span> : null}</td>
-                          <td className="px-3 py-2 text-slate-600">{h.mealPlan || '—'}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-800">{h.amount ? inr(h.amount) : '—'}</td>
-                        </tr>
-                      ))}
+                      {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => {
+                        const billed = Math.max(...opts.map((o) => o.amount || 0));
+                        return (
+                          <tr key={i}>
+                            <td className="px-3 py-2 text-slate-600">{(base.nights || []).map(ord).join(', ') || '—'}</td>
+                            <td className="px-3 py-2">
+                              {opts.map((o, k) => (
+                                <span key={k}>
+                                  {k > 0 && <span className="mx-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
+                                  <span className="font-medium text-slate-900">{o.hotelName}</span>
+                                </span>
+                              ))}
+                              <span className="text-xs text-slate-400"> · {[...new Set(opts.map((o) => o.city).filter(Boolean))].join(' / ')}</span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600">{[...new Set(opts.map((o) => o.mealPlan).filter(Boolean))].join(' / ') || '—'}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{billed ? inr(billed) : '—'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

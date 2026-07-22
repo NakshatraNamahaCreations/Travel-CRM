@@ -5,6 +5,8 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created } from '../utils/apiResponse.js';
 import { quotationHtml } from '../pdf/quotationHtml.js';
+import { voucherHtml } from '../pdf/voucherHtml.js';
+import { OrgProfile } from '../models/OrgProfile.js';
 import { htmlToPdf } from '../pdf/renderPdf.js';
 import { sendMail, emailEnabled } from '../utils/mailer.js';
 import { company } from '../config/company.js';
@@ -190,10 +192,39 @@ async function loadFullQuote(id) {
   return quote;
 }
 
+// GET /api/quotes/:id/voucher?type=trip|hotels|activity&format=html|pdf
+// Booking vouchers for the Docs tab. `format=html` returns the document HTML
+// for the on-screen preview; default renders the PDF.
+export const quoteVoucher = asyncHandler(async (req, res) => {
+  const quote = await loadFullQuote(req.params.id);
+  const org = await OrgProfile.get().catch(() => null);
+  const on = (v) => v === '1' || v === 'true';
+  const html = voucherHtml(quote.toObject(), {
+    org: org?.toObject(),
+    type: ['trip', 'hotels', 'activity'].includes(req.query.type) ? req.query.type : 'trip',
+    options: {
+      prices: on(req.query.prices),
+      removeBranding: on(req.query.removeBranding),
+      removeItinerary: on(req.query.removeItinerary),
+      bankAccount: on(req.query.bankAccount),
+      tnc: req.query.tnc == null ? true : on(req.query.tnc),
+    },
+  });
+  if (req.query.format === 'html') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  }
+  const pdf = await htmlToPdf(html);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="TRIP-ID-${quote.query?.queryNumber || quote.quoteNumber}-VOUCHER.pdf"`);
+  return res.send(pdf);
+});
+
 // GET /api/quotes/:id/pdf — server-rendered PDF (inline download)
 export const quotePdf = asyncHandler(async (req, res) => {
   const quote = await loadFullQuote(req.params.id);
-  const pdf = await htmlToPdf(quotationHtml(quote.toObject()));
+  const org = await OrgProfile.get().catch(() => null);
+  const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Quotation-${quote.quoteNumber}.pdf"`);
   return res.send(pdf);
@@ -209,7 +240,8 @@ export const emailQuote = asyncHandler(async (req, res) => {
   const to = req.body.email || obj.query?.guest?.email;
   if (!to) throw ApiError.badRequest('No recipient — guest has no email on file and none was provided');
 
-  const pdf = await htmlToPdf(quotationHtml(obj));
+  const org = await OrgProfile.get().catch(() => null);
+  const pdf = await htmlToPdf(quotationHtml(obj, org?.toObject()));
   const guestName = [obj.query?.guest?.salutation, obj.query?.guest?.name].filter(Boolean).join(' ') || 'Guest';
   await sendMail({
     to,

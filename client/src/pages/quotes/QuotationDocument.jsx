@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { quotesApi } from '../../api/quotes.js';
 import { inclusionExclusionApi } from '../../api/masterData.js';
 import { company } from '../../config/company.js';
+import { orgProfileApi } from '../../api/orgProfile.js';
 import { tripNo } from '../../lib/format.js';
 import Modal from '../../components/ui/Modal.jsx';
 
@@ -22,18 +23,25 @@ function Band({ children }) {
   );
 }
 
-function PageLetterhead() {
+function PageLetterhead({ logo }) {
   return (
     <div className="flex items-start justify-between border-b border-slate-200 pb-3 mb-4 gap-2">
-      {/* Logo block — nowrap so it never wraps to 2-3 lines */}
+      {/* Logo block — nowrap so it never wraps to 2-3 lines. The uploaded
+          brand logo (org profile) replaces the icon + name when present. */}
       <div className="flex shrink-0 items-center gap-2">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
-          <Palmtree size={17} />
-        </span>
-        <div>
-          <p className="text-[13px] font-extrabold leading-tight text-brand-700 whitespace-nowrap">{company.name}</p>
-          <p className="text-[8.5px] uppercase tracking-widest text-slate-400 whitespace-nowrap">Quality Tours. Exceptional Service.</p>
-        </div>
+        {logo ? (
+          <img src={logo} alt={company.name} className="h-10 max-w-[180px] object-contain" />
+        ) : (
+          <>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+              <Palmtree size={17} />
+            </span>
+            <div>
+              <p className="text-[13px] font-extrabold leading-tight text-brand-700 whitespace-nowrap">{company.name}</p>
+              <p className="text-[8.5px] uppercase tracking-widest text-slate-400 whitespace-nowrap">Quality Tours. Exceptional Service.</p>
+            </div>
+          </>
+        )}
       </div>
       {/* Address */}
       <div className="text-center text-[10.5px] leading-relaxed text-slate-600">
@@ -101,6 +109,8 @@ export default function QuotationDocument() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { data: q, isLoading } = useQuery({ queryKey: ['quote', id], queryFn: () => quotesApi.get(id) });
+  const { data: org } = useQuery({ queryKey: ['org-profile'], queryFn: orgProfileApi.get });
+  const orgLogo = org?.images?.logo;
   // Dynamic default inclusion/exclusion lines from the master (Settings page).
   const { data: incExcData } = useQuery({
     queryKey: ['inclusion-exclusions', 'defaults'],
@@ -214,7 +224,7 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 1 ═══ */}
           <div className="page-break px-8 pt-7 pb-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
 
             {/* Quote for + dates */}
             <div className="mt-3 grid grid-cols-2 gap-3">
@@ -265,13 +275,42 @@ export default function QuotationDocument() {
                 <tr><Th>Hotel Name</Th><Th>Type of Room</Th><Th>Place</Th><Th>#Rooms</Th><Th>#Nights</Th><Th>Extra Mattress</Th><Th>W/O Mattress</Th><Th>Meal Plan</Th></tr>
               </thead>
               <tbody>
-                {(pkg.hotels || []).map((h, i) => (
-                  <tr key={i} className="border-b border-slate-100 text-center text-brand-700">
-                    <Td className="font-semibold">{h.hotelName}</Td><Td>{h.roomType}</Td><Td>{h.city}</Td>
-                    <Td>{h.rooms}</Td><Td>{(h.nights || []).length || 1}</Td><Td>{h.aweb || 0}</Td><Td>{h.cnb || 0}</Td>
-                    <Td><span className="rounded-full bg-brand-600 px-2 py-0.5 text-[9.5px] font-semibold text-white">{h.mealPlan}</span></Td>
-                  </tr>
-                ))}
+                {(() => {
+                  // Alternatives ("Hotel A OR Hotel B") merge INTO their
+                  // primary's row — never a separate row.
+                  const list = pkg.hotels || [];
+                  const overlap = (a, b) => (a.nights || []).some((n) => (b.nights || []).includes(n));
+                  const primaries = list.filter((h) => !h.isAlternative);
+                  const groups = [
+                    ...primaries.map((p) => [p, list.filter((x) => x.isAlternative && overlap(p, x))]),
+                    ...list.filter((x) => x.isAlternative && !primaries.some((p) => overlap(p, x))).map((o) => [o, []]),
+                  ];
+                  const uniq = (vals) => [...new Set(vals.filter((v) => v || v === 0))];
+                  return groups.map(([h, alts], i) => {
+                    const opts = [h, ...alts];
+                    const joined = (get) => uniq(opts.map(get)).join(' / ');
+                    return (
+                      <tr key={i} className="border-b border-slate-100 text-center text-brand-700">
+                        <Td className="font-semibold">
+                          {opts.map((o, j) => (
+                            <span key={j}>
+                              {j > 0 && <span className="mx-1 font-extrabold text-slate-400">/</span>}
+                              {o.hotelName}
+                            </span>
+                          ))}
+                        </Td>
+                        <Td>{joined((o) => o.roomType)}</Td><Td>{joined((o) => o.city)}</Td>
+                        <Td>{joined((o) => o.rooms)}</Td><Td>{(h.nights || []).length || 1}</Td>
+                        <Td>{joined((o) => o.aweb || 0)}</Td><Td>{joined((o) => o.cnb || 0)}</Td>
+                        <Td>
+                          {uniq(opts.map((o) => o.mealPlan)).map((m, j) => (
+                            <span key={j} className="mx-0.5 rounded-full bg-brand-600 px-2 py-0.5 text-[9.5px] font-semibold text-white">{m}</span>
+                          ))}
+                        </Td>
+                      </tr>
+                    );
+                  });
+                })()}
                 {!pkg.hotels?.length && <tr><td colSpan={8} className="py-2 text-center text-[10.5px] text-slate-400">No hotels added.</td></tr>}
               </tbody>
             </table>
@@ -316,7 +355,7 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 2 — Day Wise Itinerary ═══ */}
           <div className="page-break px-8 py-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
             <Band>{q.nights}N{q.nights + 1}D Day Wise Itinerary:</Band>
 
             {q.days?.length > 0 ? (
@@ -355,7 +394,7 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 3 — Additional Info ═══ */}
           <div className="page-break px-8 py-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
             <Band>Additional Information:</Band>
             <div className="mt-3 space-y-2">
               <Box title="NOTE:" tone="slate" items={company.notes} />
@@ -381,14 +420,27 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 4 — Terms & Conditions ═══ */}
           <div className="page-break px-8 py-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
             <Band>Terms &amp; Conditions:</Band>
 
-            {tcSections.map(({ heading, items }) => items?.length ? (
+            {tcSections.map(({ heading, intro, table, items }) => (items?.length || table?.rows?.length) ? (
               <div key={heading} className="mt-4" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                 <p className="mb-1.5 border-b border-slate-200 pb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-700">{heading}</p>
+                {intro && <p className="mb-1.5 text-[11px] text-slate-700">{intro}</p>}
+                {table?.rows?.length > 0 && (
+                  <table className="mb-2 w-full border-collapse text-[10.5px]">
+                    <thead>
+                      <tr>{table.headers?.map((h) => <th key={h} className="border border-slate-300 bg-blue-50 px-2 py-1 text-left font-bold text-slate-700">{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((r, ri) => (
+                        <tr key={ri}>{r.map((c, ci) => <td key={ci} className="border border-slate-300 px-2 py-1 align-top text-slate-700">{c}</td>)}</tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
                 <ul className="space-y-1.5">
-                  {items.map((item, i) => {
+                  {(items || []).map((item, i) => {
                     const idx = item.indexOf(': ');
                     const hasLabel = idx > 0 && idx <= 45;
                     return (
@@ -431,7 +483,7 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 5 — Why Choose Us ═══ */}
           <div className="page-break px-8 py-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
             <Band>Why Choose {company.name}?</Band>
 
             {whyUs.headline && (
@@ -478,7 +530,7 @@ export default function QuotationDocument() {
 
           {/* ═══ PAGE 6 — Gallery ═══ */}
           <div className="px-8 py-6">
-            <PageLetterhead />
+            <PageLetterhead logo={orgLogo} />
             <Band>An Experience You Will Never Forget</Band>
 
             {gallery.length > 0 ? (

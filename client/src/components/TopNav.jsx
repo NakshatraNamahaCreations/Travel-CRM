@@ -49,6 +49,7 @@ const GROUPS = [
   {
     label: 'Settings', icon: Settings, side: 'right', roles: ['admin', 'manager'], items: [
       { label: 'Users & Roles', to: '/settings/users' },
+      { label: 'Organization Profile', to: '/settings/org-profile' },
       { label: 'Organization & Teams', to: '/settings/organization' },
       { label: 'Destinations', to: '/settings/destinations' },
       { label: 'Cities / Towns', to: '/settings/cities' },

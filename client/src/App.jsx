@@ -33,6 +33,7 @@ import TransactionsPage from './pages/accounting/TransactionsPage.jsx';
 import TripCheckInOutReportPage from './pages/accounting/TripCheckInOutReportPage.jsx';
 import UsersPage from './pages/settings/UsersPage.jsx';
 import OrganizationPage from './pages/settings/OrganizationPage.jsx';
+import OrgProfilePage from './pages/settings/OrgProfilePage.jsx';
 import ProfilePage from './pages/settings/ProfilePage.jsx';
 import InclusionsExclusionsPage from './pages/settings/InclusionsExclusionsPage.jsx';
 import HotelsListPage from './pages/services/HotelsListPage.jsx';
@@ -145,6 +146,7 @@ export default function App() {
         {/* Settings / admin */}
         <Route path="/settings/users" element={<ProtectedRoute roles={['admin', 'manager']}><UsersPage /></ProtectedRoute>} />
         <Route path="/settings/organization" element={<ProtectedRoute roles={['admin', 'manager']}><OrganizationPage /></ProtectedRoute>} />
+        <Route path="/settings/org-profile" element={<ProtectedRoute roles={['admin', 'manager']}><OrgProfilePage /></ProtectedRoute>} />
         <Route path="/settings/destinations" element={<ProtectedRoute roles={['admin', 'manager']}><DestinationsPage /></ProtectedRoute>} />
         <Route path="/settings/cities" element={<ProtectedRoute roles={['admin', 'manager']}><CitiesPage /></ProtectedRoute>} />
         <Route path="/settings/states" element={<ProtectedRoute roles={['admin', 'manager']}><StatesPage /></ProtectedRoute>} />

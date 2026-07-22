@@ -33,10 +33,30 @@ export function hotelRowCost(h) {
   return r2(hotelPerNight(h) * nights);
 }
 
+// Group hotel rows for display: each primary with the alternatives sharing
+// its nights ("Hotel A OR Hotel B"). Orphan alternatives (primary removed)
+// stand alone so they never disappear.
+export function groupHotelOptions(hotels) {
+  const list = hotels || [];
+  const nightsOverlap = (a, b) => (a.nights || []).some((n) => (b.nights || []).includes(n));
+  const primaries = list.filter((h) => !h.isAlternative);
+  return [
+    ...primaries.map((p) => ({ base: p, opts: [p, ...list.filter((x) => x.isAlternative && nightsOverlap(p, x))] })),
+    ...list.filter((x) => x.isAlternative && !primaries.some((p) => nightsOverlap(p, x))).map((o) => ({ base: o, opts: [o] })),
+  ];
+}
+
+// Billable hotels total. Alternatives bill at the HIGHEST rate in their
+// night group, so the quote covers whichever option the guest picks.
+// Mirror of the server rollup.
+export function hotelsBilledTotal(hotels) {
+  return r2(groupHotelOptions(hotels).reduce((s, g) => s + Math.max(...g.opts.map(hotelRowCost)), 0));
+}
+
 // Mirror of the server's per-package rollup (model: computePackage).
 export function computePackage(pkg) {
   let cost = 0;
-  (pkg.hotels || []).forEach((h) => { cost += hotelRowCost(h); });
+  cost += hotelsBilledTotal(pkg.hotels);
   (pkg.inclusions || []).forEach((i) => { cost += Number(i.price) || 0; });
   // A service selected on N days is charged for each of those days.
   (pkg.transports || []).forEach((t) => {

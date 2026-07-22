@@ -59,6 +59,14 @@ const tcDash = (arr) => (arr || []).map((x) => {
   return `<div class="dl">- ${body}</div>`;
 }).join('');
 
+// Small bordered table inside a T&C section (booking steps, hotel policy...).
+const tcTable = (t) => (t && t.rows?.length
+  ? `<table class="tctbl">
+      <tr>${(t.headers || []).map((h) => `<th>${esc(h)}</th>`).join('')}</tr>
+      ${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}
+    </table>`
+  : '');
+
 // Short place codes for the legend strips under the tables (PB | HL | NL ...).
 const placeCode = (name) => {
   const t = String(name || '').trim();
@@ -72,15 +80,12 @@ const placeCode = (name) => {
   return String(name || '').split(/\s+/).map((w) => w[0]).join('').toUpperCase().slice(0, 3);
 };
 
-const LETTERHEAD = `
+// Page letterhead — brand block uses the org profile's uploaded logo when
+// available (the wordmark image carries the name, so the text is dropped),
+// falling back to the palm icon + name from the static config.
+const letterhead = (brandHtml) => `
   <div class="lh">
-    <div class="brand">
-      <div class="logo">&#127796;</div>
-      <div>
-        <div class="bn">${esc(company.name)}</div>
-        <div class="bsub">${esc(company.tagline)}</div>
-      </div>
-    </div>
+    <div class="brand">${brandHtml}</div>
     <div class="lh-col"><b>Address:</b>${company.address.map(esc).join('<br/>')}</div>
     <div class="lh-col wide"><b>Email:</b>${company.emails.map(esc).join('<br/>')}</div>
     <div class="lh-col"><b>Phone:</b>${company.phones.map(esc).join('<br/>')}</div>
@@ -89,7 +94,18 @@ const LETTERHEAD = `
 const BOTTOMBAR = '<div class="bottombar"></div>';
 
 // Build the self-contained HTML for a populated quote document.
-export function quotationHtml(q) {
+export function quotationHtml(q, org = null) {
+  const orgLogo = org?.images?.logo || null;
+  const brandHtml = orgLogo
+    ? `<img class="logoimg" src="${orgLogo}"/>`
+    : `<div class="logo">&#127796;</div>
+      <div>
+        <div class="bn">${esc(company.name)}</div>
+        <div class="bsub">${esc(company.tagline)}</div>
+      </div>`;
+  const LETTERHEAD = letterhead(brandHtml);
+  const logoIcon = orgLogo ? `<img class="logoimg" src="${orgLogo}"/>` : '<div class="logo">&#127796;</div>';
+  const qlogoIcon = orgLogo ? `<img class="logoimg lg" src="${orgLogo}"/>` : '<div class="qlogo">&#127796;</div>';
   const pkg = (q.packages || [])[q.selectedPackageIndex || 0] || {};
   const guest = q.query?.guest || {};
   const paxAdults = q.pax?.adults || 0;
@@ -172,34 +188,59 @@ export function quotationHtml(q) {
   // ---- Hotels tables (summary page) — one card per package option with the
   // option's name + price in the heading so options compare at a glance. ----
   const hotels = pkg.hotels || [];
+  // Alternatives ("Hotel A OR Hotel B" for the same night) show in hotel tables/
+  // cards but must not shape the route, night counts, or day-to-city mapping.
+  const primaryHotels = hotels.filter((h) => !h.isAlternative);
   const starRow = (n) => `<span class="tstars">${'&#9733;'.repeat(Math.min(n || 3, 5))}</span>`;
-  const hotelRowsOf = (list) => list.map((h) => {
-    const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
-    return `<tr>
-      <td class="bcell hcell">
-        <div>${esc(h.hotelName)}</div>
-        ${starRow(master.stars)}
-      </td>
-      <td>${esc(h.roomType)}</td><td>${esc(h.city)}</td>
-      <td>${h.rooms || 0}</td><td>${(h.nights || []).length || 1}</td>
-      <td>${h.aweb || 0}</td><td>${h.cnb || 0}</td>
-      <td><span class="pill navy">${esc(h.mealPlan)}</span></td>
-    </tr>`;
-  }).join('');
+  // Alternatives ("Hotel A OR Hotel B") render INSIDE their primary's row —
+  // options stacked in the name cell, differing values joined with " / " —
+  // never as separate rows.
+  const hotelRowsOf = (list) => {
+    const overlap = (a, b) => (a.nights || []).some((n) => (b.nights || []).includes(n));
+    const primaries = list.filter((h) => !h.isAlternative);
+    const grouped = [
+      ...primaries.map((p) => [p, list.filter((x) => x.isAlternative && overlap(p, x))]),
+      ...list.filter((x) => x.isAlternative && !primaries.some((p) => overlap(p, x))).map((o) => [o, []]),
+    ];
+    const uniq = (vals) => [...new Set(vals.filter((v) => v || v === 0))];
+    return grouped.map(([h, alts]) => {
+      const opts = [h, ...alts];
+      const nameCell = opts.map((o, i) => {
+        const master = o.hotel && typeof o.hotel === 'object' ? o.hotel : {};
+        return `${i ? '<div style="margin:2px 0;color:#6b7684;font-weight:800">/</div>' : ''}<div>${esc(o.hotelName)}</div>${starRow(master.stars)}`;
+      }).join('');
+      const joined = (get) => uniq(opts.map(get)).map((v) => esc(String(v))).join(' / ') || '&mdash;';
+      return `<tr>
+        <td class="bcell hcell">${nameCell}</td>
+        <td>${joined((o) => o.roomType)}</td><td>${joined((o) => o.city)}</td>
+        <td>${joined((o) => o.rooms || 0)}</td><td>${(h.nights || []).length || 1}</td>
+        <td>${joined((o) => o.aweb || 0)}</td><td>${joined((o) => o.cnb || 0)}</td>
+        <td>${uniq(opts.map((o) => o.mealPlan)).map((m) => `<span class="pill navy">${esc(m)}</span>`).join(' ')}</td>
+      </tr>`;
+    }).join('');
+  };
   const hotelOptionCards = (q.packages || [])
     .filter((p) => (p.hotels || []).length)
     .map((p, i, arr) => {
-      const legend = p.hotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
       const label = arr.length > 1 ? `Option ${i + 1}: ${esc(p.name || `Package ${i + 1}`)}` : `Hotel Information &mdash; ${esc(p.name || 'Package')}`;
+      // Payment strip under the hotel table (replaces the old place-code
+      // legend): total incl. GST, then the highlighted 50% booking amount.
+      const gstPct = p.taxApplied ? (p.taxPercent || 5) : 5;
+      const totalWithGst = p.taxApplied ? (p.sellingPrice || 0) : Math.round((p.sellingPrice || 0) * (1 + gstPct / 100));
+      const payable = Math.round(totalWithGst / 2);
       return `<div class="seccard">
         <div class="sechead"><span class="sicon">&#127976;</span> ${label}<span class="secprice">${inr(p.sellingPrice || 0)}</span></div>
         <div class="tbl flat"><table>
           <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
-          ${legend ? `<div class="legend">${legend}</div>` : ''}
+          <div class="psrow"><span>Total Tour Cost (incl. ${gstPct}% ${esc(p.taxName || 'GST')})</span><span class="psval">${inr(totalWithGst)}</span></div>
+          <div class="psrow pshl"><span>Total Payable Amount to Confirm Booking (50%)</span><span class="psval">${inr(payable)}</span></div>
         </div>
       </div>`;
-    }).join('');
+    })
+    // Divider between option cards — a dashed line so the packages read as
+    // separate choices.
+    .join('<div class="ordivide"></div>');
 
   // ---- Hotels / Accommodations cards (own section — image + details) ----
   const ordinalPdf = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -216,7 +257,7 @@ export function quotationHtml(q) {
     const paxTotal = (Number(h.paxPerRoom) || 2) * (Number(h.rooms) || 1);
     return `<div class="hcard">
       <div class="hinfo">
-        <div class="hnights">${badges} Night${nightsArr.length > 1 ? 's' : ''} at <b>${esc(h.city || master.location?.city || '')}</b></div>
+        <div class="hnights">${h.isAlternative ? 'Alternative Option &mdash; ' : ''}${badges} Night${nightsArr.length > 1 ? 's' : ''} at <b>${esc(h.city || master.location?.city || '')}</b></div>
         ${checkIn ? `<div class="hcheckin">Check-in on ${checkIn}</div>` : ''}
         <div>${nameHtml}</div>
         <div class="cardstars">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></div>
@@ -236,22 +277,22 @@ export function quotationHtml(q) {
       ${master.imageUrl ? `<img class="hphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
     </div>`;
   }).join('');
-  const hotelLegend = hotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
+  const hotelLegend = primaryHotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
   // ---- Cover page data ----
   const fmtDateWD = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }) : '');
-  const routeCode = hotels.map((h) => `${(h.nights || []).length || 1}${placeCode(h.city)}`).join('&gt;');
+  const routeCode = primaryHotels.map((h) => `${(h.nights || []).length || 1}${placeCode(h.city)}`).join('&gt;');
   const destCovered = (() => {
     const m = new Map();
-    hotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
+    primaryHotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
     return [...m.entries()].map(([c, n]) => `<b>${esc(c)} - ${n}</b>`).join(' &nbsp;<span class="pin">&#128205;</span>&nbsp; ');
   })();
   const heroImg = company.heroImage || gallery[2] || gallery[0] || '';
 
   // City a given trip day belongs to (from hotel night assignments).
   const cityOfDay = (n) => {
-    const h = hotels.find((x) => (x.nights || []).includes(n));
-    return h?.city || hotels[hotels.length - 1]?.city || '';
+    const h = primaryHotels.find((x) => (x.nights || []).includes(n));
+    return h?.city || primaryHotels[primaryHotels.length - 1]?.city || '';
   };
 
   // ---- Itinerary introduction (day list) ----
@@ -377,7 +418,7 @@ export function quotationHtml(q) {
         <div class="dmeta"><span class="mk">Meal Plan</span>${esc(h.mealPlan || '—')}</div>
         <div class="dmeta"><span class="mk">Rooms</span>${h.rooms || 1} room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</div>`;
       return `<div class="hstrip">
-        <div class="dwtitle" style="color:var(--blue-dark)">Hotel &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
+        <div class="dwtitle" style="color:var(--blue-dark)">Hotel${h.isAlternative ? ' (Alternative Option)' : ''} &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
         <div class="svcrow">
           ${master.imageUrl ? `<img class="dphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
           <div class="svctext">${meta}</div>
@@ -461,6 +502,8 @@ export function quotationHtml(q) {
   .lh { display: flex; align-items: center; margin-bottom: 6px; }
   .brand { display: flex; align-items: center; gap: 9px; width: 29%; flex-shrink: 0; padding-right: 10px; }
   .logo { width: 38px; height: 38px; border-radius: 10px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .logoimg { height: 44px; max-width: 200px; object-fit: contain; }
+  .logoimg.lg { height: 64px; max-width: 260px; }
   .bn { font-size: 14.5px; font-weight: 800; color: var(--blue); line-height: 1.2; white-space: nowrap; }
   .bsub { font-size: 7.5px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
   .lh-col { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center; border-left: 1px solid #c9d4df; padding: 2px 8px; font-size: 10.5px; color: #445468; line-height: 1.4; }
@@ -491,6 +534,7 @@ export function quotationHtml(q) {
 
   /* ---- section cards (summary page) ---- */
   .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .ordivide { border-top: 2px dashed #9fbddd; margin: 18px 0; }
   .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue2), #fff); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
   .sechead .sicon { font-size: 14px; }
   .secprice { margin-left: auto; background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2px 13px; font-size: 12.5px; font-weight: 800; letter-spacing: 0; text-transform: none; }
@@ -507,6 +551,13 @@ export function quotationHtml(q) {
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
   .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 4.5px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
+  /* Payment strip under hotel option tables — same table idiom (row +
+     dashed divider), with the 50% booking line highlighted in brand blue
+     and the amount in the yellow price pill. */
+  .psrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #f2f6fa; border-top: 1px dashed #cddcea; padding: 6px 14px; font-size: 12px; font-weight: 700; color: var(--navy); }
+  .psrow .psval { font-weight: 800; font-size: 13px; color: var(--blue-dark); }
+  .psrow.pshl { background: linear-gradient(90deg, var(--blue), var(--blue-dark)); color: #fff; font-size: 13px; font-weight: 800; letter-spacing: 0.01em; padding: 8px 14px; }
+  .psrow.pshl .psval { background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2.5px 13px; font-size: 13px; }
   .tbl td.hl { background: var(--yellow); color: var(--ink); font-weight: 800; font-size: 14px; }
   .muted { color: #94a3b8; text-align: center; padding: 8px; font-weight: 500; }
   .tbl td.hcell { text-align: left; }
@@ -675,6 +726,9 @@ export function quotationHtml(q) {
   .tcintro { font-size: 12.5px; color: #2c3d51; margin: 4px 0 8px; }
   .tc-section { margin-top: 11px; break-inside: avoid; page-break-inside: avoid; }
   .tc-section h3 { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+  .tctbl { width: 100%; border-collapse: collapse; margin: 4px 0 6px; }
+  .tctbl th, .tctbl td { border: 1px solid var(--line); padding: 4px 9px; font-size: 11px; text-align: left; }
+  .tctbl th { background: #eaf3fb; color: var(--navy); font-weight: 800; }
 
   /* ---- why us / reviews ---- */
   .script { font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 15px; color: var(--ink); margin: 6px 0 14px; }
@@ -867,7 +921,7 @@ ${optActs ? `<div class="page pb">
   <div class="band">COMPANY &amp; CONTACT INFORMATION:</div>
   <div class="cocard">
     <div class="cbrand">
-      <div class="logo">&#127796;</div>
+      ${logoIcon}
       <div class="bn">${esc(company.name)}</div>
       <div class="cweb">${esc(company.website)}</div>
     </div>
@@ -882,7 +936,7 @@ ${optActs ? `<div class="page pb">
   <div class="tab">Terms &amp; Conditions:</div>
   <div class="tccontent">
     <div class="tcintro">These terms and conditions apply to all services and bookings provided by ${esc(company.name)}.</div>
-    ${tcSections.map((s) => `<div class="tc-section"><h3>${esc(s.heading)}</h3>${tcDash(s.items)}</div>`).join('')}
+    ${tcSections.map((s) => `<div class="tc-section"><h3>${esc(s.heading)}</h3>${s.intro ? `<div class="tcintro">${esc(s.intro)}</div>` : ''}${tcTable(s.table)}${tcDash(s.items)}</div>`).join('')}
   </div>
   ${BOTTOMBAR}
 </div>
@@ -909,7 +963,7 @@ ${optActs ? `<div class="page pb">
   <div class="band">An Experience that you will Never Forget:</div>
   ${mosaic}
   <div class="qcard">
-    <div class="qlogo">&#127796;</div>
+    ${qlogoIcon}
     <div class="qtag">${esc(company.tagline)}</div>
     ${socialIcons ? `<div style="font-size:10px;color:#46566a;margin-top:14px;font-weight:700">Find us in the Social World:</div>
     <div class="socialrow">${socialIcons}</div>` : ''}

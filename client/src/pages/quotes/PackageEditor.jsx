@@ -8,7 +8,7 @@ import Modal from '../../components/ui/Modal.jsx';
 import { hotelsApi, transportApi, activitiesApi } from '../../api/services.js';
 import { lookupApi } from '../../api/quotes.js';
 import { optionsApi } from '../../api/options.js';
-import { hotelRowCost, hotelPerNight, computePackage, money } from '../../lib/pricing.js';
+import { hotelRowCost, hotelPerNight, hotelsBilledTotal, computePackage, money } from '../../lib/pricing.js';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
@@ -23,31 +23,43 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const confirm = useConfirm();
   const [givenIdx, setGivenIdx] = useState(null);
   const c = computePackage(pkg);
-  const hotelsTotal = (pkg.hotels || []).reduce((s, h) => s + hotelRowCost(h), 0);
+  const hotelsTotal = hotelsBilledTotal(pkg.hotels);
 
   /* ----- Hotels ----- */
   const setHotel = (i, patch) => update({ hotels: pkg.hotels.map((h, idx) => (idx === i ? { ...h, ...patch } : h)) });
+  // Only primary rows claim nights — alternatives share their primary's nights.
+  const primaryNightsUsed = () => new Set((pkg.hotels || []).flatMap((x) => (x.isAlternative ? [] : x.nights || [])));
   // New rows start on the first night nobody has claimed yet (empty if all taken).
   const addHotel = () => {
-    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    const used = primaryNightsUsed();
     const free = Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).find((n) => !used.has(n));
     update({ hotels: [...(pkg.hotels || []), { ...emptyHotel(), nights: free ? [free] : [] }] });
   };
-  // Nights already assigned to OTHER hotel rows — one hotel per night.
-  const nightsTakenByOthers = (i) => (pkg.hotels || []).flatMap((x, idx) => (idx === i ? [] : (x.nights || [])));
-  // Every night of the trip already belongs to a hotel row — no more rows needed.
+  // Nights already assigned to OTHER primary rows — one primary hotel per night.
+  const nightsTakenByOthers = (i) => {
+    if (pkg.hotels?.[i]?.isAlternative) return []; // alternatives may sit on any night
+    return (pkg.hotels || []).flatMap((x, idx) => (idx === i || x.isAlternative ? [] : (x.nights || [])));
+  };
+  // Every night of the trip already belongs to a primary hotel row.
   const allNightsTaken = (() => {
-    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    const used = primaryNightsUsed();
     return Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).every((n) => used.has(n));
   })();
-  // Duplicate copies the config but not the nights (each night belongs to one row).
-  const dupHotel = (i) => update({ hotels: [...pkg.hotels, { ...pkg.hotels[i], nights: [] }] });
+  // Duplicate = alternative option for the SAME night(s): "Hotel A OR Hotel B".
+  // Inserted right below the source row; excluded from package totals.
+  const dupHotel = (i) => {
+    const { _id, ...copy } = pkg.hotels[i];
+    const next = [...pkg.hotels];
+    next.splice(i + 1, 0, { ...copy, nights: [...(copy.nights || [])], isAlternative: true });
+    update({ hotels: next });
+  };
   // Next Night: same hotel/config on the first night nobody has claimed yet.
   const nextNight = (i) => {
-    const used = new Set((pkg.hotels || []).flatMap((x) => x.nights || []));
+    const used = primaryNightsUsed();
     const free = Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).find((n) => !used.has(n));
     if (!free) return toast.error('All nights are already assigned to a hotel');
-    update({ hotels: [...pkg.hotels, { ...pkg.hotels[i], nights: [free] }] });
+    const { _id, ...copy } = pkg.hotels[i];
+    update({ hotels: [...pkg.hotels, { ...copy, isAlternative: false, nights: [free] }] });
   };
   const rmHotel = async (i) => { if (await confirm({ title: 'Remove this hotel?', message: `${pkg.hotels[i]?.hotelName || 'This hotel'} will be removed from the package.`, confirmLabel: 'Remove' })) update({ hotels: pkg.hotels.filter((_, idx) => idx !== i) }); };
   const pickHotel = (i, h) => setHotel(i, { hotel: h, hotelName: h?.name || '', city: h?.location?.city || '', mealPlan: '', roomType: '', ratePerNight: 0 });
@@ -251,11 +263,16 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       {/* Hotels */}
       <Section icon={Hotel} title="Hotels" hint="Please add hotels details (if included in package) with services provided for each hotels and the selling cost price.">
         <p className="mb-3 flex items-center gap-1 text-xs text-gray-400">
-          <Sparkles size={12} className="text-amber-500" /> Tip: To speed up the process of adding multiple hotels, use <b className="font-semibold text-gray-600">Next Night</b> or <b className="font-semibold text-gray-600">Duplicate</b> actions.
+          <Sparkles size={12} className="text-amber-500" /> Tip: Use <b className="font-semibold text-gray-600">Next Night</b> to repeat a hotel on the next free night, or <b className="font-semibold text-gray-600">Duplicate</b> to offer an alternative hotel option for the same night (Hotel A or Hotel B).
         </p>
         <div className="space-y-4">
           {(pkg.hotels || []).map((h, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 p-4">
+            <div key={i} className={cn('rounded-xl border p-4', h.isAlternative ? 'border-dashed border-amber-300 bg-amber-50/30' : 'border-slate-200')}>
+              {h.isAlternative && (
+                <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                  <Copy size={12} /> Alternative option — same night(s), guest picks this hotel OR the one above. The package bills the highest-priced option.
+                </p>
+              )}
               <div className="grid gap-5 lg:grid-cols-[1fr_330px]">
                 {/* ---- Left: hotel details ---- */}
                 <div className="lg:border-r lg:border-slate-100 lg:pr-5">
@@ -347,10 +364,13 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   </div>
                   <div className="mt-2.5 flex items-center gap-2">
                     <button type="button" onClick={() => nextNight(i)} disabled={allNightsTaken} title={allNightsTaken ? 'All nights are already assigned to a hotel' : undefined} className="btn-secondary text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={13} /> Next Night</button>
-                    <button type="button" onClick={() => dupHotel(i)} disabled={allNightsTaken} title={allNightsTaken ? 'All nights are already assigned to a hotel' : undefined} className="btn-secondary text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={12} /> Duplicate</button>
+                    <button type="button" onClick={() => dupHotel(i)} title="Add an alternative hotel option for the same night(s)" className="btn-secondary text-xs text-brand-700"><Copy size={12} /> Duplicate</button>
                     <button type="button" onClick={() => rmHotel(i)} className="btn-ghost ml-auto text-xs text-slate-500 hover:text-red-600"><Trash2 size={12} /> Remove</button>
                   </div>
-                  <p className="mt-1.5 text-right text-xs"><span className="text-slate-400">Hotel cost: </span><span className="font-semibold text-slate-700 tabular-nums">{money(hotelRowCost(h), currency)}</span></p>
+                  <p className="mt-1.5 text-right text-xs">
+                    <span className="text-slate-400">{h.isAlternative ? 'Alternative price: ' : 'Hotel cost: '}</span>
+                    <span className={cn('font-semibold tabular-nums', h.isAlternative ? 'text-amber-700' : 'text-slate-700')}>{money(hotelRowCost(h), currency)}</span>
+                  </p>
                 </div>
               </div>
             </div>

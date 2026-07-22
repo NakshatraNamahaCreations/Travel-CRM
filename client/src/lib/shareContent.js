@@ -85,13 +85,16 @@ export function buildWhatsAppText(q, { hideTotalPrice = false, includeItinerary 
     L.push('_Multiple Payments Options (UPI, DC, CC, NB etc.)_', '');
 
     L.push('🏨 *Hotels*');
-    [...(pkg.hotels || [])].sort((a, z) => firstNightOf(a) - firstNightOf(z)).forEach((h) => {
+    const primaries = (pkg.hotels || []).filter((h) => !h.isAlternative);
+    // In-package alternatives (Duplicate action) covering the same starting night.
+    const altsFor = (firstNight) => (pkg.hotels || []).filter((h) => h.isAlternative && firstNightOf(h) === firstNight);
+    [...primaries].sort((a, z) => firstNightOf(a) - firstNightOf(z)).forEach((h) => {
       const { firstNight, checkIn, checkOut } = nightDates(b.start, h);
       L.push(`*${ordinal(firstNight)} Night* at ${h.city || ''}`.trim());
       if (checkIn && checkOut) L.push(`Check in: ${format(checkIn, 'd MMM')} & Check out: ${format(checkOut, 'd MMM')}`);
       L.push(`*${h.hotelName || 'Hotel'}* ${starLabel(h)}`.trim());
       L.push(`${mealLabel(h.mealPlan)} • ${h.rooms || 1} ${h.roomType || 'Room'} (${roomPax(h)} Pax)`);
-      const sims = similarHotels(b.packages, i, firstNight);
+      const sims = [...altsFor(firstNight), ...similarHotels(b.packages, i, firstNight)];
       if (sims.length) {
         L.push('_Similar Options:_');
         sims.forEach((s) => {
@@ -184,15 +187,35 @@ export function buildEmailHtml(q, { removeItinerary = false, removeTerms = false
     out.push('<table style="width:100%;border-collapse:collapse;margin:10px 0">');
     out.push(`<tr><td colspan="5" style="background:#1e293b;color:#fff;font-weight:700;padding:7px 10px;border-radius:4px">Option ${i + 1}: ${esc(pkg.name || `Package ${i + 1}`)}</td></tr>`);
     out.push(`<tr>${th('Nights')}${th('City')}${th('Hotel Name')}${th('Meal Plan')}${th('Accommodation')}</tr>`);
-    [...(pkg.hotels || [])].sort((a, z) => firstNightOf(a) - firstNightOf(z)).forEach((h) => {
+    // Alternatives ("Hotel A OR Hotel B") merge INTO their primary's row —
+    // never a separate row.
+    const rowsList = pkg.hotels || [];
+    const nightsOverlap = (a, z) => (a.nights || []).some((n) => (z.nights || []).includes(n));
+    const rowPrimaries = rowsList.filter((h) => !h.isAlternative);
+    const rowBases = [
+      ...rowPrimaries,
+      ...rowsList.filter((x) => x.isAlternative && !rowPrimaries.some((p) => nightsOverlap(p, x))),
+    ];
+    const orTag = '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:4px">OR</span>';
+    [...rowBases].sort((a, z) => firstNightOf(a) - firstNightOf(z)).forEach((h) => {
+      const alts = h.isAlternative ? [] : rowsList.filter((x) => x.isAlternative && nightsOverlap(h, x));
+      const opts = [h, ...alts];
       const { firstNight, checkIn } = nightDates(b.start, h);
       const nlabel = `${ordinal(firstNight)} ${checkIn ? `(${format(checkIn, 'd MMM')})` : 'Night'}`;
+      const nameCell = opts.map((o, j) =>
+        `${j ? `<br/>${orTag}` : ''}<b>${esc(o.hotelName || 'Hotel')}</b>${o.stars ? `<br/><span style="color:#6b7280;font-size:11px">${o.stars} Star</span>` : ''}`
+      ).join('');
+      const cityCell = [...new Set(opts.map((o) => o.city).filter(Boolean))].map(esc).join(' / ');
+      const mealCell = [...new Set(opts.map((o) => o.mealPlan).filter(Boolean))]
+        .map((m) => `${esc(mealLabel(m))}${mealLabel(m) !== m ? ` <span style="color:#6b7280;font-size:11px">(${esc(m)})</span>` : ''}`)
+        .join('<br/>');
+      const roomCell = [...new Set(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`))].map(esc).join(' / ');
       out.push('<tr>'
         + td(esc(nlabel))
-        + td(`<b>${esc(h.city || '')}</b>`)
-        + td(`<b>${esc(h.hotelName || 'Hotel')}</b>${h.stars ? `<br/><span style="color:#6b7280;font-size:11px">${h.stars} Star</span>` : ''}`)
-        + td(`${esc(mealLabel(h.mealPlan))}${h.mealPlan && mealLabel(h.mealPlan) !== h.mealPlan ? `<br/><span style="color:#6b7280;font-size:11px">(${esc(h.mealPlan)})</span>` : ''}`)
-        + td(`<b>${h.rooms || 1} ${esc(h.roomType || 'Room')}</b><br/><span style="color:#6b7280;font-size:11px">${roomPax(h)} Pax</span>`)
+        + td(`<b>${cityCell}</b>`)
+        + td(nameCell)
+        + td(mealCell)
+        + td(`<b>${roomCell}</b><br/><span style="color:#6b7280;font-size:11px">${roomPax(h)} Pax</span>`)
         + '</tr>');
     });
     const incs = pkg.inclusions || [];
@@ -257,7 +280,7 @@ export function buildEmailHtml(q, { removeItinerary = false, removeTerms = false
 }
 
 function nightBadge(b) {
-  const first = b.packages?.[0]?.hotels?.[0];
+  const first = (b.packages?.[0]?.hotels || []).find((h) => !h.isAlternative);
   if (!first) return '';
   const n = Math.max(1, (first.nights || []).length || 1);
   return `<br/><span style="display:inline-block;background:#fef08a;color:#854d0e;font-size:11px;padding:1px 6px;border-radius:3px;margin-top:3px">${esc(first.city || '')} ${n} Night${n === 1 ? '' : 's'}</span>`;

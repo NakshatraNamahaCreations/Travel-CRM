@@ -24,7 +24,8 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '2mb' }));
+// 8mb: org-profile brand images travel as base64 data URIs in JSON.
+app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 if (!env.isProd) app.use(morgan('dev'));

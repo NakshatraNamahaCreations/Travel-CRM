@@ -29,6 +29,9 @@ const hotelRowSchema = new mongoose.Schema(
     givenPerNight: { type: Number, default: 0 }, // selling override (0 = use cost)
     cardRate: { type: Number, default: 0 }, // supplier card rate shown as "cost" in the builder
     amount: { type: Number, default: 0 }, // computed cost
+    // Alternative hotel option for the same night(s) — "Hotel A OR Hotel B".
+    // Not counted in package totals; the primary (non-alternative) row is.
+    isAlternative: { type: Boolean, default: false },
   },
   { _id: true }
 );
@@ -196,9 +199,20 @@ function hotelRowCost(h) {
 
 function computePackage(pkg) {
   let cost = 0;
-  for (const h of pkg.hotels || []) {
-    h.amount = hotelRowCost(h);
-    cost += h.amount;
+  // Alternatives ("Hotel A OR Hotel B" on the same nights) bill at the
+  // HIGHEST rate in their night group, so the quote covers whichever
+  // option the guest picks.
+  const hotelRows = pkg.hotels || [];
+  const nightsOverlap = (a, b) => (a.nights || []).some((n) => (b.nights || []).includes(n));
+  for (const h of hotelRows) h.amount = hotelRowCost(h);
+  for (const h of hotelRows) {
+    if (h.isAlternative) {
+      // Orphan alternative (its primary row was removed) still bills itself.
+      if (!hotelRows.some((p) => !p.isAlternative && nightsOverlap(p, h))) cost += h.amount;
+    } else {
+      const altCosts = hotelRows.filter((x) => x.isAlternative && nightsOverlap(h, x)).map((x) => x.amount);
+      cost += Math.max(h.amount, ...altCosts);
+    }
   }
   for (const inc of pkg.inclusions || []) cost += inc.price || 0;
   for (const t of pkg.transports || []) {
@@ -234,6 +248,7 @@ function flattenSelected(doc) {
   if (!pkg) return;
   const items = [];
   for (const h of pkg.hotels || []) {
+    if (h.isAlternative) continue; // legacy costItems mirror bills only primary hotels
     items.push({
       category: 'hotel', refId: h.hotel,
       label: `${h.hotelName || 'Hotel'}${h.roomType ? ` — ${h.roomType}` : ''}${h.mealPlan ? ` (${h.mealPlan})` : ''}`,

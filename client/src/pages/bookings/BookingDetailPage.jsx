@@ -113,7 +113,7 @@ export default function BookingDetailPage() {
   const costPrice = fullQuote?.pricing?.cost || 0;
 
   // Derive hotel stays with dates
-  const hotelStays = (selPkg?.hotels || []).map((h) => {
+  const hotelStays = (selPkg?.hotels || []).filter((h) => !h.isAlternative).map((h) => {
     const nights = (h.nights || []).slice().sort((a, c) => a - c);
     const firstNight = nights[0] || 1;
     const checkIn = b.startDate ? addDays(new Date(b.startDate), firstNight - 1) : null;
@@ -421,7 +421,7 @@ export default function BookingDetailPage() {
           {activeTab === 'quotes'     && <QuotesTab id={queryId} quotes={quotes} onShare={setShareQuoteId} />}
           {activeTab === 'services'   && <ServiceBookingsTab queryId={queryId} quote={fullQuote} startDate={b.startDate} />}
           {activeTab === 'accounting' && <AccountingTab id={queryId} bookingId={id} totalAmount={b.totalAmount} />}
-          {activeTab === 'docs'       && <DocsTab quotes={quotes} />}
+          {activeTab === 'docs'       && <DocsTab quotes={quotes} queryId={queryId} />}
           {activeTab === 'activities' && <ActivitiesTab id={queryId} />}
         </div>
       )}

@@ -6,6 +6,7 @@ import {
   accountOptions,
   createInstallment,
   logPayment,
+  receiptPdf,
   verifyInstallment,
   addComment,
   deleteInstallment,
@@ -19,6 +20,7 @@ router.get('/summary', installmentSummary);
 router.get('/accounts', accountOptions);
 router.post('/', createInstallment);
 router.post('/:id/log-payment', logPayment);
+router.get('/:id/receipt', receiptPdf);
 router.patch('/:id/verify', verifyInstallment);
 router.post('/:id/comments', addComment);
 router.delete('/:id', deleteInstallment);

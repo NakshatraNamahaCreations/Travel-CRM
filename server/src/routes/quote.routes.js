@@ -7,6 +7,7 @@ import {
   updateQuoteStatus,
   deleteQuote,
   quotePdf,
+  quoteVoucher,
   emailQuote,
   emailStatus,
   quoteSuggestions,
@@ -23,6 +24,7 @@ router.get('/', listQuotes);
 router.post('/:id/clone', cloneQuote);
 router.get('/:id', getQuote);
 router.get('/:id/pdf', quotePdf);
+router.get('/:id/voucher', quoteVoucher);
 router.post('/:id/email', emailQuote);
 router.post('/', createQuote);
 router.put('/:id', updateQuote);

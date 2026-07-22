@@ -16,12 +16,15 @@ import { installmentsApi } from '../../api/installments.js';
 import { activityLogApi } from '../../api/activities.js';
 import { usersApi, inclusionExclusionApi } from '../../api/masterData.js';
 import { cn } from '../../lib/cn.js';
+import { groupHotelOptions, hotelsBilledTotal } from '../../lib/pricing.js';
 import { tripNo } from '../../lib/format.js';
 import { company } from '../../config/company.js';
 import Modal from '../../components/ui/Modal.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
 import ServiceBookingsTab from '../../components/trips/ServiceBookingsTab.jsx';
+import { ProformaSection, ProfitSection } from '../../components/trips/AccountingSections.jsx';
+import DocsVouchers from '../../components/trips/DocsVouchers.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 
 const TERMINAL_LABEL = { canceled: 'Canceled', dropped: 'Dropped' };
@@ -311,7 +314,7 @@ const lostMut = useMutation({
         {activeTab === 'new_quote' && <NewQuoteTab id={id} nights={q.nights} />}
         {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} />}
         {activeTab === 'accounting' && <AccountingTab id={id} />}
-        {activeTab === 'docs' && <DocsTab quotes={quotes} />}
+        {activeTab === 'docs' && <DocsTab quotes={quotes} queryId={id} />}
         {activeTab === 'activities' && <ActivitiesTab id={id} />}
       </div>
 
@@ -416,24 +419,31 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                       <table className="w-full text-sm">
                         <thead className="text-left text-xs text-gray-400"><tr><th className="py-1.5 font-medium">Night</th><th className="font-medium">Hotel</th><th className="font-medium">Meal</th><th className="font-medium">Rooms</th><th className="text-right font-medium">Price</th></tr></thead>
                         <tbody className="divide-y divide-gray-100">
-                          {p.hotels.map((h, j) => {
-                            const firstNight = (h.nights || [])[0];
+                          {groupHotelOptions(p.hotels).map(({ base, opts }, j) => {
+                            const firstNight = (base.nights || [])[0];
+                            const uniq = (vals) => [...new Set(vals.filter(Boolean))];
+                            const billed = Math.max(...opts.map((o) => o.amount || 0));
                             return (
                               <tr key={j}>
                                 <td className="py-2.5 pr-2 align-top">
-                                  <p className="font-medium text-gray-800">{(h.nights || []).map(ord).join(', ') || '—'}</p>
+                                  <p className="font-medium text-gray-800">{(base.nights || []).map(ord).join(', ') || '—'}</p>
                                   {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
                                 </td>
                                 <td className="py-2.5 pr-2 align-top">
-                                  <p className="font-medium text-gray-900">{h.hotelName}</p>
-                                  <p className="text-xs text-gray-400">{[h.city, h.stars ? `${h.stars} Star` : null].filter(Boolean).join(', ')}</p>
+                                  {opts.map((o, k) => (
+                                    <p key={k} className="font-medium text-gray-900">
+                                      {k > 0 && <span className="mr-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
+                                      {o.hotelName}
+                                    </p>
+                                  ))}
+                                  <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}</p>
                                 </td>
-                                <td className="py-2.5 pr-2 align-top text-gray-600">{h.mealPlan || '—'}</td>
+                                <td className="py-2.5 pr-2 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                                 <td className="py-2.5 pr-2 align-top">
-                                  <p className="text-gray-800">{h.rooms || 1} {h.roomType || 'Room'}</p>
-                                  <p className="text-xs text-gray-400">{h.paxPerRoom || 2} Pax{h.aweb ? ` +${h.aweb} AWEB` : ''}{h.cnb ? ` +${h.cnb} CNB` : ''}</p>
+                                  <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
+                                  <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                                 </td>
-                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{h.amount ? `₹${h.amount.toLocaleString('en-IN')}` : '—'}</td>
+                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{billed ? `₹${billed.toLocaleString('en-IN')}` : '—'}</td>
                               </tr>
                             );
                           })}
@@ -654,7 +664,7 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
 
   const latestId = quotes[0]?._id; // list is sorted newest first
   const pkg = pkgOf(sel);
-  const hotelTotal = (pkg?.hotels || []).reduce((s, h) => s + (h.amount || 0), 0);
+  const hotelTotal = hotelsBilledTotal(pkg?.hotels);
   const startDate = sel?.startDate ? new Date(sel.startDate) : null;
 
   // Transports + activities grouped by day number for the day-wise listing.
@@ -783,24 +793,31 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                       <tr><th className="px-4 py-2 font-medium">Night</th><th className="px-4 py-2 font-medium">Hotel</th><th className="px-4 py-2 font-medium">Meal</th><th className="px-4 py-2 font-medium">Rooms</th><th className="px-4 py-2 text-right font-medium">Price</th></tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {pkg.hotels.map((h, i) => {
-                        const firstNight = (h.nights || [])[0];
+                      {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => {
+                        const firstNight = (base.nights || [])[0];
+                        const uniq = (vals) => [...new Set(vals.filter(Boolean))];
+                        const billed = Math.max(...opts.map((o) => o.amount || 0));
                         return (
                           <tr key={i}>
                             <td className="px-4 py-3 align-top">
-                              <p className="font-medium text-gray-800">{(h.nights || []).map(ord).join(', ') || '—'}</p>
+                              <p className="font-medium text-gray-800">{(base.nights || []).map(ord).join(', ') || '—'}</p>
                               {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
                             </td>
                             <td className="px-4 py-3 align-top">
-                              <p className="font-medium text-gray-900">{h.hotelName}</p>
-                              <p className="text-xs text-gray-400">{[h.city, h.stars ? `${h.stars} Star` : null].filter(Boolean).join(', ')}</p>
+                              {opts.map((o, k) => (
+                                <p key={k} className="font-medium text-gray-900">
+                                  {k > 0 && <span className="mr-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
+                                  {o.hotelName}
+                                </p>
+                              ))}
+                              <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}</p>
                             </td>
-                            <td className="px-4 py-3 align-top text-gray-600">{h.mealPlan || '—'}</td>
+                            <td className="px-4 py-3 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                             <td className="px-4 py-3 align-top">
-                              <p className="text-gray-800">{h.rooms || 1} {h.roomType || 'Room'}</p>
-                              <p className="text-xs text-gray-400">{h.paxPerRoom || 2} Pax{h.aweb ? ` +${h.aweb} AWEB` : ''}{h.cnb ? ` +${h.cnb} CNB` : ''}</p>
+                              <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
+                              <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                             </td>
-                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{h.amount ? `₹${h.amount.toLocaleString('en-IN')}` : '—'}</td>
+                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{billed ? `₹${billed.toLocaleString('en-IN')}` : '—'}</td>
                           </tr>
                         );
                       })}
@@ -976,8 +993,21 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                   {(company.termsAndConditions || []).map((s) => (
                     <div key={s.heading}>
                       <p className="mb-1.5 text-[12.5px] font-bold uppercase tracking-wide text-gray-800">{s.heading}</p>
+                      {s.intro && <p className="mb-1.5 text-[13px] leading-relaxed text-gray-600">{s.intro}</p>}
+                      {s.table?.rows?.length > 0 && (
+                        <table className="mb-2 w-full border-collapse text-[12px]">
+                          <thead>
+                            <tr>{s.table.headers?.map((h) => <th key={h} className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-semibold text-gray-700">{h}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            {s.table.rows.map((r, ri) => (
+                              <tr key={ri}>{r.map((c, ci) => <td key={ci} className="border border-gray-200 px-2 py-1 align-top text-gray-600">{c}</td>)}</tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                       <ul className="space-y-1">
-                        {s.items.map((x, i) => {
+                        {(s.items || []).map((x, i) => {
                           const idx = x.indexOf(': ');
                           return (
                             <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-gray-600">
@@ -1154,13 +1184,20 @@ function SuggestionCard({ quote, onUse, pending }) {
         {view === 'hotels' && (
           pkg?.hotels?.length ? (
             <div className="divide-y divide-slate-100">
-              {pkg.hotels.map((h, i) => (
+              {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => (
                 <div key={i} className="flex items-center justify-between py-2 text-sm">
                   <div>
-                    <p className="font-medium text-slate-800">{h.hotelName}</p>
-                    <p className="text-xs text-slate-400">{[h.city, h.roomType, h.mealPlan].filter(Boolean).join(' • ')}</p>
+                    <p className="font-medium text-slate-800">
+                      {opts.map((o, k) => (
+                        <span key={k}>
+                          {k > 0 && <span className="mx-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
+                          {o.hotelName}
+                        </span>
+                      ))}
+                    </p>
+                    <p className="text-xs text-slate-400">{[...new Set(opts.map((o) => [o.city, o.roomType, o.mealPlan].filter(Boolean).join(' • ')))].join('  |  ')}</p>
                   </div>
-                  <span className="text-xs text-slate-500">{(h.nights || []).length || 1}N • {h.rooms || 1} room(s)</span>
+                  <span className="text-xs text-slate-500">{(base.nights || []).length || 1}N • {base.rooms || 1} room(s)</span>
                 </div>
               ))}
             </div>
@@ -1418,7 +1455,40 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
   );
 }
 
+const ACCOUNTING_SECTIONS = [
+  { key: 'payments', label: 'Payments' },
+  { key: 'proforma', label: 'Proforma Invoice' },
+  { key: 'profit', label: 'Profit Report' },
+];
+
 export function AccountingTab({ id, bookingId, totalAmount }) {
+  const [section, setSection] = useState('payments');
+  return (
+    <div className="flex gap-6">
+      <aside className="w-44 shrink-0 space-y-1">
+        {ACCOUNTING_SECTIONS.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSection(s.key)}
+            className={cn(
+              'block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold',
+              section === s.key ? 'border-l-2 border-brand-600 bg-brand-50 text-brand-700' : 'text-gray-600 hover:bg-gray-50'
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </aside>
+      <div className="min-w-0 flex-1">
+        {section === 'payments' && <PaymentsSection id={id} bookingId={bookingId} totalAmount={totalAmount} />}
+        {section === 'proforma' && <ProformaSection queryId={id} />}
+        {section === 'profit' && <ProfitSection queryId={id} onGoToPayments={() => setSection('payments')} />}
+      </div>
+    </div>
+  );
+}
+
+function PaymentsSection({ id, bookingId, totalAmount }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inst', id], queryFn: () => installmentsApi.list({ query: id, direction: 'incoming' }) });
   const rows = data?.data || [];
@@ -1430,11 +1500,20 @@ export function AccountingTab({ id, bookingId, totalAmount }) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [payInst, setPayInst] = useState(null); // instalment being paid
 
+  const openReceipt = async (r) => {
+    const t = toast.loading('Preparing receipt…');
+    try {
+      const blob = await installmentsApi.receipt(r._id);
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch {
+      toast.error('Could not generate the receipt');
+    } finally {
+      toast.dismiss(t);
+    }
+  };
+
   return (
-    <div className="flex gap-6">
-      <aside className="w-40 shrink-0 space-y-1">
-        <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700">Payments</div>
-      </aside>
+    <div>
       <div className="min-w-0 flex-1">
         <h3 className="mb-3 font-semibold text-gray-900">Payments from customer</h3>
         <div className="mb-4 rounded-xl border border-gray-200 bg-white px-5 py-3">
@@ -1474,12 +1553,20 @@ export function AccountingTab({ id, bookingId, totalAmount }) {
                       {r.comments?.length ? r.comments[r.comments.length - 1].body : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {!r.paid && (
+                      {!r.paid ? (
                         <button
                           onClick={() => setPayInst(r)}
                           className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
                         >
                           + Add Payment
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => openReceipt(r)}
+                          title="Download the payment receipt PDF"
+                          className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700"
+                        >
+                          <FileText size={12} className="mr-1 inline" /> Receipt
                         </button>
                       )}
                     </td>
@@ -1520,14 +1607,16 @@ export function AccountingTab({ id, bookingId, totalAmount }) {
 }
 
 /* ---------------------------------- Docs --------------------------------- */
-export function DocsTab({ quotes }) {
+export function DocsTab({ quotes, queryId }) {
   const accepted = quotes.find((x) => x.status === 'accepted') || quotes[0];
   if (!accepted) return <div className="card p-8 text-center text-sm text-gray-400">No quote to generate documents from yet.</div>;
   return (
-    <div className="max-w-xl space-y-2">
-      <p className="mb-2 text-sm text-gray-500">Generate trip documents from quote #{accepted.quoteNumber}.</p>
-      <Link to={`/quotes/${accepted._id}/quotation`} className="card flex items-center justify-between p-4 hover:border-brand-300"><span className="flex items-center gap-2 font-medium text-gray-800"><FileText size={16} className="text-brand-500" /> Trip Voucher / Quotation</span><ChevronRight size={16} className="text-gray-400" /></Link>
-      <Link to={`/quotes/${accepted._id}`} className="card flex items-center justify-between p-4 hover:border-brand-300"><span className="flex items-center gap-2 font-medium text-gray-800"><Share2 size={16} className="text-brand-500" /> Share package (WhatsApp / Email / PDF)</span><ChevronRight size={16} className="text-gray-400" /></Link>
+    <div className="space-y-4">
+      <DocsVouchers queryId={queryId} quotes={quotes} />
+      <div className="flex flex-wrap gap-2">
+        <Link to={`/quotes/${accepted._id}/quotation`} className="card flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-800 hover:border-brand-300"><FileText size={15} className="text-brand-500" /> Quotation Document <ChevronRight size={14} className="text-gray-400" /></Link>
+        <Link to={`/quotes/${accepted._id}`} className="card flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-800 hover:border-brand-300"><Share2 size={15} className="text-brand-500" /> Share package (WhatsApp / Email / PDF) <ChevronRight size={14} className="text-gray-400" /></Link>
+      </div>
     </div>
   );
 }

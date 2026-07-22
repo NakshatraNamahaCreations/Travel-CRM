@@ -56,94 +56,117 @@ export const company = {
   // a "Label: " prefix — the label (text before ": ") is rendered in bold.
   termsAndConditions: [
     {
-      heading: 'Payment Policy',
+      heading: '1. Booking Policy',
+      intro: 'To confirm your Andaman package, please complete the following steps:',
+      table: {
+        headers: ['Step', 'Requirement'],
+        rows: [
+          ['Step 1', 'Pay 50% to 70% of the package cost (as advised by your travel consultant) to confirm the booking.'],
+          ['Step 2', 'Share a valid Government Photo ID (Aadhaar, Passport, Voter ID, Driving Licence, etc.) for all travellers.'],
+          ['Step 3', 'Share your arrival and departure flight details.'],
+          ['Step 4', 'Provide the full name, age and gender of all travellers.'],
+        ],
+      },
       items: [
-        '25% at Booking: 25% of the total package cost is due at the time of booking (1st installment) via bank transfer or payment gateway (3.5% extra gateway fee).',
-        '25% after Confirmation: 25% is due 5 days after receiving confirmation (2nd installment).',
-        '50% on Arrival: The remaining 50% is due on the day of arrival. If you wish to pay the third installment online, notify us at least 3 days before travel. Online payments incur an additional 2% fee.',
+        'Balance Payment: Remaining amount must be paid 2 days before arrival, or on arrival in Port Blair before commencement of services (if agreed). Bookings are confirmed only after the required advance payment is received.',
       ],
     },
     {
-      heading: 'Cancellation Policy',
+      heading: '2. Payment Policy',
       items: [
-        '30+ Days Before Travel: 30% of the total package cost is charged as a cancellation fee.',
-        '15-30 Days Before Travel: 70% of the total package cost is charged as a cancellation fee.',
-        '0-15 Days Before Travel: 100% of the total package cost is charged as a cancellation fee.',
-        'Weather/Government Restrictions: No refunds for cancellations due to weather, government restrictions, or unforeseen circumstances, though alternate activities will be provided when possible.',
+        'Payments can be made through Bank Transfer, UPI or other approved online payment methods. Cash payments are accepted as per applicable Government regulations. Cheques are not accepted. Payments made to any account other than the official AndamanTravelCare account will not be considered valid.',
       ],
     },
     {
-      heading: 'Last-Minute Cancellations',
+      heading: '3. Cancellation Policy (Land Packages)',
+      table: {
+        headers: ['Cancellation Before Arrival', 'Cancellation Charges'],
+        rows: [
+          ['More than 30 Days', '100% refund after deducting ferry cancellation charges (if applicable).'],
+          ['21–30 Days', '25% of the total package cost.'],
+          ['11–20 Days', '50% of the total package cost.'],
+          ['10 Days or Less', '100% cancellation charges. No refund.'],
+        ],
+      },
       items: [
-        'For cancellations due to flight cancellations, natural calamities, or changes in flight schedules/ferry services (due to technical/weather issues), 100% of the booking amount is non-refundable.',
-        'Andaman TravelCare is not responsible for missed sightseeing, closures, or delays due to strikes, roadblocks, or unforeseen circumstances.',
+        "Additional Conditions: Ferry tickets are cancelled as per the ferry operator's policy.",
+        "Hotel cancellation charges apply as per the respective hotel's policy.",
+        'Peak season (15 Dec–15 Jan) bookings may attract 100% cancellation charges depending on hotel/ferry policies.',
+        'Premium hotels such as Taj, Barefoot, Munjoh, Seashell, Coral Reef and similar properties may have separate cancellation policies.',
       ],
     },
     {
-      heading: 'Check-in/Check-out and Special Requests',
+      heading: '4. Flight Cancellation Policy',
       items: [
-        'Check-in time at the hotels is 11:00 AM, with early check-in available based on room availability.',
-        'Check-out time at hotels in Andaman is 8:00 AM. If clients wish to extend their stay, they will need to pay additional charges, subject to availability.',
-        'If the listed hotel is unavailable, a similar alternative will be provided in the same category. Availability is subject to change without prior notice.',
-        'Special Requests: Requests for early check-in, late check-out, room type, or other special accommodations are subject to availability and cannot be guaranteed.',
-        'If a Gala dinner is held at your hotel (on Christmas, New Year, or other special occasions), it is mandatory and charges will be directly applied by the hotel.',
-        'Meals must be taken as per hotel timings. An extra bed refers to an extra mattress. The meal plans are: EP (Accommodation only), CP (Accommodation with breakfast), MAP (Accommodation with breakfast and one additional meal), and AP (Accommodation with all meals).',
+        "Flight tickets are governed by airline rules. Airline delays, cancellations or rescheduling are beyond AndamanTravelCare's control. Any airline cancellation charges apply as per airline policy. Refunds for missed hotel nights, ferries or sightseeing due to flight disruptions are subject to the respective providers' policies.",
       ],
     },
     {
-      heading: 'Ferry and Cruise Operations',
+      heading: '5. Hotel Policy',
+      table: {
+        headers: ['Destination', 'Standard Hotels', 'Premium Hotels'],
+        rows: [
+          ['Port Blair', 'Check-in: 11:00 AM · Check-out: 8:00 AM', 'Same'],
+          ['Havelock Island', 'Check-in: 11:00 AM · Check-out: 8:00 AM', 'Check-in: 12:00 PM · Check-out: 8:00 AM'],
+          ['Neil Island', 'Check-in: 11:00 AM · Check-out: 8:00 AM', 'Check-in: 12:00 PM · Check-out: 8:00 AM'],
+        ],
+      },
       items: [
-        "Ferry and cruise operations are subject to government clearance and weather conditions. If a ferry cannot sail due to weather or other restrictions, alternative arrangements will be made. However, no refund will be provided for non-sailing ferries, and cancellations will be handled as per the company's cancellation policy.",
+        'Early check-in and late check-out are subject to availability and may incur additional charges. Similar category hotels may be provided if the booked hotel is unavailable.',
       ],
     },
     {
-      heading: 'Water Activities and Weather Conditions',
+      heading: '6. Ferry & Sightseeing Policy',
       items: [
-        'All water activities are subject to weather conditions. If any activity is not conducted due to weather, no refund will be provided. Alternative activities will be arranged when possible.',
+        'Ferry schedules are subject to weather, Government regulations and operational conditions. Alternate arrangements will be made wherever possible. Sightseeing order may change. No refund for services missed due to late arrival by guests.',
       ],
     },
     {
-      heading: 'Urgent Bookings',
+      heading: '7. Water Activities',
       items: [
-        'For bookings made within 15 days of travel, 50% of the total package cost is required upfront. Vouchers and payment invoices will be emailed within 7 days of booking.',
+        "All water activities are subject to weather and Government permissions. Refunds, if any, are governed by the activity operator's policy.",
       ],
     },
     {
-      heading: 'Instalment Payment Terms, Booking Cancellation, and Package Changes',
+      heading: '8. Guest Responsibilities',
       items: [
-        'Instalment Extensions: Clients can request an extension on instalment dates in special cases, subject to approval from the Travel Consultant. Any changes will be assessed on a case-by-case basis.',
-        'Payment Non-Compliance: Failure to meet payment terms may result in booking cancellation. If the instalment is not paid within 3 days of the due date, a rebooking fee of 10% applies to continue the trip.',
-        'Package Changes and Extra Costs: Changes due to government orders, pandemics, strikes, or natural disasters incur additional costs, which must be borne by the client. These charges apply even if the package is altered for any reason.',
-        'Postponement charges vary between 10% and 30%, depending on remaining days. Seasonal surcharges during peak times and long weekends are applicable and must be borne by the guest.',
+        'Guests must carry original ID, report on time, follow hotel/ferry/activity rules and behave respectfully. Services may be discontinued without refund in cases of misconduct.',
       ],
     },
     {
-      heading: 'Changes to Itineraries',
+      heading: '9. Force Majeure',
       items: [
-        'By Andaman TravelCare: We reserve the right to make changes to your itinerary or accommodations due to unforeseen circumstances. We will make every effort to inform you of such changes as soon as possible.',
-        'By You: Any changes requested by you to your itinerary may be subject to fees or penalties, as determined by the service providers and Andaman TravelCare.',
+        'AndamanTravelCare is not responsible for disruptions caused by weather, natural disasters, Government restrictions, pandemics, civil unrest, flight or ferry suspensions, or other events beyond our control. Refunds remain subject to supplier policies.',
       ],
     },
     {
-      heading: 'Disclaimer on Verbal Commitments, Sightseeing Delays, and Tour Expectations',
+      heading: '10. Liability',
       items: [
-        'Verbal commitments are not valid. Heavy traffic during peak season may cause missed sightseeing, for which Andaman TravelCare is not responsible. We cannot guarantee the tour will meet your expectations.',
+        'AndamanTravelCare acts as a booking facilitator and is not liable for accidents, injuries, loss or theft occurring during third-party services.',
       ],
     },
     {
-      heading: 'General Terms',
+      heading: '11. Privacy Policy',
       items: [
-        'Personal Responsibility: Guests are responsible for their personal belongings. The company is not liable for any lost or damaged items during the trip.',
-        'Amendments and Changes: If you wish to amend your itinerary or postpone your travel dates, you must bear additional charges. Changes are subject to availability and may incur extra costs.',
-        'Non-Compliance: If payment terms are not met, the booking may be canceled, and rebooking charges may apply.',
-        'Local Attractions and Closures: Andaman museums and monuments remain closed on Mondays, while Ross Island is closed on Wednesdays. If any attraction is missed due to unforeseen closures, efforts will be made to cover the sightseeing when possible.',
+        'Personal information is used only for bookings, permits and travel arrangements and is shared only where required for service delivery or by law.',
       ],
     },
     {
-      heading: 'Additional Important Notes',
+      heading: '12. Changes to Itinerary',
       items: [
-        'Mobile Networks: Only BSNL, Airtel, and Vodafone networks are supported in Andaman.',
-        'Foreign Nationals: Foreign nationals and Indians holding passports from other countries (PIO/OCI) must register at Port Blair airport upon arrival and obtain a Restricted Area Permit (RAP), valid for 30 days.',
+        'Itineraries may change due to weather, ferry schedules, Government restrictions or operational requirements. Suitable alternatives will be arranged wherever possible.',
+      ],
+    },
+    {
+      heading: '13. Dispute Resolution',
+      items: [
+        'Disputes should first be resolved amicably. If unresolved, they shall be subject to the jurisdiction of competent courts in Port Blair, Andaman & Nicobar Islands.',
+      ],
+    },
+    {
+      heading: 'Important Notes',
+      items: [
+        'Room allocation, ferry seats and flight fares are subject to availability. Package prices may change before confirmation due to supplier price revisions. By confirming a booking, guests agree to these terms and conditions.',
       ],
     },
   ],

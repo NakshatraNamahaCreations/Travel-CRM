@@ -28,6 +28,13 @@ export const env = {
   clientUrl: clientUrls[0],
   isProd: (process.env.NODE_ENV || 'development') === 'production',
   chromePath: process.env.CHROME_PATH || '',
+  cloudinary: {
+    // Either set CLOUDINARY_URL (cloudinary://key:secret@cloud) or the trio below.
+    url: process.env.CLOUDINARY_URL || '',
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  },
   email: {
     host: process.env.EMAIL_HOST || '',
     port: Number(process.env.EMAIL_PORT) || 587,

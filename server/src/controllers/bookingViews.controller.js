@@ -27,7 +27,7 @@ function selectedPackage(b) {
 function hotelStays(b) {
   const pkg = selectedPackage(b);
   if (!pkg || !b.startDate) return [];
-  return (pkg.hotels || []).map((h) => {
+  return (pkg.hotels || []).filter((h) => !h.isAlternative).map((h) => {
     const nights = (h.nights || []).slice().sort((a, c) => a - c);
     const first = nights[0] || 1;
     const count = Math.max(1, nights.length);

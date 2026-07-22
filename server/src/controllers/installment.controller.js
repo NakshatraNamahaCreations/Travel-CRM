@@ -1,10 +1,13 @@
 import { Installment } from '../models/Installment.js';
 import { Payment } from '../models/Payment.js';
 import { Booking } from '../models/Booking.js';
+import { OrgProfile } from '../models/OrgProfile.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { createNotification } from './notification.controller.js';
+import { paymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
+import { htmlToPdf } from '../pdf/renderPdf.js';
 
 function todayStart() {
   const d = new Date();
@@ -171,6 +174,34 @@ export const logPayment = asyncHandler(async (req, res) => {
   }
 
   return ok(res, inst);
+});
+
+// GET /api/installments/:id/receipt — payment receipt PDF for a paid instalment
+export const receiptPdf = asyncHandler(async (req, res) => {
+  const inst = await Installment.findById(req.params.id)
+    .populate('payment', 'mode')
+    .populate('query', 'queryNumber pax');
+  if (!inst) throw ApiError.notFound('Installment not found');
+  if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment yet');
+
+  const org = await OrgProfile.get().catch(() => null);
+  // Paid-so-far / scheduled totals across the trip's incoming instalments.
+  const queryId = inst.query?._id || inst.query;
+  const siblings = queryId ? await Installment.find({ query: queryId, direction: 'incoming' }) : [inst];
+  const totals = {
+    paid: siblings.reduce((s, r) => s + (r.paidAmount || 0), 0),
+    scheduled: siblings.reduce((s, r) => s + (r.amount || 0), 0),
+  };
+  const paxObj = inst.query?.pax;
+  const pax = paxObj
+    ? `${paxObj.adults || 0} Adult${(paxObj.adults || 0) === 1 ? '' : 's'}${paxObj.children?.length ? `, ${paxObj.children.length} Child${paxObj.children.length === 1 ? '' : 'ren'}` : ''}`
+    : '';
+
+  const html = paymentReceiptHtml(inst.toObject(), { org: org?.toObject(), mode: inst.payment?.mode || '', pax, totals });
+  const pdf = await htmlToPdf(html);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="PaymentReceipt-${inst.installmentNumber}.pdf"`);
+  return res.send(pdf);
 });
 
 // PATCH /api/installments/:id/verify
