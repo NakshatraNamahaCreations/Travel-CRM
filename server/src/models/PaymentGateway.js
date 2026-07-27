@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A configured payment-gateway provider (e.g. PayU). No live credentials are stored here —
 // this is the UI/model layer; settlement & transaction rows live in GatewayTransaction.
@@ -13,5 +14,7 @@ const paymentGatewaySchema = new mongoose.Schema(
 );
 
 paymentGatewaySchema.set('toJSON', { virtuals: true });
+
+paymentGatewaySchema.plugin(tenantPlugin);
 
 export const PaymentGateway = mongoose.model('PaymentGateway', paymentGatewaySchema);

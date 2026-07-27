@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import XLSX from 'xlsx';
 import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
+import { enterTenant } from '../tenant/context.js';
+import { defaultOrg } from '../seed/org.js';
 import { TransportService } from '../models/TransportService.js';
 import { TransportPrice } from '../models/TransportPrice.js';
 import { Destination } from '../models/Destination.js';
@@ -74,6 +76,7 @@ function parseSheet(rows) {
 
 async function run() {
   await connectDB();
+  enterTenant((await defaultOrg())._id); // scope the import to the default org
   const dry = process.argv.includes('--dry');
   const wb = XLSX.readFile(findFile());
   const andaman = await Destination.findOne({ name: 'Andaman' });

@@ -16,14 +16,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Normalize errors and auto-logout on 401.
+// Normalize errors, auto-logout on 401, and bounce locked-out organizations
+// (suspended by the platform owner / subscription expired) to the login page.
+const LOCKOUT_CODES = { ORG_SUSPENDED: 'suspended', SUBSCRIPTION_EXPIRED: 'expired' };
+
 api.interceptors.response.use(
   (res) => res,
   (error) => {
     const status = error.response?.status;
+    const code = error.response?.data?.code;
     const message =
       error.response?.data?.message || error.message || 'Something went wrong';
-    if (status === 401 && !error.config?._skipAuthRedirect) {
+    if (status === 403 && LOCKOUT_CODES[code] && window.location.pathname !== '/login') {
+      localStorage.removeItem(TOKEN_KEY);
+      window.location.assign(`/login?reason=${LOCKOUT_CODES[code]}`);
+    } else if (status === 401 && !error.config?._skipAuthRedirect) {
       localStorage.removeItem(TOKEN_KEY);
       if (window.location.pathname !== '/login') {
         window.location.assign('/login');

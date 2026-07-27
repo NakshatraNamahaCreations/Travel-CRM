@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -19,5 +20,7 @@ const notificationSchema = new mongoose.Schema(
 
 // Compound index for fast per-user unread queries.
 notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
+
+notificationSchema.plugin(tenantPlugin);
 
 export const Notification = mongoose.model('Notification', notificationSchema);

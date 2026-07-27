@@ -197,7 +197,7 @@ async function loadFullQuote(id) {
 // for the on-screen preview; default renders the PDF.
 export const quoteVoucher = asyncHandler(async (req, res) => {
   const quote = await loadFullQuote(req.params.id);
-  const org = await OrgProfile.get().catch(() => null);
+  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
   const on = (v) => v === '1' || v === 'true';
   const html = voucherHtml(quote.toObject(), {
     org: org?.toObject(),
@@ -223,7 +223,7 @@ export const quoteVoucher = asyncHandler(async (req, res) => {
 // GET /api/quotes/:id/pdf — server-rendered PDF (inline download)
 export const quotePdf = asyncHandler(async (req, res) => {
   const quote = await loadFullQuote(req.params.id);
-  const org = await OrgProfile.get().catch(() => null);
+  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
   const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Quotation-${quote.quoteNumber}.pdf"`);
@@ -240,7 +240,7 @@ export const emailQuote = asyncHandler(async (req, res) => {
   const to = req.body.email || obj.query?.guest?.email;
   if (!to) throw ApiError.badRequest('No recipient — guest has no email on file and none was provided');
 
-  const org = await OrgProfile.get().catch(() => null);
+  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
   const pdf = await htmlToPdf(quotationHtml(obj, org?.toObject()));
   const guestName = [obj.query?.guest?.salutation, obj.query?.guest?.name].filter(Boolean).join(' ') || 'Guest';
   await sendMail({

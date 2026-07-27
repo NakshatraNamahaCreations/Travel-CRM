@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // One proforma invoice raised against a trip (query). Seller/buyer blocks are
 // snapshotted at creation so later company-config edits don't rewrite old
@@ -67,8 +68,13 @@ proformaInvoiceSchema.pre('validate', function compute(next) {
   next();
 });
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+proformaInvoiceSchema.plugin(tenantPlugin);
+proformaInvoiceSchema.index({ organization: 1, invoiceNumber: 1 }, { unique: true });
+
 proformaInvoiceSchema.pre('save', async function assignNumber(next) {
-  if (this.isNew && !this.invoiceNumber) this.invoiceNumber = await Counter.next('proformaInvoice', 1);
+  if (this.isNew && !this.invoiceNumber) this.invoiceNumber = await Counter.nextFor(this.organization, 'proformaInvoice', 1);
   next();
 });
 

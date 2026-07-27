@@ -1,5 +1,7 @@
 /* Seed City and State collections from scratch. Safe to re-run (upsert by name). */
 import { connectDB } from '../config/db.js';
+import { enterTenant } from '../tenant/context.js';
+import { defaultOrg } from './org.js';
 import { State } from '../models/State.js';
 import { City } from '../models/City.js';
 
@@ -25,6 +27,7 @@ const CITIES = [
 
 async function run() {
   await connectDB();
+  enterTenant((await defaultOrg())._id); // scope all writes to the default org
 
   // Upsert states
   const stateMap = {};

@@ -43,11 +43,17 @@ export const getUser = asyncHandler(async (req, res) => {
 
 // POST /api/users  (admin/manager)
 export const createUser = asyncHandler(async (req, res) => {
-  const exists = await User.findOne({ email: req.body.email });
+  // Email is globally unique (one email = one account across all tenants), so
+  // the conflict check must bypass the tenant filter.
+  const exists = await User.findOne({ email: req.body.email }).setOptions({ skipTenant: true });
   if (exists) throw ApiError.conflict('Email already registered');
+  // organization comes from the tenant context (never from the request body),
+  // and the platform 'owner' role can only be created via bootstrap:owner.
+  const { organization, ...body } = req.body;
+  if (body.role === 'owner') throw ApiError.forbidden('Invalid role');
   const user = await User.create({
-    ...req.body,
-    permissionOverrides: sanitizeOverrides(req.body.permissionOverrides),
+    ...body,
+    permissionOverrides: sanitizeOverrides(body.permissionOverrides),
   });
   return created(res, user);
 });
@@ -60,7 +66,10 @@ export const updateUser = asyncHandler(async (req, res) => {
   const { name, phone, role, team, avatarUrl, password, permissionOverrides } = req.body;
   if (name !== undefined) user.name = name;
   if (phone !== undefined) user.phone = phone;
-  if (role !== undefined) user.role = role;
+  if (role !== undefined) {
+    if (role === 'owner') throw ApiError.forbidden('Invalid role');
+    user.role = role;
+  }
   if (team !== undefined) user.team = team || undefined;
   if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
   if (password) user.password = password; // re-hashed by pre-save hook

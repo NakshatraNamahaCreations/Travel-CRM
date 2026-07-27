@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A room type and how many extra beds of each kind it allows.
 const roomTypeSchema = new mongoose.Schema(
@@ -91,5 +92,7 @@ hotelSchema.virtual('locationLabel').get(function () {
 hotelSchema.index({ name: 'text', 'location.city': 'text' });
 hotelSchema.set('toJSON', { virtuals: true });
 hotelSchema.set('toObject', { virtuals: true });
+
+hotelSchema.plugin(tenantPlugin);
 
 export const Hotel = mongoose.model('Hotel', hotelSchema);

@@ -1,6 +1,10 @@
-/* Seeds an admin user + a couple of sample teams. Safe to re-run (idempotent on email/name). */
+/* Seeds the default org, an admin user + a couple of sample teams.
+   Safe to re-run (idempotent on email/name). All writes run inside the default
+   org's tenant context so tenantPlugin stamps/scopes them automatically. */
 import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
+import { runWithTenant } from '../tenant/context.js';
+import { defaultOrg } from './org.js';
 import { User } from '../models/User.js';
 import { Team } from '../models/Team.js';
 import { Destination } from '../models/Destination.js';
@@ -25,9 +29,7 @@ async function upsertMany(Model, field, values, extra = () => ({})) {
 }
 
 
-async function run() {
-  await connectDB();
-
+async function seedTenantData() {
   const teams = ['Inbound Sales', 'Outbound Sales'];
   const teamDocs = {};
   for (const name of teams) {
@@ -270,13 +272,23 @@ async function run() {
 
   // eslint-disable-next-line no-console
   console.log('[seed] Done.');
+}
+
+async function run() {
+  await connectDB();
+  const org = await defaultOrg();
+  // eslint-disable-next-line no-console
+  console.log(`[seed] Seeding into org: ${org.name} (${org._id})`);
+  await runWithTenant(org._id, seedTenantData);
   await mongoose.disconnect();
   process.exit(0);
 }
 
-
-run().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('[seed] Failed:', err);
-  process.exit(1);
-});
+// Only run when executed directly (this module is also imported for defaultOrg).
+if (process.argv[1] && /seed[\\/]index\.js$/.test(process.argv[1])) {
+  run().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[seed] Failed:', err);
+    process.exit(1);
+  });
+}

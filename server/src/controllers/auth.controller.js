@@ -1,9 +1,11 @@
 import { User } from '../models/User.js';
+import { Organization } from '../models/Organization.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { ok, created } from '../utils/apiResponse.js';
+import { ok } from '../utils/apiResponse.js';
 import { signToken, setAuthCookie } from '../utils/token.js';
 import { effectivePermissions } from '../config/permissions.js';
+import { assertOrgAccess } from '../middleware/auth.js';
 
 // Serialises a user doc with its resolved permission list for the client.
 const withPermissions = (user) => ({
@@ -11,21 +13,9 @@ const withPermissions = (user) => ({
   permissions: effectivePermissions(user),
 });
 
-// POST /api/auth/register
-// First-ever user becomes admin; afterwards only admins create users (enforced in routes).
-export const register = asyncHandler(async (req, res) => {
-  const { email } = req.body;
-  const exists = await User.findOne({ email });
-  if (exists) throw ApiError.conflict('Email already registered');
-
-  const userCount = await User.estimatedDocumentCount();
-  const role = userCount === 0 ? 'admin' : req.body.role || 'sales';
-
-  const user = await User.create({ ...req.body, role });
-  const token = signToken(user);
-  setAuthCookie(res, token);
-  return created(res, { user: withPermissions(user), token });
-});
+// There is no public registration. Tenant companies are created by the
+// platform owner (POST /api/owner/organizations); the owner account itself is
+// bootstrapped via `npm run bootstrap:owner`.
 
 // POST /api/auth/login
 export const login = asyncHandler(async (req, res) => {
@@ -36,12 +26,18 @@ export const login = asyncHandler(async (req, res) => {
   }
   if (!user.isActive) throw ApiError.forbidden('Account disabled');
 
+  if (user.role !== 'owner') {
+    const org = await Organization.findById(user.organization).select('isActive subscription');
+    assertOrgAccess(org);
+  }
+
   user.lastLoginAt = new Date();
   await user.save();
 
   const token = signToken(user);
   setAuthCookie(res, token);
   user.password = undefined;
+  if (user.organization) await user.populate('organization', 'name isActive subscription');
   return ok(res, { user: withPermissions(user), token });
 });
 
@@ -53,7 +49,9 @@ export const logout = asyncHandler(async (req, res) => {
 
 // GET /api/auth/me
 export const me = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).populate('team', 'name');
+  const user = await User.findById(req.user._id)
+    .populate('team', 'name')
+    .populate('organization', 'name isActive subscription');
   return ok(res, { user: withPermissions(user) });
 });
 

@@ -10,6 +10,8 @@
     "seed": "node src/seed/index.js",
     "seed:options": "node src/seed/seed-options.js",
     "seed:locations": "node src/seed/seed-locations.js",
+    "bootstrap:owner": "node src/seed/create-owner.mjs",
+    "migrate:multitenant": "node src/migrations/2026-07-multitenant.mjs",
     "import:hotels": "node src/import/run-hotels.mjs",
     "import:activities": "node src/import/run-activities.mjs",
     "import:transport": "node src/import/run-transport.mjs",

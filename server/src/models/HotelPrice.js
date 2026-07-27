@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A date-ranged rate card row for a hotel/room-type/meal-plan combination.
 const hotelPriceSchema = new mongoose.Schema(
@@ -22,5 +23,7 @@ const hotelPriceSchema = new mongoose.Schema(
 
 hotelPriceSchema.index({ hotel: 1, startDate: 1, endDate: 1 });
 hotelPriceSchema.set('toJSON', { virtuals: true });
+
+hotelPriceSchema.plugin(tenantPlugin);
 
 export const HotelPrice = mongoose.model('HotelPrice', hotelPriceSchema);

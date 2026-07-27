@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A ledger account in the double-entry accounting system.
 // kind groups accounts the way the Accounts page tabs do.
@@ -30,5 +31,7 @@ const accountSchema = new mongoose.Schema(
 accountSchema.index({ name: 'text' });
 accountSchema.set('toJSON', { virtuals: true });
 accountSchema.set('toObject', { virtuals: true });
+
+accountSchema.plugin(tenantPlugin);
 
 export const Account = mongoose.model('Account', accountSchema);

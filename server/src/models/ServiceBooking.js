@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A single bookable service line within a trip (one hotel stay or one operational
 // service). Created from the accepted quote, then worked through a status workflow
@@ -40,5 +41,7 @@ const serviceBookingSchema = new mongoose.Schema(
 );
 
 serviceBookingSchema.set('toJSON', { virtuals: true });
+
+serviceBookingSchema.plugin(tenantPlugin);
 
 export const ServiceBooking = mongoose.model('ServiceBooking', serviceBookingSchema);

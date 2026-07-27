@@ -184,7 +184,7 @@ export const receiptPdf = asyncHandler(async (req, res) => {
   if (!inst) throw ApiError.notFound('Installment not found');
   if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment yet');
 
-  const org = await OrgProfile.get().catch(() => null);
+  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
   // Paid-so-far / scheduled totals across the trip's incoming instalments.
   const queryId = inst.query?._id || inst.query;
   const siblings = queryId ? await Installment.find({ query: queryId, direction: 'incoming' }) : [inst];

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Master list of default inclusion / exclusion lines shown on quotations.
 // Quotes can still override with their own lists; these are the defaults.
@@ -13,5 +14,7 @@ const inclusionExclusionSchema = new mongoose.Schema(
 );
 
 inclusionExclusionSchema.set('toJSON', { virtuals: true });
+
+inclusionExclusionSchema.plugin(tenantPlugin);
 
 export const InclusionExclusion = mongoose.model('InclusionExclusion', inclusionExclusionSchema);

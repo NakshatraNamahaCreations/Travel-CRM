@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
+// Tenant staff roles. The platform 'owner' role is deliberately NOT in this
+// list so tenant-facing role dropdowns/validators never offer it.
 export const ROLES = ['admin', 'manager', 'sales', 'operations', 'accounts'];
+export const PLATFORM_ROLES = ['owner'];
 
 const userSchema = new mongoose.Schema(
   {
@@ -9,13 +13,13 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
+      unique: true, // global — one email = one account = one org (or owner)
       lowercase: true,
       trim: true,
     },
     phone: { type: String, trim: true },
     password: { type: String, required: true, minlength: 6, select: false },
-    role: { type: String, enum: ROLES, default: 'sales', index: true },
+    role: { type: String, enum: [...ROLES, ...PLATFORM_ROLES], default: 'sales', index: true },
     team: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', index: true },
     // Per-user permission overrides: { 'payments.cancel': false, 'trips.create': true }.
     // Unset keys fall back to the role default. See config/permissions.js.
@@ -26,6 +30,14 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Adds the `organization` field + tenant scoping. Registered BEFORE the other
+// hooks so the org stamp runs first in the pre-save chain.
+userSchema.plugin(tenantPlugin);
+// Every user except the platform owner must belong to an organization.
+userSchema.path('organization').required(function orgRequired() {
+  return this.role !== 'owner';
+}, 'organization is required for tenant users');
 
 userSchema.pre('save', async function hashPassword(next) {
   if (!this.isModified('password')) return next();

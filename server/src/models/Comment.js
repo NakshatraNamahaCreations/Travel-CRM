@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Tasks & comments attached to a query/trip. An "actionable" comment is a task
 // that shows in the demanding list until resolved.
@@ -17,5 +18,7 @@ const commentSchema = new mongoose.Schema(
 );
 
 commentSchema.set('toJSON', { virtuals: true });
+
+commentSchema.plugin(tenantPlugin);
 
 export const Comment = mongoose.model('Comment', commentSchema);

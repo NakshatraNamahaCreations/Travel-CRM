@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import XLSX from 'xlsx';
 import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
+import { enterTenant } from '../tenant/context.js';
+import { defaultOrg } from '../seed/org.js';
 import { Hotel } from '../models/Hotel.js';
 import { HotelPrice } from '../models/HotelPrice.js';
 import { Destination } from '../models/Destination.js';
@@ -101,6 +103,7 @@ function parseHotelSheet(rows, sheetName) {
 
 async function run() {
   await connectDB();
+  enterTenant((await defaultOrg())._id); // scope the import to the default org
   const dryRun = process.argv.includes('--dry');
   const files = hotelFiles();
   let hotelCount = 0, priceCount = 0, skipped = 0;

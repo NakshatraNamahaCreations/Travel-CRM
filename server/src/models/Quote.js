@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 const round = (n, to = 1) => {
   const r = Math.round(n / to) * to;
@@ -148,7 +149,7 @@ const costItemSchema = new mongoose.Schema(
 const quoteSchema = new mongoose.Schema(
   {
     query: { type: mongoose.Schema.Types.ObjectId, ref: 'Query', required: true, index: true },
-    quoteNumber: { type: Number, unique: true, index: true },
+    quoteNumber: { type: Number, index: true }, // unique per-org (compound index below)
     title: { type: String, trim: true },
     status: { type: String, enum: ['draft', 'sent', 'accepted', 'rejected'], default: 'draft', index: true },
     currency: { type: String, default: 'INR' },
@@ -328,8 +329,13 @@ quoteSchema.pre('validate', function compute(next) {
   next();
 });
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+quoteSchema.plugin(tenantPlugin);
+quoteSchema.index({ organization: 1, quoteNumber: 1 }, { unique: true });
+
 quoteSchema.pre('save', async function assignNumber(next) {
-  if (this.isNew && !this.quoteNumber) this.quoteNumber = await Counter.next('quote', 5100000);
+  if (this.isNew && !this.quoteNumber) this.quoteNumber = await Counter.nextFor(this.organization, 'quote', 5100000);
   next();
 });
 

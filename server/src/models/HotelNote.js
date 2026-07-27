@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // General hotel notes shown on quotations/vouchers (optionally scoped to meal plans / dates).
 const hotelNoteSchema = new mongoose.Schema(
@@ -14,4 +15,6 @@ const hotelNoteSchema = new mongoose.Schema(
 );
 
 hotelNoteSchema.set('toJSON', { virtuals: true });
+hotelNoteSchema.plugin(tenantPlugin);
+
 export const HotelNote = mongoose.model('HotelNote', hotelNoteSchema);

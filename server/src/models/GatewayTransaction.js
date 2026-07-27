@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A row under a payment gateway — either a customer transaction or a settlement.
 const gatewayTransactionSchema = new mongoose.Schema(
@@ -22,5 +23,7 @@ const gatewayTransactionSchema = new mongoose.Schema(
 );
 
 gatewayTransactionSchema.set('toJSON', { virtuals: true });
+
+gatewayTransactionSchema.plugin(tenantPlugin);
 
 export const GatewayTransaction = mongoose.model('GatewayTransaction', gatewayTransactionSchema);

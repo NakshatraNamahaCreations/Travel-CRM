@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Date-ranged rate for a transport service (optionally a specific item) and config.
 const transportPriceSchema = new mongoose.Schema(
@@ -22,5 +23,7 @@ const transportPriceSchema = new mongoose.Schema(
 );
 
 transportPriceSchema.set('toJSON', { virtuals: true });
+
+transportPriceSchema.plugin(tenantPlugin);
 
 export const TransportPrice = mongoose.model('TransportPrice', transportPriceSchema);

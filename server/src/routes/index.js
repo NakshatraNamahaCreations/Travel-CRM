@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';
+import ownerRoutes from './owner.routes.js';
+import { protect } from '../middleware/auth.js';
+import { tenantContext } from '../tenant/middleware.js';
 import userRoutes from './user.routes.js';
 import { teamRoutes } from './team.routes.js';
 import {
@@ -43,7 +46,15 @@ router.get('/', (req, res) =>
   res.json({ name: 'Travel CRM API', version: '0.1.0', status: 'ok' })
 );
 
+// Outside the tenant wall: login/me handle org themselves; the owner panel is
+// deliberately unscoped (its handlers filter by organization explicitly).
 router.use('/auth', authRoutes);
+router.use('/owner', ownerRoutes);
+
+// Everything below runs inside the caller's tenant context — tenantPlugin
+// scopes every DB query to req.user's organization (owners are rejected).
+router.use(protect, tenantContext);
+
 router.use('/users', userRoutes);
 router.use('/teams', teamRoutes);
 router.use('/destinations', destinationRoutes);

@@ -47,7 +47,7 @@ export const deleteProformaInvoice = asyncHandler(async (req, res) => {
 export const proformaPdf = asyncHandler(async (req, res) => {
   const doc = await ProformaInvoice.findById(req.params.id).populate(POPULATE);
   if (!doc) throw ApiError.notFound('Proforma invoice not found');
-  const org = await OrgProfile.get().catch(() => null);
+  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
   const pdf = await htmlToPdf(proformaHtml(doc.toObject(), org?.toObject()));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="ProformaInvoice-${doc.invoiceNumber}.pdf"`);

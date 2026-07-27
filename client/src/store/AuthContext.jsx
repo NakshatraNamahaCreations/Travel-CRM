@@ -45,6 +45,10 @@ export function AuthProvider({ children }) {
     login,
     logout,
     isAuthenticated: !!user,
+    isOwner: user?.role === 'owner',
+    // Populated org object from /me ({ name, isActive, subscription }) — an id
+    // string right after login until the next /me fetch.
+    organization: user?.organization && typeof user.organization === 'object' ? user.organization : null,
     hasRole: (...roles) => (user ? roles.includes(user.role) : false),
     // Fine-grained permission check, e.g. can('payments.cancel').
     // Falls back to true when the server didn't send a permission list (older sessions).

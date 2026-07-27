@@ -1,12 +1,13 @@
 import { Router } from 'express';
-import { register, login, logout, me, updateProfile } from '../controllers/auth.controller.js';
+import { login, logout, me, updateProfile } from '../controllers/auth.controller.js';
 import { validate } from '../middleware/validate.js';
 import { protect } from '../middleware/auth.js';
-import { registerSchema, loginSchema } from '../validators/auth.validator.js';
+import { loginSchema } from '../validators/auth.validator.js';
 
 const router = Router();
 
-router.post('/register', validate(registerSchema), register);
+// No public /register — companies are created by the platform owner and the
+// owner account is bootstrapped via `npm run bootstrap:owner`.
 router.post('/login', validate(loginSchema), login);
 router.post('/logout', logout);
 router.get('/me', protect, me);

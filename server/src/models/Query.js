@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 import { QUERY_STATUS_VALUES } from '../constants/queryStatus.js';
 
 const childSchema = new mongoose.Schema({ age: { type: Number, min: 0, max: 17 } }, { _id: false });
@@ -27,7 +28,7 @@ const guestSchema = new mongoose.Schema(
 
 const querySchema = new mongoose.Schema(
   {
-    queryNumber: { type: Number, unique: true, index: true },
+    queryNumber: { type: Number, index: true }, // unique per-org (compound index below)
 
     // Source block
     source: { type: mongoose.Schema.Types.ObjectId, ref: 'QuerySource' },
@@ -79,10 +80,15 @@ querySchema.virtual('totalPax').get(function () {
   return (this.pax?.adults || 0) + (this.pax?.children?.length || 0);
 });
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+querySchema.plugin(tenantPlugin);
+querySchema.index({ organization: 1, queryNumber: 1 }, { unique: true });
+
 // Assign a human-friendly sequential query number on first save (starts at 1 → shown as 0001).
 querySchema.pre('save', async function assignNumber(next) {
   if (this.isNew && !this.queryNumber) {
-    this.queryNumber = await Counter.next('query', 1);
+    this.queryNumber = await Counter.nextFor(this.organization, 'query', 1);
   }
   next();
 });

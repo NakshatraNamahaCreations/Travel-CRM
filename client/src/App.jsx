@@ -1,7 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout.jsx';
+import OwnerLayout from './layouts/OwnerLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import CompaniesListPage from './pages/owner/CompaniesListPage.jsx';
+import CompanyDetailPage from './pages/owner/CompanyDetailPage.jsx';
+import PlansPage from './pages/owner/PlansPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import Placeholder from './components/Placeholder.jsx';
@@ -68,12 +72,26 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
+      {/* Platform owner panel (separate chrome from the tenant app) */}
+      <Route
+        element={
+          <ProtectedRoute roles={['owner']}>
+            <OwnerLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/owner" element={<Navigate to="/owner/companies" replace />} />
+        <Route path="/owner/companies" element={<CompaniesListPage />} />
+        <Route path="/owner/companies/:id" element={<CompanyDetailPage />} />
+        <Route path="/owner/plans" element={<PlansPage />} />
+      </Route>
+
       {/* Standalone print document (no app chrome) */}
       <Route path="/quotes/:id/quotation" element={<ProtectedRoute><QuotationDocument /></ProtectedRoute>} />
 
       <Route
         element={
-          <ProtectedRoute>
+          <ProtectedRoute redirectOwner>
             <AppLayout />
           </ProtectedRoute>
         }

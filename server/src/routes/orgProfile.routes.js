@@ -9,12 +9,12 @@ const router = Router();
 router.use(protect);
 
 // GET /api/org-profile — any signed-in user (needed to render invoices)
-router.get('/', asyncHandler(async (req, res) => ok(res, await OrgProfile.get())));
+router.get('/', asyncHandler(async (req, res) => ok(res, await OrgProfile.getFor(req.organizationId))));
 
 // PUT /api/org-profile — admins/managers edit the org details
 router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
-  const doc = await OrgProfile.get();
-  const { _id, createdAt, updatedAt, ...patch } = req.body || {};
+  const doc = await OrgProfile.getFor(req.organizationId);
+  const { _id, organization, createdAt, updatedAt, ...patch } = req.body || {};
 
   // Freshly-uploaded images arrive as data URIs. With Cloudinary configured
   // they're pushed there (fixed public_id per slot → replacing overwrites)
@@ -23,7 +23,7 @@ router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => 
     for (const [key, val] of Object.entries(patch.images)) {
       if (typeof val === 'string' && val.startsWith('data:')) {
         try {
-          patch.images[key] = await uploadImage(val, `travel-crm/org/${key}`);
+          patch.images[key] = await uploadImage(val, `travel-crm/org/${req.organizationId}/${key}`);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.warn(`[cloudinary] upload failed for ${key}: ${err.message} — storing inline`);

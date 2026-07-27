@@ -35,6 +35,12 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY || '',
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   },
+  // Platform owner bootstrap (npm run bootstrap:owner / migration script).
+  owner: {
+    email: process.env.OWNER_EMAIL || '',
+    password: process.env.OWNER_PASSWORD || '',
+    name: process.env.OWNER_NAME || 'Platform Owner',
+  },
   email: {
     host: process.env.EMAIL_HOST || '',
     port: Number(process.env.EMAIL_PORT) || 587,

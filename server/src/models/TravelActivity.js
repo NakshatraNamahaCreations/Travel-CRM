@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 const intervalSchema = new mongoose.Schema({ start: { type: Date }, end: { type: Date } }, { _id: false });
 
@@ -49,5 +50,7 @@ const travelActivitySchema = new mongoose.Schema(
 );
 
 travelActivitySchema.set('toJSON', { virtuals: true });
+
+travelActivitySchema.plugin(tenantPlugin);
 
 export const TravelActivity = mongoose.model('TravelActivity', travelActivitySchema);

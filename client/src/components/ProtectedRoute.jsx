@@ -1,8 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext.jsx';
 
-export default function ProtectedRoute({ children, roles }) {
-  const { isAuthenticated, loading, hasRole } = useAuth();
+export default function ProtectedRoute({ children, roles, redirectOwner = false }) {
+  const { isAuthenticated, loading, hasRole, user } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -15,6 +15,11 @@ export default function ProtectedRoute({ children, roles }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // The platform owner never uses the tenant app — send them to their panel.
+  if (redirectOwner && user?.role === 'owner') {
+    return <Navigate to="/owner/companies" replace />;
   }
 
   if (roles && !hasRole(...roles)) {

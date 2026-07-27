@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Generic, user-extensible option lists for categorical dropdowns
 // (mealPlan, salutation, currency, paymentMode, vehicleType, …).
@@ -20,7 +21,8 @@ const optionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-optionSchema.index({ category: 1, value: 1 }, { unique: true });
+optionSchema.plugin(tenantPlugin);
+optionSchema.index({ organization: 1, category: 1, value: 1 }, { unique: true });
 optionSchema.set('toJSON', { virtuals: true });
 
 export const Option = mongoose.model('Option', optionSchema);

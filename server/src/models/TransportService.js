@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 const intervalSchema = new mongoose.Schema({ start: { type: Date }, end: { type: Date } }, { _id: false });
 
@@ -50,5 +51,7 @@ transportServiceSchema.virtual('routeLabel').get(function () {
 
 transportServiceSchema.set('toJSON', { virtuals: true });
 transportServiceSchema.set('toObject', { virtuals: true });
+
+transportServiceSchema.plugin(tenantPlugin);
 
 export const TransportService = mongoose.model('TransportService', transportServiceSchema);

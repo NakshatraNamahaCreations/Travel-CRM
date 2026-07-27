@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Customer collections (money in) and supplier payments (money out).
 const paymentSchema = new mongoose.Schema(
   {
-    paymentNumber: { type: Number, unique: true, index: true },
+    paymentNumber: { type: Number, index: true }, // unique per-org (compound index below)
     party: { type: String, enum: ['customer', 'supplier'], required: true, index: true },
 
     // Customer payments link to a booking; supplier payments name a supplier.
@@ -27,9 +28,14 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+paymentSchema.plugin(tenantPlugin);
+paymentSchema.index({ organization: 1, paymentNumber: 1 }, { unique: true });
+
 paymentSchema.pre('save', async function assignNumber(next) {
   if (this.isNew && !this.paymentNumber) {
-    this.paymentNumber = await Counter.next('payment', 8100000);
+    this.paymentNumber = await Counter.nextFor(this.organization, 'payment', 8100000);
   }
   next();
 });

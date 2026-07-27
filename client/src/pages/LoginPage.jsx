@@ -32,8 +32,13 @@ const BUBBLES = [
   { w: 50,  h: 50,  left: '40%', top: '25%', delay: '4s',   dur: '7s'  },
 ];
 
+const LOCKOUT_MESSAGES = {
+  suspended: 'Your organization is suspended. Please contact support.',
+  expired: 'Your subscription has expired. Please contact support to renew.',
+};
+
 export default function LoginPage() {
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, isAuthenticated, loading, user } = useAuth();
   const [email, setEmail]       = useState('admin@travelcrm.test');
   const [password, setPassword] = useState('admin123');
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +47,7 @@ export default function LoginPage() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const from      = location.state?.from?.pathname || '/';
+  const lockoutMsg = LOCKOUT_MESSAGES[new URLSearchParams(location.search).get('reason')];
 
   /* Auto-advance slides every 5 s */
   useEffect(() => {
@@ -54,15 +60,18 @@ export default function LoginPage() {
     return () => clearInterval(t);
   }, []);
 
-  if (!loading && isAuthenticated) return <Navigate to={from} replace />;
+  if (!loading && isAuthenticated) {
+    return <Navigate to={user?.role === 'owner' ? '/owner/companies' : from} replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await login({ email, password });
+      const u = await login({ email, password });
       toast.success('Welcome back!');
-      navigate(from, { replace: true });
+      // The platform owner lands on the owner panel, never the tenant app.
+      navigate(u?.role === 'owner' ? '/owner/companies' : from, { replace: true });
     } catch (err) {
       toast.error(err.message || 'Login failed');
     } finally {
@@ -250,6 +259,13 @@ export default function LoginPage() {
                 Sign in to manage bookings, quotes & your team.
               </p>
             </div>
+
+            {/* Suspended / expired lockout notice */}
+            {lockoutMsg && (
+              <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {lockoutMsg}
+              </div>
+            )}
 
             {/* Demo badge */}
             <div className="mb-6 flex items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 const guestSnap = new mongoose.Schema(
   {
@@ -14,7 +15,7 @@ const guestSnap = new mongoose.Schema(
 
 const bookingSchema = new mongoose.Schema(
   {
-    bookingNumber: { type: Number, unique: true, index: true },
+    bookingNumber: { type: Number, index: true }, // unique per-org (compound index below)
     query: { type: mongoose.Schema.Types.ObjectId, ref: 'Query', index: true },
     quote: { type: mongoose.Schema.Types.ObjectId, ref: 'Quote' },
 
@@ -63,9 +64,14 @@ bookingSchema.pre('validate', function computeEnd(next) {
   next();
 });
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+bookingSchema.plugin(tenantPlugin);
+bookingSchema.index({ organization: 1, bookingNumber: 1 }, { unique: true });
+
 bookingSchema.pre('save', async function assignNumber(next) {
   if (this.isNew && !this.bookingNumber) {
-    this.bookingNumber = await Counter.next('booking', 7100000);
+    this.bookingNumber = await Counter.nextFor(this.organization, 'booking', 7100000);
   }
   next();
 });

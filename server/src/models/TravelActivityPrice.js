@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Date-ranged price for an activity ticket type and tourist config (Adult/Child).
 const travelActivityPriceSchema = new mongoose.Schema(
@@ -21,6 +22,8 @@ const travelActivityPriceSchema = new mongoose.Schema(
 );
 
 travelActivityPriceSchema.set('toJSON', { virtuals: true });
+
+travelActivityPriceSchema.plugin(tenantPlugin);
 
 export const TravelActivityPrice = mongoose.model(
   'TravelActivityPrice',

@@ -44,6 +44,9 @@ export function errorHandler(err, req, res, next) {
   res.status(statusCode).json({
     success: false,
     message,
+    // err.code is also set (to a number) by Mongo driver errors — only forward
+    // our own string codes (e.g. 'ORG_SUSPENDED', 'SUBSCRIPTION_EXPIRED').
+    ...(typeof err.code === 'string' ? { code: err.code } : {}),
     ...(details ? { details } : {}),
     ...(env.isProd ? {} : { stack: err.stack }),
   });

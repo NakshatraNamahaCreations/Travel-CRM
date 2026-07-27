@@ -18,4 +18,12 @@ counterSchema.statics.next = async function next(key, start = 1) {
   return doc.seq;
 };
 
+// Per-organization sequence: each tenant gets independent numbering under a
+// composite key like '<orgId>:query'. The migration renames the old global
+// keys to the default org's composite keys so its sequences continue.
+counterSchema.statics.nextFor = function nextFor(orgId, key, start = 1) {
+  if (!orgId) throw new Error(`Counter.nextFor: missing organization for key '${key}'`);
+  return this.next(`${orgId}:${key}`, start);
+};
+
 export const Counter = mongoose.model('Counter', counterSchema);

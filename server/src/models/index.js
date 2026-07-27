@@ -1,6 +1,13 @@
 // Barrel that imports every model so Mongoose registers all schemas at startup.
 // Import this once (in app.js) to make populate() work regardless of route imports.
-export { User, ROLES } from './User.js';
+export { User, ROLES, PLATFORM_ROLES } from './User.js';
+export { Organization } from './Organization.js';
+export { Plan } from './Plan.js';
+export { SubscriptionPayment } from './SubscriptionPayment.js';
+export { OrgProfile } from './OrgProfile.js';
+export { Notification } from './Notification.js';
+export { ProformaInvoice } from './ProformaInvoice.js';
+export { InclusionExclusion } from './InclusionExclusion.js';
 export { Team } from './Team.js';
 export { Destination } from './Destination.js';
 export { QuerySource } from './QuerySource.js';

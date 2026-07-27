@@ -1,6 +1,8 @@
 /* One-shot: insert/update default option lists only (cities, states, meal plans, etc).
    Safe to re-run — uses upsert so nothing is duplicated or deleted. */
 import { connectDB } from '../config/db.js';
+import { enterTenant } from '../tenant/context.js';
+import { defaultOrg } from './org.js';
 import { Option } from '../models/Option.js';
 
 const DEFAULTS = {
@@ -39,6 +41,7 @@ const DEFAULTS = {
 
 async function run() {
   await connectDB();
+  enterTenant((await defaultOrg())._id); // scope all writes to the default org
   let inserted = 0;
   let skipped = 0;
 

@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
 import { company } from '../config/company.js';
 
-// Singleton organization profile — the editable version of the static company
-// config. Seeded from config on first read; documents that render seller /
-// bank blocks (e.g. proforma invoices) read from here so admins can update
-// details without a code change.
+// Per-organization profile — the editable version of the static company
+// config (one document per tenant, auto-created from the config template on
+// first read). Documents that render seller / bank blocks (e.g. proforma
+// invoices) read from here so admins can update details without a code change.
 const addressSchema = new mongoose.Schema(
   {
     label: { type: String, trim: true },
@@ -31,6 +31,7 @@ const bankAccountSchema = new mongoose.Schema(
 
 const orgProfileSchema = new mongoose.Schema(
   {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, unique: true },
     officialName: { type: String, trim: true },
     brandName: { type: String, trim: true },
     supportPhones: [{ type: String, trim: true }],
@@ -56,11 +57,13 @@ const orgProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Fetch the singleton, creating it from the static config the first time.
-orgProfileSchema.statics.get = async function get() {
-  const existing = await this.findOne();
+// Fetch (or lazily create from the config template) the profile of one org.
+orgProfileSchema.statics.getFor = async function getFor(orgId) {
+  if (!orgId) throw new Error('OrgProfile.getFor: organization id is required');
+  const existing = await this.findOne({ organization: orgId });
   if (existing) return existing;
   return this.create({
+    organization: orgId,
     officialName: company.name,
     brandName: company.name,
     supportPhones: company.phones || [],

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // A scheduled payment due (instalment) — incoming (from customer) or outgoing (to supplier).
 // Status is derived: paid+verified = paid, paid+!verified = unverified, else overdue/upcoming by due date.
@@ -14,7 +15,7 @@ const commentSchema = new mongoose.Schema(
 
 const installmentSchema = new mongoose.Schema(
   {
-    installmentNumber: { type: Number, unique: true, index: true },
+    installmentNumber: { type: Number, index: true }, // unique per-org (compound index below)
     direction: { type: String, enum: ['incoming', 'outgoing'], required: true, index: true },
 
     booking: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', index: true },
@@ -64,9 +65,14 @@ installmentSchema.virtual('balance').get(function () {
   return Math.max(0, (this.amount || 0) - (this.paidAmount || 0));
 });
 
+// Tenant scoping — registered BEFORE assignNumber so this.organization is
+// stamped when the counter key is built.
+installmentSchema.plugin(tenantPlugin);
+installmentSchema.index({ organization: 1, installmentNumber: 1 }, { unique: true });
+
 installmentSchema.pre('save', async function assignNumber(next) {
   if (this.isNew && !this.installmentNumber) {
-    this.installmentNumber = await Counter.next('installment', 3800000);
+    this.installmentNumber = await Counter.nextFor(this.organization, 'installment', 3800000);
   }
   next();
 });

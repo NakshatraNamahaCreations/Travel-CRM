@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tenantPlugin } from '../tenant/tenantPlugin.js';
 
 // Lightweight audit trail of notable actions on a query/trip (stage changes, quotes, etc.).
 const activitySchema = new mongoose.Schema(
@@ -16,5 +17,7 @@ const activitySchema = new mongoose.Schema(
 );
 
 activitySchema.set('toJSON', { virtuals: true });
+
+activitySchema.plugin(tenantPlugin);
 
 export const Activity = mongoose.model('Activity', activitySchema);
