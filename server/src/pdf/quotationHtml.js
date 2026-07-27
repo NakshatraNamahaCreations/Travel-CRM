@@ -19,7 +19,6 @@ const inr = (n, dec = 0) => '&#8377;' + Number(n || 0).toLocaleString('en-IN', {
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '&mdash;');
 const fmtDateDM = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const stars = (n) => '&#9733;'.repeat(Math.min(n || 5, 5));
 
 // "14:00" → "02:00 PM"; returns '' when unparsable.
 const fmtTime = (hm) => {
@@ -453,31 +452,17 @@ export function quotationHtml(q, org = null) {
 
   const extras = (pkg.extras || []).map((e) => e.label || e.name).filter(Boolean).join(', ');
 
-  // ---- Testimonials ----
-  const initials = (name) => String(name || '').split(/\s+/).map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-  const testimonialCards = (whyUs.testimonials || []).map((t) => `
-    <div class="review-card">
-      <div class="review-text">${esc(t.review)}</div>
-      <div class="review-footer">
-        <div class="avatar">${esc(initials(t.name))}</div>
-        <div>
-          <div class="reviewer-name">${esc(t.name)}</div>
-          <div class="reviewer-via"><span class="stars">${stars(t.rating)}</span>&nbsp; Reviewed on ${esc(t.platform)}</div>
-        </div>
-      </div>
-    </div>`).join('');
+  // ---- Client review posters (Why Us + closing pages) ----
+  // Asset filenames are embedded as data URIs; http(s) URLs pass through.
+  const reviewImgs = (whyUs.reviewImages || [])
+    .map((f) => (/^https?:/i.test(f) ? f : assetUri(f)))
+    .filter(Boolean);
+  const reviewCell = (src) => `<div class="rimg"><img src="${esc(src)}" alt=""/></div>`;
+  const reviewGrid = reviewImgs.slice(0, 4).map(reviewCell).join('');
+  const reviewRow = reviewImgs.slice(4).map(reviewCell).join('');
 
   const reviewRows = (whyUs.reviewLinks || []).map((rl) => `
     <div class="rm-row"><b>${esc(rl.label)}:</b><span class="rm-url">${esc(rl.url)}</span></div>`).join('');
-
-  // ---- Gallery mosaic ----
-  const img = (src, cls = '') => (src ? `<div class="gi ${cls}"><img src="${esc(src)}" alt=""/></div>` : '');
-  const mosaic = gallery.length ? `
-    <div class="mosaic">
-      ${img(gallery[0], 'tall-l')}${img(gallery[1])}${img(gallery[2])}${img(gallery[5] || gallery[1], 'tall-r')}
-      ${img(gallery[3])}${img(gallery[4])}
-    </div>
-    <div class="pano"><img src="${esc(gallery[6] || gallery[2] || gallery[0])}" alt=""/></div>` : '<p class="muted" style="margin-top:12px">No gallery images configured.</p>';
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -732,15 +717,14 @@ export function quotationHtml(q, org = null) {
   .tctbl th, .tctbl td { border: 1px solid var(--line); padding: 4px 9px; font-size: 11px; text-align: left; }
   .tctbl th { background: #eaf3fb; color: var(--navy); font-weight: 800; }
 
-  /* ---- why us / reviews ---- */
-  .script { font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 15px; color: var(--ink); margin: 6px 0 14px; }
-  .review-card { border: 1.4px solid #8fd0a5; border-radius: 11px; background: #fff; padding: 13px 16px; margin-bottom: 12px; }
-  .review-text { font-size: 12.8px; color: #2c3d51; line-height: 1.7; }
-  .review-footer { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .reviewer-name { font-weight: 800; font-size: 13.5px; color: var(--ink); }
-  .reviewer-via { font-size: 11px; color: #64748b; margin-top: 1px; }
-  .stars { color: #f59e0b; font-size: 10px; letter-spacing: 1px; }
+  /* ---- why us / client review posters ---- */
+  .script { font-size: 14.5px; font-weight: 500; color: var(--ink); margin: 4px 0 12px; }
+  .rgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rgrid .rimg img { height: 118mm; }
+  .rrow { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .rrow .rimg img { height: 70mm; }
+  .rimg { display: flex; align-items: center; justify-content: center; break-inside: avoid; page-break-inside: avoid; }
+  .rimg img { max-width: 100%; width: auto; object-fit: contain; display: block; border: 1px solid var(--line); border-radius: 10px; }
   .readmore { background: #f2f5f8; border: 1px solid var(--line); border-radius: 11px; padding: 14px 18px; margin-top: 14px; display: flex; align-items: center; }
   .readmore .rm-left { flex: 1; }
   .readmore h3 { font-size: 13px; font-weight: 800; margin-bottom: 8px; }
@@ -750,13 +734,7 @@ export function quotationHtml(q, org = null) {
   .searchpill { background: #e4e9ee; border-radius: 999px; padding: 9px 16px; font-size: 11px; color: #37475a; display: flex; align-items: center; gap: 8px; min-width: 220px; justify-content: space-between; }
   .disclaimer { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 16px; font-size: 10.2px; color: #5b6b7d; text-align: center; line-height: 1.8; }
 
-  /* ---- gallery ---- */
-  .mosaic { display: grid; grid-template-columns: 1.05fr 1.35fr 1.35fr 1.05fr; grid-auto-rows: 104px; gap: 8px; }
-  .gi { border-radius: 9px; overflow: hidden; }
-  .gi img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .gi.tall-l { grid-row: span 2; } .gi.tall-r { grid-row: span 2; grid-column: 4; }
-  .pano { border-radius: 10px; overflow: hidden; height: 205px; margin-top: 8px; }
-  .pano img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* ---- closing page ---- */
   .qcard { border: 1px solid var(--line); border-radius: 12px; padding: 22px; text-align: center; margin-top: 14px; }
   .qcard .qlogo { font-size: 26px; margin-bottom: 8px; }
   .qcard .qtag { font-size: 16.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--ink); text-transform: uppercase; }
@@ -943,11 +921,18 @@ ${optActs ? `<div class="page pb">
   ${BOTTOMBAR}
 </div>
 
-<!-- ===== PAGE 5 — Why Us ===== -->
+<!-- ===== PAGE 5 — Why Us (client review posters) ===== -->
 <div class="page pb">
   <div class="band">WHY US:</div>
   ${whyUs.headline ? `<div class="script">${esc(whyUs.headline)}</div>` : ''}
-  ${testimonialCards}
+  ${reviewGrid ? `<div class="rgrid">${reviewGrid}</div>` : '<p class="muted" style="margin-top:12px">No review images configured.</p>'}
+  ${BOTTOMBAR}
+</div>
+
+<!-- ===== PAGE 6 — More reviews + closing ===== -->
+<div class="page">
+  <div class="band">An Experience that you will Never Forget:</div>
+  ${reviewRow ? `<div class="rrow">${reviewRow}</div>` : ''}
   ${reviewRows ? `
   <div class="readmore">
     <div class="rm-left">
@@ -957,13 +942,6 @@ ${optActs ? `<div class="page pb">
     <div class="searchpill"><span><b style="color:#4285f4">G</b>&nbsp; ${esc(company.name)}</span><span>&#128269;</span></div>
   </div>` : ''}
   <div class="disclaimer">The information contained in this document and electronic transmission can be privileged, and not available for disclosure. All information contained is owned by ${esc(company.name)}. Any unauthorized sharing and upload are prohibited. Terms &amp; Conditions: ${esc(company.website)}/terms-and-conditions</div>
-  ${BOTTOMBAR}
-</div>
-
-<!-- ===== PAGE 6 — Gallery ===== -->
-<div class="page">
-  <div class="band">An Experience that you will Never Forget:</div>
-  ${mosaic}
   <div class="qcard">
     ${qlogoIcon}
     <div class="qtag">${esc(company.tagline)}</div>

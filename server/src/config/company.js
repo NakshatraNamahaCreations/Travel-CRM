@@ -161,26 +161,11 @@ export const company = {
 
   whyUs: {
     headline: 'Andaman TravelCare believes in Quality Tours and Warm Hospitality.',
-    testimonials: [
-      {
-        name: 'Nabarun Chakraborty',
-        platform: 'Google',
-        rating: 5,
-        review: 'From the day of booking to the time of flight taking off they made our trip hassle free, comfortable, and fine. The beautiful archipelago has become more and more beautiful for their cordial support, class of service with reasonable price and punctuality.',
-      },
-      {
-        name: 'Anupama Saxena',
-        platform: 'Google',
-        rating: 5,
-        review: 'I would have given 10 stars out of 5 — great team work! I have never seen in my life that a tour operator calls you every evening during your tour and takes the feedback of each place covered in the itinerary. Not at all a money-minded company.',
-      },
-      {
-        name: 'Amit Singh',
-        platform: 'Tripadvisor',
-        rating: 5,
-        review: 'Very well explained, updated itinerary day wise and executed really well. They believe in Punctuality, Quality, Value. Andaman TravelCare provided us with best service — on time pickup and drop, clean sanitized cars, sightseeing, hassle free booking of ferries and boats.',
-      },
-    ],
+    // Client review posters shown on the closing pages of the quotation PDF:
+    // filenames under server/src/assets (embedded as data URIs) or http(s) URLs.
+    // First 4 fill the WHY US page (2x2) — keep same-aspect posters there so the
+    // grid aligns; the rest go in a row on the following page.
+    reviewImages: ['r1.jpeg', 'r4.jpeg', 'r5.jpeg', 'r6.jpeg', 'r2.jpeg', 'r3.jpeg', 'r7.jpeg'],
     reviewLinks: [
       { label: 'Google', url: 'www.andamantravelcare.com' },
       { label: 'Tripadvisor', url: 'www.andamantravelcare.com' },
