@@ -2,19 +2,42 @@
 export const company = {
   name: 'Andaman TravelCare',
   tagline: 'Quality Tours. Exceptional Service.',
-  address: ['M.A Road, Phoenix Bay,', 'Port Blair, A&N Islands,', 'PIN: 744101'],
+  address: ['22 AK Anarkali Street,', 'Near Community Hall,', 'Port Blair - 744102'],
   emails: ['info@andamantravelcare.com', 'bookings@andamantravelcare.com'],
-  phones: ['+91 89009 12121', '+91 94742 07541'],
+  phones: ['+91 89009 12121', '+91 89009 16161'],
   website: 'www.andamantravelcare.com',
   bank: {
-    holder: 'Andaman TravelCare (Current Account)',
-    bank: 'HDFC',
-    address: 'Junglighat, Port Blair, South Andaman, 744103',
-    accNo: '50200066269962',
-    ifsc: 'HDFC0001994',
+    holder: 'ANDAMAN TRAVEL CARE',
+    bank: 'ICICI',
+    address: 'Garacharma, Port Blair',
+    accNo: '387905500122',
+    ifsc: 'ICIC0003879',
     paymentLink: 'www.andamantravelcare.com/pay',
   },
+  // "Scan to Pay" block on the Additional Information page: a designed image
+  // (ICICI/UPI QR) under server/src/assets or an http(s) URL. Clear it to hide
+  // the card and let Payment Information span the full width.
+  paymentQrImage: 'scanner.png',
   advancePercent: 50,
+
+  // Quotation cover page — "Why Travel with us" bullets over the hero photo.
+  coverPoints: [
+    'Government Licensed & Local Tour Operator',
+    'Transparent Pricing • No Hidden Charges',
+    '24x7 On-Ground Assistance',
+    'Trusted by 700+ Happy Travellers',
+  ],
+  // "YOUR PACKAGE INCLUDES" icon row on the cover. `icon` is an HTML entity
+  // (rendered raw); `sub` is an optional orange sub-label.
+  coverIncludes: [
+    { icon: '&#128716;', label: 'Stays' },
+    { icon: '&#127796;', label: 'Beaches' },
+    { icon: '&#9972;', label: 'Ferry Transfers' },
+    { icon: '&#128663;', label: 'Private Cab' },
+    { icon: '&#128301;', label: 'Sightseeings' },
+    { icon: '&#127859;', label: 'Breakfast', sub: 'Included' },
+  ],
+
   defaultInclusions: [
     'Sightseeing in private A/C vehicles.',
     'Accommodation at all islands as given, including meal plan as mentioned.',
@@ -38,6 +61,8 @@ export const company = {
     'For Ross Island, Rs. 50 entry fee is paid directly by the traveller at the island.',
   ],
   bookingTerms: '50% payment in advance to confirm your package. Balance 50% on day of arrival in Port Blair.',
+  // "Please note" strip under the day-wise itinerary in the quotation PDF.
+  itineraryNote: 'The itinerary is subject to change due to weather, operational conditions or other unforeseen circumstances.',
   gstin: '35BTEPK8670E1ZK',
 
   // Terms & Conditions rendered on the quotation PDF. Each item may start with
@@ -62,7 +87,9 @@ export const company = {
     {
       heading: '2. Payment Policy',
       items: [
-        'Payments can be made through Bank Transfer, UPI or other approved online payment methods. Cash payments are accepted as per applicable Government regulations. Cheques are not accepted. Payments made to any account other than the official AndamanTravelCare account will not be considered valid.',
+        'Payments can be made through Bank Transfer, UPI or other approved online payment methods.',
+        'Cash payments are accepted as per applicable Government regulations. Cheques are not accepted.',
+        'Payments made to any account other than the official AndamanTravelCare account will not be considered valid.',
       ],
     },
     {
@@ -76,8 +103,9 @@ export const company = {
           ['10 Days or Less', '100% cancellation charges. No refund.'],
         ],
       },
+      boxTitle: 'Additional Conditions:',
       items: [
-        "Additional Conditions: Ferry tickets are cancelled as per the ferry operator's policy.",
+        "Ferry tickets are cancelled as per the ferry operator's policy.",
         "Hotel cancellation charges apply as per the respective hotel's policy.",
         'Peak season (15 Dec–15 Jan) bookings may attract 100% cancellation charges depending on hotel/ferry policies.',
         'Premium hotels such as Taj, Barefoot, Munjoh, Seashell, Coral Reef and similar properties may have separate cancellation policies.',
@@ -100,7 +128,8 @@ export const company = {
         ],
       },
       items: [
-        'Early check-in and late check-out are subject to availability and may incur additional charges. Similar category hotels may be provided if the booked hotel is unavailable.',
+        'Early check-in and late check-out are subject to availability and may incur additional charges.',
+        'Similar category hotels may be provided if the booked hotel is unavailable.',
       ],
     },
     {
@@ -207,19 +236,25 @@ export const company = {
     { match: 'arrival|airport|leisure|havelock|neil', image: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=500&q=80' },
   ],
 
-  // Upsell grid on the quotation PDF. Set to [] to hide the section.
+  // Optional Activities upsell grid on the quotation PDF. Images are asset
+  // filenames (server/src/assets) or http(s) URLs; `icon` is an HTML entity
+  // for the navy circle badge; `onRequest: true` prints "On Request" instead
+  // of a price. Set to [] to hide the page entirely.
   optionalActivities: [
-    { name: 'Scuba Diving', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500&q=80' },
-    { name: 'Sea Walk', adult: 3800, child: 3800, image: 'https://images.unsplash.com/photo-1682687982501-1e58ab814714?w=500&q=80' },
-    { name: 'Parasailing', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1677126578070-6f1afdf453e3?w=500&q=80' },
-    { name: 'Bioluminescence Kayaking', adult: 3500, child: 3500, image: 'https://images.unsplash.com/photo-1465310477141-6fb93167a273?w=500&q=80' },
-    { name: 'Glass Bottom Boat', adult: 1500, child: 1500, image: 'https://images.unsplash.com/photo-1470218091926-22a08a325802?w=500&q=80' },
-    { name: 'Jet Ski Ride', adult: 900, child: 900, image: 'https://images.unsplash.com/photo-1755566981084-00c579a061a5?w=500&q=80' },
+    { name: 'Scuba Diving', adult: 2500, icon: '&#129343;', image: 'opt-1.jpeg' },
+    { name: 'Sea Walk', adult: 3500, icon: '&#129405;', image: 'opt-2.jpeg' },
+    { name: 'Parasailing', adult: 3500, icon: '&#129666;', image: 'opt-3.jpeg' },
+    { name: 'Bioluminescence Kayaking', adult: 3500, icon: '&#128758;', image: 'opt-4.jpeg' },
+    { name: 'Glass Bottom Ride', adult: 1200, icon: '&#128741;', image: 'opt-5.jpeg' },
+    { name: 'Jet Ski Ride', adult: 900, icon: '&#128676;', image: 'opt-6.jpeg' },
+    { name: 'Snorkeling', adult: 1000, icon: '&#128031;', image: 'opt-7.jpeg' },
+    { name: 'Deep Sea Fishing', onRequest: true, icon: '&#127907;', image: 'opt-8.jpeg' },
+    { name: 'Candle Light Dinner', adult: 4500, icon: '&#128367;', image: 'opt-9.jpeg' },
   ],
 
   emergencyContacts: [
-    { name: 'Reservations', phone: '+91 89009 12121', email: 'bookings@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
-    { name: 'Operations', phone: '+91 94742 07541', email: 'info@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
+    { name: 'Reservations', phone: '8900912121', email: 'booking@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
+    { name: 'B2B DMC', phone: '8900916161', email: 'b2b@andamantravelcare.com', availableOn: 'Call & WhatsApp' },
   ],
 
   social: [

@@ -114,6 +114,59 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const addTrItem = (ti) => setTr(ti, { items: [...pkg.transports[ti].items, { type: '', qty: 1, rate: 0, given: 0 }] });
   const rmTrItem = (ti, ii) => setTr(ti, { items: pkg.transports[ti].items.filter((_, idx) => idx !== ii) });
 
+  /* ----- Multi service-type support -----
+     The Service Type field is a multi-select: the row keeps one type, and every
+     additional tick mirrors into its own transport row (same master/location/
+     days) so each service keeps separate timings and price rows. The chips
+     show every type of the same location+days family; unticking one removes
+     that service row. */
+  const trDaysKey = (t) => daysKey(t.days, [t.day || 1]);
+  const trFamily = (t) => {
+    const key = trDaysKey(t);
+    return (x) => x === t || (!!t.serviceLocation && x.serviceLocation === t.serviceLocation && trDaysKey(x) === key);
+  };
+  const trServiceTypeValue = (t) => {
+    const fam = (pkg.transports || []).filter(trFamily(t));
+    const names = [t.serviceType, ...fam.filter((x) => x !== t).map((x) => x.serviceType)].filter(Boolean);
+    return [...new Set(names)].map((n) => ({ _id: n, name: n }));
+  };
+  const setTrServiceTypes = (ti, list) => {
+    const src = pkg.transports || [];
+    const t = src[ti];
+    const inFam = trFamily(t);
+    const names = [...new Set((list || []).map((o) => o?.name).filter(Boolean))];
+
+    const own = { ...t };
+    if (own.serviceType && !names.includes(own.serviceType)) own.serviceType = '';
+
+    // Drop family rows whose type was unticked (the edited row just clears).
+    const kept = [];
+    for (const x of src) {
+      if (x === t) { kept.push(own); continue; }
+      if (inFam(x) && x.serviceType && !names.includes(x.serviceType)) continue;
+      kept.push(x);
+    }
+
+    // Types still present in the family after removals.
+    const present = new Set(
+      kept.filter((x) => x === own || inFam(x)).map((x) => x.serviceType).filter(Boolean)
+    );
+
+    const additions = [];
+    for (const n of names) {
+      if (present.has(n)) continue;
+      if (!own.serviceType) { own.serviceType = n; present.add(n); continue; }
+      additions.push({
+        ...emptyTransport([...(Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1])]),
+        service: t.service ?? null,
+        serviceLocation: t.serviceLocation || '',
+        serviceType: n,
+      });
+      present.add(n);
+    }
+    update({ transports: [...kept, ...additions] });
+  };
+
   // Auto-fill cost rates from the Transport Prices master (needs a master service picked).
   const autoTrRate = async (ti) => {
     const t = pkg.transports[ti];
@@ -549,8 +602,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       {t.service && <p className="mt-1 text-[11px] text-green-600">✓ Linked to transport master — rates can auto-fill</p>}
                     </div>
                     <div>
-                      <label className="label">Service Type</label>
+                      <label className="label">Service Type <span className="text-[10.5px] font-normal normal-case text-slate-400">(select one or more — each gets its own service row)</span></label>
                       <AsyncSelect
+                        isMulti
                         loadOptions={async (q) => {
                           const sid = typeof t.service === 'object' ? t.service?._id : t.service;
                           if (!sid) return [];
@@ -559,8 +613,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                             .map((it) => ({ _id: it.name, name: it.name }))
                             .filter((o) => o.name.toLowerCase().includes((q || '').toLowerCase()));
                         }}
-                        value={t.serviceType ? { _id: t.serviceType, name: t.serviceType } : null}
-                        onChange={(v) => setTr(ti, { serviceType: v ? v.name : '' })}
+                        value={trServiceTypeValue(t)}
+                        onChange={(list) => setTrServiceTypes(ti, list)}
                         creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
                         placeholder={t.service ? 'Type to search...' : 'Pick a service location first'}
                       />

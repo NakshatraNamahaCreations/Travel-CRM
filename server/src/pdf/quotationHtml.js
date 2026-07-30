@@ -46,25 +46,14 @@ const stripHtml = (s) => String(s || '')
   .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
   .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&')
   .replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
-const dash = (arr) => (arr || []).map((x) => `<div class="dl">- ${esc(x)}</div>`).join('');
-
-// Like dash(), but renders a leading "Label: " prefix in bold.
-const tcDash = (arr) => (arr || []).map((x) => {
+// Renders text with a leading "Label: " prefix in bold when present.
+const boldLabel = (x) => {
   const s = String(x ?? '');
   const idx = s.indexOf(': ');
-  const body = idx > 0 && idx <= 45
+  return idx > 0 && idx <= 45
     ? `<b>${esc(s.slice(0, idx + 1))}</b> ${esc(s.slice(idx + 2))}`
     : esc(s);
-  return `<div class="dl">- ${body}</div>`;
-}).join('');
-
-// Small bordered table inside a T&C section (booking steps, hotel policy...).
-const tcTable = (t) => (t && t.rows?.length
-  ? `<table class="tctbl">
-      <tr>${(t.headers || []).map((h) => `<th>${esc(h)}</th>`).join('')}</tr>
-      ${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}
-    </table>`
-  : '');
+};
 
 // Short place codes for the legend strips under the tables (PB | HL | NL ...).
 const placeCode = (name) => {
@@ -85,9 +74,18 @@ const placeCode = (name) => {
 const letterhead = (brandHtml) => `
   <div class="lh">
     <div class="brand">${brandHtml}</div>
-    <div class="lh-col"><b>Address:</b>${company.address.map(esc).join('<br/>')}</div>
-    <div class="lh-col wide"><b>Email:</b>${company.emails.map(esc).join('<br/>')}</div>
-    <div class="lh-col"><b>Phone:</b>${company.phones.map(esc).join('<br/>')}</div>
+    <div class="lh-col">
+      <div class="lh-head"><span class="lh-ic">&#128205;</span><b>Address</b></div>
+      <div class="lh-val">${company.address.map(esc).join('<br/>')}</div>
+    </div>
+    <div class="lh-col wide">
+      <div class="lh-head"><span class="lh-ic">&#9993;</span><b>Email</b></div>
+      <div class="lh-val">${company.emails.map(esc).join('<br/>')}</div>
+    </div>
+    <div class="lh-col">
+      <div class="lh-head"><span class="lh-ic">&#128222;</span><b>Phone</b></div>
+      <div class="lh-val">${company.phones.map(esc).join('<br/>')}</div>
+    </div>
   </div>`;
 
 const BOTTOMBAR = '<div class="bottombar"></div>';
@@ -149,7 +147,6 @@ export function quotationHtml(q, org = null) {
     const entry = (company.ferrySchedule || []).find((f) => n.includes(f.match));
     return entry?.times?.[sectorKey(loc)] || null;
   };
-  const pillCls = (i) => 'pl' + (i % 3);
   const transports = pkg.transports || [];
   // Ferries/cruises are authored as Activities (name = sector, ticket type =
   // "Makruzz Ferry : Premium"), and occasionally as ferry-named transports.
@@ -170,19 +167,29 @@ export function quotationHtml(q, org = null) {
     const [fname, category] = splitCategory(t.serviceType);
     ferries.push({ name: fname || t.serviceLocation, sector: t.serviceLocation, category, start: t.startTime, dur: t.durationMins });
   });
-  const transferRows = ferries.map((f, i) => {
+  const splitSector = (loc) => String(loc || '').split(/\s+to\s+|\s*(?:>|&gt;|→|—|–)\s*|\s+-\s+/i).map((s) => s.trim()).filter(Boolean);
+  const transferRows = ferries.map((f) => {
     const sched = staticTimes(`${f.name} ${f.category}`, f.sector);
     const dep = fmtTime(f.start) || (sched ? fmtTime(sched[0]) : '') || '&mdash;';
     const arr = arrTime(f.start, f.dur) || (sched ? fmtTime(sched[1]) : '') || '&mdash;';
+    const parts = splitSector(f.sector);
+    const chip = parts.length >= 2
+      ? `<span class="schip"><span class="sc-pin">&#128205;</span>${esc(parts[0])}<span class="sc-ship">&#9972;</span>${esc(parts[parts.length - 1])}</span>`
+      : `<span class="schip">${esc(f.sector)}</span>`;
+    const cat = f.category
+      ? `<span class="pill ${/premium|royal|luxury/i.test(f.category) ? 'purple' : 'navy'}">${/premium|royal|luxury/i.test(f.category) ? '&#128081; ' : ''}${esc(f.category)}</span>`
+      : '&mdash;';
     return `<tr>
-      <td class="bcell">${esc(f.name)}</td>
-      <td><span class="pill ${pillCls(i)}">${esc(f.sector)}</span></td>
-      <td>${esc(f.category) || '&mdash;'}</td>
+      <td class="bcell fname"><span class="fship">&#9972;</span>${esc(f.name)}</td>
+      <td>${chip}</td>
+      <td>${cat}</td>
       <td>${dep}</td>
       <td>${arr}</td>
     </tr>`;
   }).join('');
-  const ferryLegend = ferries.map((f) => esc(f.sector)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
+  const ferryLegend = ferries
+    .map((f) => { const p = splitSector(f.sector); return p.length >= 2 ? `${esc(p[0])} to ${esc(p[p.length - 1])}` : esc(f.sector); })
+    .filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
   // ---- Hotels tables (summary page) — one card per package option with the
   // option's name + price in the heading so options compare at a glance. ----
@@ -202,19 +209,27 @@ export function quotationHtml(q, org = null) {
       ...list.filter((x) => x.isAlternative && !primaries.some((p) => overlap(p, x))).map((o) => [o, []]),
     ];
     const uniq = (vals) => [...new Set(vals.filter((v) => v || v === 0))];
-    return grouped.map(([h, alts]) => {
+    return grouped.map(([h, alts], rowIdx) => {
       const opts = [h, ...alts];
       const nameCell = opts.map((o, i) => {
         const master = o.hotel && typeof o.hotel === 'object' ? o.hotel : {};
-        return `${i ? '<div style="margin:2px 0;color:#6b7684;font-weight:800">/</div>' : ''}<div>${esc(o.hotelName)}</div>${starRow(master.stars)}`;
+        return `${i ? '<div style="margin:2px 0;color:#6b7684;font-weight:800">/</div>' : ''}
+          <div class="hname-row">
+            ${master.imageUrl ? `<img class="hthumb2" src="${esc(master.imageUrl)}" alt=""/>` : ''}
+            <div><div class="hname">${esc(o.hotelName)}</div>${starRow(master.stars)}</div>
+          </div>`;
       }).join('');
       const joined = (get) => uniq(opts.map(get)).map((v) => esc(String(v))).join(' / ') || '&mdash;';
+      const roomChips = uniq(opts.map((o) => o.roomType))
+        .map((r) => `<span class="rtchip rt${rowIdx % 3}">&#128716; ${esc(r)}</span>`).join(' ') || '&mdash;';
+      const placeCell = uniq(opts.map((o) => o.city))
+        .map((c) => `<span class="placecell"><span class="pc-pin">&#128205;</span>${esc(c)}</span>`).join(' / ') || '&mdash;';
       return `<tr>
         <td class="bcell hcell">${nameCell}</td>
-        <td>${joined((o) => o.roomType)}</td><td>${joined((o) => o.city)}</td>
+        <td>${roomChips}</td><td>${placeCell}</td>
         <td>${joined((o) => o.rooms || 0)}</td><td>${(h.nights || []).length || 1}</td>
         <td>${joined((o) => o.aweb || 0)}</td><td>${joined((o) => o.cnb || 0)}</td>
-        <td>${uniq(opts.map((o) => o.mealPlan)).map((m) => `<span class="pill navy">${esc(m)}</span>`).join(' ')}</td>
+        <td>${uniq(opts.map((o) => o.mealPlan)).map((m) => `<span class="pill navy">&#127860; ${esc(m)}</span>`).join(' ')}</td>
       </tr>`;
     }).join('');
   };
@@ -228,7 +243,7 @@ export function quotationHtml(q, org = null) {
       const totalWithGst = p.taxApplied ? (p.sellingPrice || 0) : Math.round((p.sellingPrice || 0) * (1 + gstPct / 100));
       const payable = Math.round(totalWithGst / 2);
       return `<div class="seccard">
-        <div class="sechead"><span class="sicon">&#127976;</span> ${label}</div>
+        <div class="sechead teal"><span class="shic">&#127976;</span><span class="shnum">2</span> ${label}</div>
         <div class="tbl flat"><table>
           <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
@@ -280,7 +295,6 @@ export function quotationHtml(q, org = null) {
 
   // ---- Cover page data ----
   const fmtDateWD = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }) : '');
-  const routeCode = primaryHotels.map((h) => `${(h.nights || []).length || 1}${placeCode(h.city)}`).join('&gt;');
   const destCovered = (() => {
     const m = new Map();
     primaryHotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
@@ -333,10 +347,30 @@ export function quotationHtml(q, org = null) {
   // 09:00") back to the service/activity it came from: drop the time and any
   // trailing separators before comparing.
   const lineKey = (l) => normName(String(l).replace(/\d{1,2}:\d{2}.*$/, '').replace(/[\s·•|–—-]+$/g, ''));
+  // Timeline rail icon by service keyword (ferry / flight / cab / sightseeing).
+  const tlIcon = (text) => {
+    const s = String(text || '').toLowerCase();
+    if (/ferry|cruise|catamaran|makruzz|nautika|green ocean|itt|sea ?link|jetty|boat/.test(s)) return '&#9972;';
+    if (/flight|airport|departure|drop/.test(s)) return '&#9992;';
+    if (/cab|pickup|transfer|arrival/.test(s)) return '&#128663;';
+    return '&#128247;';
+  };
+  const tlChip = (icon, label, value) => (value
+    ? `<div class="tchip"><div class="tclab"><span>${icon}</span>${label}</div><div class="tcval">${value}</div></div>`
+    : '');
+  const tlRow = (icon, photo, inner) => `
+    <div class="tlrow">
+      <div class="tlicon"><span class="tlcirc">${icon}</span></div>
+      <div class="tlbody">
+        ${photo ? `<img class="tlphoto" src="${esc(photo)}" alt=""/>` : ''}
+        <div class="tlinfo">${inner}</div>
+      </div>
+    </div>`;
+
   const dayBlocks = (q.days || []).map((d) => {
     const n = d.dayNumber || 1;
     const date = d.date || (start ? addDays(start, n - 1) : null);
-    // Rich service blocks: service name + "Day Schedule" description from the
+    // Rich service rows: service name + "Day Schedule" description from the
     // transport master (imported from the Transport Excel), when available.
     const dayTs = transports.filter((t) => (Array.isArray(t.days) ? t.days : [t.day]).includes(n));
     const svcBlocks = dayTs.map((t) => {
@@ -349,19 +383,16 @@ export function quotationHtml(q, org = null) {
       const photo = item?.imageUrl || master?.imageUrl || svcImage(`${t.serviceType} ${t.serviceLocation}`);
       if (!desc && !photo) return '';
       const paras = desc.split('\n').filter(Boolean)
-        .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
-      // Key details fill the text column even when no long description exists.
-      const meta = [
-        t.serviceLocation && `<div class="dmeta"><span class="mk">Route</span>${esc(t.serviceLocation)}</div>`,
-        fmtTime(t.startTime) && `<div class="dmeta"><span class="mk">Start Time</span>${fmtTime(t.startTime)}</div>`,
-        t.durationMins && `<div class="dmeta"><span class="mk">Duration</span>${t.durationMins} mins</div>`,
-      ].filter(Boolean).join('');
-      const body = photo
-        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}${meta}</div></div>`
-        : `${paras}${meta}`;
-      return `<div class="svcblk"><div class="dwtitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${body}</div>`;
+        .map((p) => `<div class="tldesc">${esc(p)}</div>`).join('');
+      const chips = [
+        tlChip('&#128205;', 'Route', esc(t.serviceLocation || '')),
+        tlChip('&#128336;', 'Start Time', fmtTime(t.startTime)),
+        tlChip('&#8986;', 'Duration', t.durationMins ? `${t.durationMins} mins` : ''),
+      ].join('');
+      const inner = `<div class="tltitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`;
+      return tlRow(tlIcon(`${t.serviceType} ${t.serviceLocation}`), photo, inner);
     }).filter(Boolean).join('');
-    // Activity blocks (scuba, ferry tickets...) — photo from the activity
+    // Activity rows (scuba, ferry tickets...) — photo from the activity
     // master + details from the matching ticket type (or activity-level).
     const dayActs = activities.filter((a) => (Array.isArray(a.days) && a.days.length ? a.days : [1]).includes(n));
     const actBlocks = dayActs.map((a) => {
@@ -370,18 +401,19 @@ export function quotationHtml(q, org = null) {
       const desc = stripHtml(tk?.details || master?.details || '');
       const photo = master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
       if (!desc && !photo) return '';
-      const title2 = [a.name, a.ticketType].filter(Boolean).join(' — ');
+      // Title shows the ferry/operator name without its category suffix; the
+      // full ticket type stays in the chip below.
+      const tkName = String(a.ticketType || '').split(':')[0].trim();
+      const title2 = [a.name, tkName].filter(Boolean).join(' &mdash; ');
       const paras = desc.split('\n').filter(Boolean)
-        .map((p) => `<div class="ddesc">${esc(p)}</div>`).join('');
-      const meta = [
-        a.ticketType && `<div class="dmeta"><span class="mk">Ticket / Package</span>${esc(a.ticketType)}</div>`,
-        fmtTime(a.slot) && `<div class="dmeta"><span class="mk">Slot</span>${fmtTime(a.slot)}</div>`,
-        a.durationMins && `<div class="dmeta"><span class="mk">Duration</span>${a.durationMins} mins</div>`,
-      ].filter(Boolean).join('');
-      const body = photo
-        ? `<div class="svcrow"><img class="dphoto" src="${esc(photo)}" alt=""/><div class="svctext">${paras}${meta}</div></div>`
-        : `${paras}${meta}`;
-      return `<div class="svcblk"><div class="dwtitle">${esc(title2)}</div>${body}</div>`;
+        .map((p) => `<div class="tldesc">${esc(p)}</div>`).join('');
+      const chips = [
+        tlChip('&#127915;', 'Ticket / Package', esc(a.ticketType || '')),
+        tlChip('&#128336;', 'Slot', fmtTime(a.slot)),
+        tlChip('&#8986;', 'Duration', a.durationMins ? `${a.durationMins} mins` : ''),
+      ].join('');
+      const inner = `<div class="tltitle">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`;
+      return tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, inner);
     }).filter(Boolean).join('');
     const richBlocks = svcBlocks + actBlocks;
     const describedKeys = new Set([
@@ -405,44 +437,95 @@ export function quotationHtml(q, org = null) {
       .filter((l) => !(richBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
       .map((l) => `<div class="ditem">&bull;&nbsp; ${esc(l.trim())}</div>`).join('')
       || (richBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
-    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) && !richBlocks ? `<div class="dwtitle">${esc(d.title)}</div>` : '';
+    const title = d.title && !/^day\s*\d+$/i.test(d.title.trim()) && !richBlocks ? d.title : '';
+    // Leftover free-text lines (day title, custom bullets) get their own
+    // timeline row so everything hangs off the icon rail.
+    const lineRow = (title || lines)
+      ? tlRow(tlIcon(`${title} ${d.description || ''}`), '', `${title ? `<div class="tltitle">${esc(title)}</div>` : ''}${lines}`)
+      : '';
     const nightHotels = hotels.filter((h) => (h.nights || []).includes(n));
-    const strips = nightHotels.map((h) => {
+    const hotelRows = nightHotels.map((h) => {
       const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
       const st = Math.min(master.stars || 3, 5);
-      // Same layout as the service blocks: big photo left, labelled details right.
-      const meta = `
-        <div class="dmeta"><span class="mk">Category</span><span class="cardstars">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></span></div>
-        <div class="dmeta"><span class="mk">Room Type</span>${esc(h.roomType || '—')}</div>
-        <div class="dmeta"><span class="mk">Meal Plan</span>${esc(h.mealPlan || '—')}</div>
-        <div class="dmeta"><span class="mk">Rooms</span>${h.rooms || 1} room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</div>`;
-      return `<div class="hstrip">
-        <div class="dwtitle" style="color:var(--blue-dark)">Hotel${h.isAlternative ? ' (Alternative Option)' : ''} &nbsp;&#124;&nbsp; ${esc(h.hotelName)}</div>
-        <div class="svcrow">
-          ${master.imageUrl ? `<img class="dphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
-          <div class="svctext">${meta}</div>
-        </div>
+      const det = `<div class="hdet">
+        <div class="hdr"><span class="hlab">&#127991; Category</span><span class="cardstars" style="font-size:12px;margin:0">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></span></div>
+        <div class="hdr"><span class="hlab">&#128716; Room Type</span><span class="hval">${esc(h.roomType || '—')}</span></div>
+        <div class="hdr"><span class="hlab">&#127860; Meal Plan</span><span class="hval">${esc(h.mealPlan || '—')}</span></div>
+        <div class="hdr"><span class="hlab">&#128682; Rooms</span><span class="hval">${h.rooms || 1} Room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</span></div>
       </div>`;
+      const inner = `<div class="tltitle">Hotel${h.isAlternative ? ' (Alternative Option)' : ''}</div>
+        <div class="tlname">${esc(h.hotelName)}</div>${det}`;
+      return tlRow('&#128716;', master.imageUrl || '', inner);
     }).join('');
+    const sight = sightBlock(d);
     return `<div class="dayblk">
-      <div class="dwband">Day ${n} ${esc(cityOfDay(n))} &nbsp;&#124;&nbsp; ${date ? fmtDateWD(date) : ''}</div>
-      <div class="dwbody">${strips}${title}${richBlocks}${lines}${sightBlock(d)}</div>
+      <div class="dwhead">
+        <span class="daytab">Day ${n}</span>
+        <span class="daycity">${esc(cityOfDay(n))}</span>
+        ${date ? `<span class="dayhr"></span><span class="daydate">&#128197;&nbsp; ${fmtDateWD(date)}</span>` : ''}
+      </div>
+      <div class="tlwrap">${hotelRows}${richBlocks}${lineRow}</div>
+      ${sight ? `<div class="tlextra">${sight}</div>` : ''}
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
 
-  // ---- Optional activities (config-driven upsell grid) ----
-  const optActs = (company.optionalActivities || []).map((a) => `
-    <div class="oacard">
-      ${a.image ? `<img src="${esc(a.image)}" alt=""/>` : ''}
-      <div class="oaname">${esc(a.name)}</div>
-      <div class="oacost"><b>Adult Cost :</b> ${inr(a.adult)}</div>
-      <div class="oacost"><b>Child Cost :</b> ${inr(a.child)}</div>
-    </div>`).join('');
+  // ---- Optional activities (poster-style card grid) ----
+  const optActs = (company.optionalActivities || []).map((a) => {
+    const src = a.image ? (/^https?:/i.test(a.image) ? a.image : assetUri(a.image)) : '';
+    return `<div class="oacard2">
+      ${src ? `<img class="oa-img" src="${esc(src)}" alt=""/>` : ''}
+      <div class="oa-label"><span class="oa-ic">${a.icon || '&#127754;'}</span><span class="oa-name">${esc(a.name)}</span></div>
+      <div class="oa-cost">${a.onRequest ? '<span class="oa-req">On Request</span>' : `Adult Cost : <b>${inr(a.adult)}</b>`}</div>
+    </div>`;
+  }).join('');
 
-  // ---- Emergency contacts + social icons ----
+  // ---- Terms & Conditions sections (numbered, reference-styled) ----
+  // Config shape: { heading: 'N. Title', intro?, table? {headers, rows},
+  // boxTitle?, items[] }. A section with a table renders its items in a light
+  // box below the table; text-only sections render dotted-left paragraphs.
+  // The "Important Notes" section gets the pill + bar treatment.
+  const tcSectionsHtml = tcSections.map((s) => {
+    const heading = String(s.heading || '');
+    if (/important note/i.test(heading)) {
+      return `<div class="tcnotes">
+        <div class="tcnotes-pill">IMPORTANT NOTES</div>
+        <div class="tcnotes-body">${(s.items || []).map((x) => `<div>${boldLabel(x)}</div>`).join('')}</div>
+      </div>`;
+    }
+    const num = (heading.match(/^(\d+)\./) || [])[1] || '';
+    const title = heading.replace(/^\d+\.\s*/, '');
+    const tbl = s.table && s.table.rows?.length
+      ? `<table class="tctbl2${(s.table.headers || []).length >= 3 ? ' navyhead' : ''}">
+          <thead><tr>${(s.table.headers || []).map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${s.table.rows.map((r) => `<tr>${r.map((c, ci) => `<td${ci === 0 ? ' class="c0"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>`
+      : '';
+    const items = s.items || [];
+    const body = tbl
+      ? (items.length ? `<div class="tcbox">
+          ${s.boxTitle ? `<div class="tcbox-t">&#9881; ${esc(s.boxTitle)}</div>` : ''}
+          ${items.map((x) => `<div class="tcbox-i">${s.boxTitle ? '&bull;&nbsp; ' : ''}${boldLabel(x)}</div>`).join('')}
+        </div>` : '')
+      : items.map((x) => `<div class="tcp">${boldLabel(x)}</div>`).join('');
+    return `<div class="tcsec">
+      <div class="tcsec-h">${num ? `<span class="tcnum">${num}</span>` : ''}${esc(title)}</div>
+      ${s.intro ? `<div class="tcsec-intro">${esc(s.intro)}</div>` : ''}
+      ${tbl}${body}
+    </div>`;
+  }).join('');
+
+  // ---- Additional information page pieces ----
+  const aiCard = (title, cls, items) => `
+    <div class="aicard ${cls}">
+      <div class="aihead">${title}</div>
+      <div class="aibody">${(items || []).map((x) => `<div class="aiitem"><span class="dot"></span><span>${esc(x)}</span></div>`).join('')}</div>
+    </div>`;
+  const paymentQr = company.paymentQrImage
+    ? (/^https?:/i.test(company.paymentQrImage) ? company.paymentQrImage : assetUri(company.paymentQrImage))
+    : '';
   const ecRows = (company.emergencyContacts || []).map((c) => `<tr>
-    <td class="dkcell">${esc(c.name)}</td><td class="dkcell">${esc(c.phone)}</td>
-    <td class="dkcell">${esc(c.email)}</td><td class="dkcell">${esc(c.availableOn)}</td>
+    <td>${esc(c.name)}</td><td>${esc(c.phone)}</td>
+    <td>${esc(c.email)}</td><td>${esc(c.availableOn)}</td>
   </tr>`).join('');
   const socialIcons = (company.social || []).map((s) => `
     <a class="soc" href="${esc(s.url)}">
@@ -467,10 +550,11 @@ export function quotationHtml(q, org = null) {
   return `<!doctype html><html><head><meta charset="utf-8"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet"/>
 <style>
   :root {
     --blue: #1577bd; --blue-dark: #0e5fa0; --navy: #14498f;
+    --deep: #16295c; --orange: #f36f21;
     --lblue: #d9ecf9; --lblue2: #eef6fc; --line: #cfdae5;
     --yellow: #fdefad; --green: #18a24b; --ink: #16212e;
   }
@@ -484,17 +568,20 @@ export function quotationHtml(q, org = null) {
   .bottombar { margin-top: auto; height: 7px; background: linear-gradient(90deg, var(--blue-dark), var(--blue) 45%, #f6a83b); border-radius: 2px; }
   .grow { flex: 1; }
 
-  /* ---- letterhead: brand + Address | Email | Phone columns ---- */
-  .lh { display: flex; align-items: center; margin-bottom: 6px; }
-  .brand { display: flex; align-items: center; gap: 9px; width: 29%; flex-shrink: 0; padding-right: 10px; }
-  .logo { width: 38px; height: 38px; border-radius: 10px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
-  .logoimg { height: 44px; max-width: 200px; object-fit: contain; }
+  /* ---- letterhead: brand + icon columns (Address | Email | Phone) ---- */
+  .lh { display: flex; align-items: center; margin-bottom: 8px; }
+  .brand { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 30%; flex-shrink: 0; padding-right: 12px; }
+  .logo { width: 38px; height: 38px; border-radius: 10px; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .logoimg { height: 62px; max-width: 100%; object-fit: contain; }
   .logoimg.lg { height: 64px; max-width: 260px; }
-  .bn { font-size: 14.5px; font-weight: 800; color: var(--blue); line-height: 1.2; white-space: nowrap; }
+  .bn { font-size: 14.5px; font-weight: 800; color: var(--deep); line-height: 1.2; white-space: nowrap; }
   .bsub { font-size: 7.5px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
-  .lh-col { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center; border-left: 1px solid #c9d4df; padding: 2px 8px; font-size: 10.5px; color: #445468; line-height: 1.4; }
-  .lh-col.wide { flex: 1.25; }
-  .lh-col b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 3px; }
+  .lh-col { flex: 1; padding: 1px 12px; border-left: 1px solid #dfe6ee; }
+  .lh-col.wide { flex: 1.2; }
+  .lh-head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+  .lh-head b { font-size: 11.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--deep); }
+  .lh-ic { width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .lh-val { font-size: 9.8px; color: #445468; line-height: 1.5; }
 
   /* ---- blue band heading ---- */
   .band { background: linear-gradient(90deg, var(--blue-dark), var(--blue) 55%, #2f96dd); color: #fff; padding: 10px 16px; font-weight: 800; font-size: 17px; border-radius: 5px; margin-bottom: 14px; }
@@ -512,21 +599,42 @@ export function quotationHtml(q, org = null) {
   .h1 { font-size: 21px; font-weight: 800; color: var(--ink); margin: 10px 0 4px; }
 
   /* ---- tables ---- */
-  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #f8fbfe; }
+  .tbl { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 7px; background: #fff; }
   .tbl table { width: 100%; border-collapse: collapse; }
-  .tbl thead th { background: #eaf3fb; color: var(--navy); padding: 7px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; font-weight: 800; border-right: 1px solid #d8e7f5; }
-  .tbl thead th:last-child { border-right: 0; }
-  .tbl td { padding: 6.5px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--blue-dark); border-top: 1px dashed #cddcea; }
-  .tbl tbody tr:nth-child(even) td { background: #ecf4fc; }
+  .tbl thead th { background: #f4f8fc; color: var(--deep); padding: 7px 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; font-weight: 800; border-bottom: 1px solid #dfe9f2; }
+  .tbl td { padding: 7px 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--deep); border-top: 1px solid #eaf0f6; }
+  .tbl tbody tr:first-child td { border-top: 0; }
 
   /* ---- section cards (summary page) ---- */
-  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 7px; background: #f6faff; break-inside: avoid; page-break-inside: avoid; }
+  .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 9px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
   .ordivide { border-top: 2px dashed #9fbddd; margin: 18px 0; }
-  .sechead { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--lblue), #f2f9ff 70%, #fff); border-left: 4px solid var(--blue); padding: 5px 14px; font-weight: 800; font-size: 13.5px; color: var(--navy); border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.02em; }
-  .sechead .sicon { font-size: 14px; }
+  .sechead { display: flex; align-items: center; gap: 10px; background: linear-gradient(90deg, #1259c9, #2f97ec 60%, #4fa9f2); padding: 7px 14px; font-weight: 800; font-size: 13.5px; color: #fff; text-transform: uppercase; letter-spacing: 0.03em; }
+  .sechead.teal { background: linear-gradient(90deg, #0b8f80, #2bbfae 55%, #6fd6c3); }
+  .sechead.navy { background: var(--deep); }
+  .sechead .shic { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .sechead .shnum { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; }
   .secprice { margin-left: auto; background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2px 13px; font-size: 12.5px; font-weight: 800; letter-spacing: 0; text-transform: none; }
   .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
   .tbl.flat.sep { border-top: 1px solid var(--line); }
+
+  /* ---- ferry sector chips + category pills ---- */
+  .fname { white-space: nowrap; }
+  .fname .fship { margin-right: 4px; }
+  .schip { display: inline-flex; align-items: center; gap: 6px; border: 1.3px solid #bcd6f2; background: #fff; border-radius: 999px; padding: 3px 13px; font-size: 11.5px; font-weight: 800; color: var(--deep); white-space: nowrap; }
+  .schip .sc-pin, .schip .sc-ship { font-size: 10px; }
+  .pill.purple { background: #7c3aed; }
+
+  /* ---- hotel rows: thumbnail + name + stars, room chips ---- */
+  .hname-row { display: flex; align-items: center; gap: 9px; text-align: left; }
+  .hthumb2 { width: 52px; height: 40px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
+  .hname { font-weight: 800; font-size: 12.5px; color: var(--deep); line-height: 1.3; }
+  .rtchip { display: inline-block; border-radius: 8px; padding: 3.5px 10px; font-size: 11px; font-weight: 700; color: var(--deep); }
+  .rtchip.rt0 { background: #e3f0fd; } .rtchip.rt1 { background: #e6f6ec; } .rtchip.rt2 { background: #fdf5dc; }
+  .placecell { white-space: nowrap; }
+  .placecell .pc-pin { color: var(--blue); font-size: 10.5px; margin-right: 2px; }
+
+  /* ---- fare summary row icons ---- */
+  .fic { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border: 1px solid #d5e0ea; border-radius: 6px; background: #fff; font-size: 11px; margin-right: 9px; vertical-align: -5px; }
 
   /* ---- fare summary ---- */
   .fare { width: 100%; border-collapse: collapse; }
@@ -537,7 +645,8 @@ export function quotationHtml(q, org = null) {
   .fare tr.final td { background: linear-gradient(90deg, #fde68a, #fdf3c0); border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); font-size: 14px; }
   .tbl td.bcell { font-weight: 700; }
   .tbl td.dkcell { color: var(--ink); }
-  .tbl .legend { background: #f2f6fa; border-top: 1px solid var(--line); padding: 4.5px; text-align: center; font-size: 10.5px; font-weight: 700; color: #46566a; }
+  .tbl .legend { background: #fff; border-top: 1px solid var(--line); padding: 5.5px; text-align: center; font-size: 11px; font-weight: 800; color: var(--blue); }
+  .tbl .legend .lgwave { color: #7fb4e8; letter-spacing: -2px; }
   /* Payment strip under hotel option tables — same table idiom (row +
      dashed divider), with the 50% booking line highlighted in brand blue
      and the amount in the yellow price pill. */
@@ -586,29 +695,52 @@ export function quotationHtml(q, org = null) {
   .notebox { margin-top: 6px; border: 1px solid var(--line); border-radius: 9px; padding: 5px 14px; font-size: 10.5px; color: #37475a; text-align: center; line-height: 1.5; }
 
   /* ---- cover page ---- */
-  .hero { border-radius: 12px; overflow: hidden; height: 118mm; }
-  .hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .coverband { background: var(--blue); color: #fff; font-weight: 800; font-size: 19.5px; text-align: center; letter-spacing: 0.02em; padding: 12px 16px; margin: 0 -4px; border-radius: 4px; text-transform: uppercase; }
-  .covermeta { display: flex; justify-content: space-between; font-size: 12.5px; color: #37475a; margin: 12px 2px 4px; }
-  .stats { display: flex; justify-content: center; gap: 70px; margin-top: 22px; text-align: center; }
-  .stat .sk { font-size: 12.5px; color: #46566a; letter-spacing: 0.02em; }
-  .stat .sv { font-size: 15px; font-weight: 800; color: var(--ink); margin-top: 4px; }
-  .destcov { text-align: center; margin-top: 26px; }
-  .destcov .sk { font-size: 12.5px; color: #46566a; letter-spacing: 0.04em; }
-  .destcov .sv { font-size: 14px; margin-top: 6px; color: var(--ink); }
+  .hero2 { position: relative; border-radius: 14px; overflow: hidden; height: 136mm; border: 2.5px solid var(--deep); }
+  .hero2-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hero2-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,24,54,0.30) 0%, rgba(10,24,54,0.10) 32%, rgba(10,24,54,0.55) 62%, rgba(9,21,48,0.88) 100%); }
+  .hero2-body { position: absolute; inset: 0; display: flex; flex-direction: column; color: #fff; padding: 26px 30px 22px; }
+  .hx-script { font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 46px; font-weight: 700; line-height: 0.85; text-shadow: 0 2px 10px rgba(0,0,0,0.45); }
+  .hx-script::after { content: ''; display: block; width: 92px; height: 4px; margin: 6px 0 2px 4px; border-radius: 99px; background: var(--orange); }
+  .hx-title { font-size: 62px; font-weight: 800; letter-spacing: 3px; line-height: 1.05; text-shadow: 0 3px 12px rgba(0,0,0,0.5); }
+  .hx-why { margin-top: auto; font-size: 19px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.55); }
+  .hx-why span { color: var(--orange); }
+  .hx-point { margin-top: 6px; font-size: 12.5px; font-weight: 700; text-shadow: 0 1px 6px rgba(0,0,0,0.65); }
+  .hx-check { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 7px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 9px; vertical-align: 1px; }
+  .hx-pillwrap { margin-top: 13px; }
+  .hx-pill { display: inline-block; background: #fff; color: var(--deep); font-weight: 800; font-size: 13px; letter-spacing: 0.06em; padding: 6px 30px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+  .hx-icons { display: flex; justify-content: space-between; gap: 6px; margin-top: 12px; }
+  .hx-item { flex: 1; text-align: center; min-width: 0; }
+  .hx-circle { width: 52px; height: 52px; margin: 0 auto; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+  .hx-lbl { margin-top: 6px; font-size: 8.4px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.3; text-shadow: 0 1px 5px rgba(0,0,0,0.7); }
+  .hx-sub { display: block; color: var(--orange); }
+  .coverband { display: flex; align-items: center; gap: 10px; background: var(--deep); color: #fff; font-weight: 800; font-size: 18px; letter-spacing: 0.02em; padding: 11px 18px; margin-top: 10px; border-radius: 8px; text-transform: uppercase; }
+  .coverband .cb-ic { font-size: 17px; }
+  .coverband .cb-route { color: var(--orange); font-size: 15px; margin-left: 2px; }
+  .covermeta { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: #37475a; margin: 10px 2px 4px; }
+  .stats { display: flex; align-items: stretch; margin-top: 12px; text-align: center; }
+  .stat { flex: 1; min-width: 0; padding: 2px 8px; }
+  .stat + .stat { border-left: 1px solid #dfe6ee; }
+  .statico { width: 38px; height: 38px; margin: 0 auto 7px; border-radius: 50%; background: #edf1f7; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .stat .sk { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #46566a; }
+  .stat .sv { font-size: 15px; font-weight: 800; color: var(--deep); margin-top: 3px; }
+  .destcov { position: relative; text-align: center; border-top: 1px solid #dfe6ee; margin-top: 14px; padding-top: 21px; }
+  .destcov .statico { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; font-size: 15px; margin: 0; border: 3px solid #fff; }
+  .destcov .sk { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #46566a; }
+  .destcov .sv { font-size: 14px; font-weight: 700; margin-top: 5px; color: var(--deep); }
   .stat .ss { font-size: 10.5px; color: #64748b; margin-top: 2px; }
 
-  /* ---- Ratings + award badges on the cover ---- */
-  .recog { margin-top: 30px; text-align: center; }
-  .recogpill { display: inline-block; background: #f6b93b; color: #123a63; font-weight: 800; font-size: 13px; letter-spacing: 0.08em; padding: 6px 26px; border-radius: 999px; }
-  .recogrow { margin-top: 14px; display: flex; justify-content: center; align-items: stretch; gap: 28px; }
-  .ratecard { border: 2px dashed #cbd5e1; border-radius: 14px; background: #fff; padding: 10px 26px 12px; }
-  .ratecard .rctitle { text-align: center; font-size: 14.5px; font-weight: 800; color: var(--ink); }
-  .rcitems { display: flex; justify-content: center; gap: 40px; margin-top: 8px; }
-  .rcitem { text-align: center; }
-  .rcitem .rclogo { height: 46px; object-fit: contain; }
+  /* ---- Ratings + award badge cards on the cover ---- */
+  .recogrow { margin-top: 22px; display: flex; align-items: stretch; gap: 22px; }
+  .ratecard { position: relative; flex: 1.15; border: 1px solid var(--line); border-radius: 13px; background: #f6f8fb; padding: 17px 24px 11px; }
+  .ratecard:last-child { flex: 1; }
+  .rcpill { position: absolute; top: -11px; left: 34px; background: var(--deep); color: #fff; font-weight: 800; font-size: 10.5px; letter-spacing: 0.09em; padding: 4px 20px; border-radius: 999px; white-space: nowrap; }
+  .rcitems { display: flex; justify-content: center; margin-top: 4px; }
+  .rcitem { flex: 1; text-align: center; }
+  .rcitem + .rcitem { border-left: 1px solid #dfe6ee; }
+  .rcitem .rclogo { height: 44px; object-fit: contain; }
   .rccap { margin-top: 4px; font-size: 11.5px; color: #37475a; }
   .rccap b { font-size: 12.5px; color: var(--ink); }
+  .bottombar.navy { background: var(--deep); }
   .awardrow { display: flex; justify-content: center; align-items: stretch; gap: 14px; margin-top: 8px; }
   .awardrow .rbadge { min-width: 0; min-height: 0; border: 0; box-shadow: none; padding: 0 6px; }
   .awardrow .rbadge img { max-height: 78px; }
@@ -631,42 +763,61 @@ export function quotationHtml(q, org = null) {
   .introrow:last-child { border-bottom: 0; }
   .introday { display: inline-block; min-width: 52px; font-weight: 800; color: var(--blue-dark); }
 
-  /* ---- day-wise itinerary ---- */
-  .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
-  .dwband { background: linear-gradient(90deg, var(--blue-dark), var(--blue) 55%, #2f96dd); color: #fff; font-weight: 700; font-size: 13.5px; padding: 7px 14px; border-radius: 5px 5px 0 0; }
-  .dwbody { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; background: #f8fbfe; padding: 11px 15px; }
-  .dwtitle { font-weight: 800; font-size: 13px; color: var(--ink); text-transform: uppercase; margin-bottom: 6px; }
-  .ditem { font-size: 12.5px; color: #2c3d51; line-height: 1.65; }
-  .svcblk { margin-bottom: 8px; }
-  .svcblk + .svcblk { border-top: 1px dashed #d5e0ea; padding-top: 8px; }
-  .ddesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 3px; }
-  /* service photo + description row (photo left, text right — like the hotel strip) */
-  .svcrow { display: flex; align-items: flex-start; gap: 16px; margin-top: 7px; }
-  .dphoto { width: 236px; height: 156px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.18); }
-  .svctext { flex: 1; min-width: 0; }
-  .svctext .ddesc { font-size: 12.5px; line-height: 1.75; }
-  .svctext .ddesc:first-child { margin-top: 0; }
-  .dmeta { font-size: 12px; color: #2c3d51; margin-top: 6px; }
-  .dmeta .mk { display: inline-block; min-width: 108px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #8fa0b3; }
-  .ddesc + .dmeta { margin-top: 10px; }
-  .svctext .dmeta:first-child { margin-top: 0; }
-  .dwsight { border-top: 1px dashed #d5e0ea; margin-top: 9px; padding-top: 8px; }
+  /* ---- day-wise itinerary (timeline cards) ---- */
+  .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .dwhead { display: flex; align-items: center; gap: 13px; background: #f7f9fc; border-bottom: 1px solid #e8eef5; padding: 8px 16px 8px 8px; }
+  .daytab { background: var(--deep); color: #fff; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 17px; border-radius: 8px; white-space: nowrap; }
+  .daycity { color: var(--blue); font-weight: 800; font-size: 15.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .dayhr { width: 1px; align-self: stretch; background: #d5dfe9; margin: 3px 2px; }
+  .daydate { font-size: 12px; font-weight: 600; color: #37475a; }
+  .tlwrap { position: relative; padding: 11px 16px 11px 8px; }
+  .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px dotted #b9cbe0; }
+  .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; }
+  .tlicon { width: 44px; flex-shrink: 0; display: flex; justify-content: center; }
+  .tlcirc { position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 0 3px #fff; }
+  .tlbody { flex: 1; min-width: 0; display: flex; gap: 15px; align-items: flex-start; }
+  .tlphoto { width: 168px; height: 118px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.15); }
+  .tlinfo { flex: 1; min-width: 0; }
+  .tltitle { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
+  .tlname { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tldesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 6px; }
+  .hdet { margin-top: 7px; }
+  .hdr { display: flex; align-items: center; gap: 10px; padding: 4.5px 0; border-top: 1px solid #eef2f7; font-size: 11.5px; color: var(--ink); }
+  .hdr:first-child { border-top: 0; }
+  .hlab { min-width: 112px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue); }
+  .hval { font-weight: 600; }
+  .tchips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .tchip { border: 1px solid #e2e9f0; background: #fbfcfe; border-radius: 10px; padding: 7px 15px; min-width: 96px; }
+  .tclab { display: flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue); }
+  .tcval { margin-top: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink); }
+  .ditem { font-size: 12.5px; color: #2c3d51; line-height: 1.65; margin-top: 3px; }
+  .tlextra { padding: 0 16px 12px; }
+  .dwsight { border-top: 1px dashed #d5e0ea; padding-top: 8px; }
   .dwsighthead { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); margin-bottom: 4px; }
   .spill { display: inline-block; background: #eaf3fb; color: var(--blue-dark); border: 1px solid #cfe2f1; border-radius: 999px; padding: 2.5px 11px; font-size: 10.5px; font-weight: 700; margin: 0 5px 4px 0; }
-  .hstrip { border-bottom: 1px dashed #c9d8e5; margin-bottom: 10px; padding-bottom: 10px; }
-  .hstrip .dwtitle { margin-bottom: 7px; }
-  .hthumb { width: 88px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
-  .hsname { font-weight: 800; font-size: 13px; color: var(--blue-dark); margin-bottom: 4px; }
-  .hscols { display: flex; gap: 30px; }
-  .hscols .k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: #8fa0b3; }
-  .hscols .v { font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 1px; }
+  /* "Please note" strip under the itinerary */
+  .notestrip { display: flex; align-items: center; gap: 11px; margin-top: 10px; background: #eef4fb; border: 1px solid #d8e6f5; border-radius: 10px; padding: 8px 15px; font-size: 11px; color: #2c3d51; line-height: 1.5; }
+  .notestrip b { color: var(--deep); font-size: 10.5px; letter-spacing: 0.05em; white-space: nowrap; }
+  .notestrip .ni { width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; font-style: normal; }
+  .notestrip .nsdiv { width: 1px; align-self: stretch; background: #c9d9ea; }
 
-  /* ---- optional activities ---- */
-  .oagrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
-  .oacard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-align: center; padding-bottom: 10px; background: #f8fbfe; break-inside: avoid; page-break-inside: avoid; }
-  .oacard img { width: 100%; height: 108px; object-fit: cover; display: block; margin-bottom: 8px; }
-  .oaname { font-weight: 800; font-size: 12.5px; color: var(--ink); text-transform: uppercase; padding: 0 8px; }
-  .oacost { font-size: 11.5px; color: #2c3d51; margin-top: 3px; }
+  /* ---- optional activities (poster-style cards) ---- */
+  .oa-title { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 27px; font-weight: 800; letter-spacing: 1.5px; margin-top: 2px; }
+  .oa-title::before, .oa-title::after { content: ''; width: 76px; height: 3px; border-radius: 3px; background: var(--deep); }
+  .oa-t1 { color: var(--deep); } .oa-t2 { color: #1e88e5; }
+  .oa-sub { text-align: center; font-size: 11.5px; font-weight: 700; color: #22303f; margin-top: 5px; }
+  .oagrid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; margin-top: 12px; }
+  .oacard2 { border: 1px solid #dfe6ee; border-radius: 10px; overflow: hidden; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .oa-img { width: 100%; height: 44mm; object-fit: cover; display: block; }
+  .oa-label { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 8px 6px; min-height: 40px; }
+  .oa-ic { width: 27px; height: 27px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .oa-name { font-weight: 800; font-size: 11px; text-transform: uppercase; color: var(--ink); letter-spacing: 0.02em; line-height: 1.3; }
+  .oa-cost { text-align: center; padding: 5px 6px 8px; font-size: 10.8px; font-weight: 700; color: var(--deep); border-top: 1px solid #eef2f7; }
+  .oa-cost b, .oa-req { color: #1e88e5; }
+  .oa-notes { margin-top: 12px; border: 1px solid #dfe6ee; border-radius: 10px; background: #f4f8fd; padding: 3px 15px; }
+  .oa-note { display: flex; gap: 12px; align-items: center; padding: 8px 0; font-size: 10.8px; color: #22303f; line-height: 1.55; }
+  .oa-note + .oa-note { border-top: 1px solid #e2e9f2; }
+  .oa-nic { width: 27px; height: 27px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-style: normal; }
 
   /* ---- social + end of document ---- */
   .socialrow { display: flex; justify-content: center; gap: 46px; margin-top: 14px; }
@@ -680,42 +831,84 @@ export function quotationHtml(q, org = null) {
   .extra .er { flex: 1; background: var(--blue); color: #fff; font-size: 13px; padding: 15px 16px; display: flex; align-items: center; }
 
   /* ---- info boxes (note / inclusions / exclusions) ---- */
-  .box { border: 1.2px solid var(--line); border-radius: 10px; padding: 11px 15px; margin-top: 12px; background: #f8fbfe; }
-  .box.g { background: #f2fbf5; border-color: #7ecf9a; }
-  .box.r { background: #fef5f5; border-color: #f0a8a8; }
-  .box h3 { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 6px; letter-spacing: 0.02em; }
   .dl { font-size: 12.5px; color: #2c3d51; line-height: 1.6; }
 
-  /* ---- payment info ---- */
-  .paybox { border: 1.6px solid var(--blue); background: #e9f3fb; border-radius: 13px; padding: 16px 20px; margin-top: 15px; }
-  .paybox .ptitle { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
-  .paybox .picon { font-size: 22px; }
-  .paybox .kv { font-size: 12.5px; margin: 3.5px 0; color: #2c3d51; }
-  .paybox .kv b { display: inline-block; min-width: 100px; color: var(--ink); }
-  .paybox .plink { border-top: 1.2px solid #b9d7ec; margin-top: 10px; padding-top: 9px; }
-  .banktbl { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #b9d7ec; border-radius: 8px; overflow: hidden; }
-  .banktbl td { border: 1px solid #cfe2f1; padding: 7px 12px; font-size: 12.5px; color: #2c3d51; }
-  .banktbl td.bk { width: 32%; font-weight: 800; color: var(--ink); background: #f2f8fd; }
+  /* ---- Additional Information page ---- */
+  .ai-banner { width: fit-content; margin: 0 auto 12px; background: var(--deep); color: #fff; font-weight: 800; font-size: 18px; letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 42px; border-radius: 10px; border: 2.5px solid #0c1c44; box-shadow: 0 2px 0 #0c1c44; }
+  .ai3col { display: flex; gap: 12px; align-items: stretch; }
+  .aicard { flex: 1; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .aicard.navy { border: 1.5px solid var(--deep); } .aicard.green { border: 1.5px solid #188038; } .aicard.red { border: 1.5px solid #c62828; }
+  .aihead { color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; padding: 7px 8px; }
+  .aicard.navy .aihead { background: var(--deep); } .aicard.green .aihead { background: #188038; } .aicard.red .aihead { background: #c62828; }
+  .aibody { padding: 4px 12px 8px; background: #fff; flex: 1; }
+  .aiitem { display: flex; gap: 8px; padding: 7px 0; font-size: 10.6px; color: #22303f; line-height: 1.55; border-bottom: 1px solid #edf1f6; }
+  .aiitem:last-child { border-bottom: 0; }
+  .aiitem .dot { width: 5px; height: 5px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .aicard.navy .dot { background: var(--deep); } .aicard.green .dot { background: #188038; } .aicard.red .dot { background: #c62828; }
+  /* payment info + scan-to-pay row */
+  .payrow { display: flex; gap: 12px; margin-top: 12px; align-items: stretch; }
+  .paycard { flex: 1.15; border: 1.5px solid var(--deep); border-radius: 10px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+  .paycard .payh { background: var(--deep); color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; padding: 7px 10px; }
+  .paytbl { width: 100%; border-collapse: collapse; }
+  .paytbl td { border-bottom: 1px solid #e4eaf1; padding: 11px 16px; font-size: 11.5px; color: #22303f; font-weight: 600; }
+  .paytbl td.pk { width: 38%; background: var(--deep); color: #fff; font-weight: 700; border-bottom: 1px solid #2b3f77; }
+  .paynote { display: flex; gap: 9px; margin: 10px 12px 12px; background: #eef4fb; border-left: 3px solid var(--blue); border-radius: 6px; padding: 9px 12px; font-size: 10.6px; color: #2c3d51; line-height: 1.6; }
+  .scancard { flex: 1; border-color: #d84315; }
+  .scancard .payh { background: linear-gradient(90deg, #d84315, #f4511e); }
+  .scanbody { flex: 1; display: flex; align-items: center; justify-content: center; padding: 6px 8px; }
+  .scanbody img { max-width: 100%; max-height: 66mm; object-fit: contain; }
+  /* emergency contacts */
+  .emcard { margin-top: 12px; border: 1.5px solid #c62828; border-radius: 10px; overflow: hidden; }
+  .emcard .emh { background: #c62828; color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; padding: 7px 10px; }
+  .emtbl { width: 100%; border-collapse: collapse; }
+  .emtbl th { background: #b71c1c; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 10px; text-align: left; }
+  .emtbl td { padding: 6.5px 10px; font-size: 11px; color: #22303f; font-weight: 600; border-bottom: 1px solid #f0e2e2; }
+  .emtbl tr:last-child td { border-bottom: 0; }
+  /* thank-you footer */
+  .thanks { margin-top: 12px; border: 1.5px solid var(--deep); border-radius: 10px; padding: 8px 14px 10px; text-align: center; }
+  .thanks .th1 { display: flex; align-items: center; gap: 12px; color: var(--deep); font-weight: 800; font-size: 15px; letter-spacing: 0.04em; }
+  .thanks .th1::before, .thanks .th1::after { content: ''; flex: 1; border-top: 2.5px solid var(--deep); }
+  .thanks .th2 { margin-top: 3px; font-size: 11px; font-weight: 600; color: #37475a; }
   .infobox { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 11px; color: #37475a; text-align: center; line-height: 2; }
 
-  /* ---- company & contact card (page 4) ---- */
-  .cocard { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; }
-  .cocard .cbrand { width: 33%; text-align: center; }
-  .cocard .cbrand .logo { margin: 0 auto 6px; width: 48px; height: 48px; font-size: 24px; }
-  .cocard .cweb { font-size: 9px; color: #64748b; margin-top: 3px; }
-  .cocard .ccol { flex: 1; border-left: 1px solid #d8e2ec; padding: 4px 16px; font-size: 12.5px; color: #2c3d51; line-height: 1.65; }
-  .cocard .ccol b { display: block; font-size: 13px; color: var(--ink); margin-bottom: 4px; letter-spacing: 0.03em; }
-  .support { background: var(--lblue2); border: 1px solid #bcd9ee; border-radius: 9px; padding: 9px 14px; text-align: center; font-size: 11.3px; color: #2c3d51; line-height: 1.9; margin-top: 12px; }
+  /* ---- company & contact page (banner, card, support strip) ---- */
+  .secban { display: flex; align-items: center; gap: 12px; background: var(--deep); color: #fff; font-weight: 800; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase; padding: 10px 16px; border-radius: 12px; margin-bottom: 12px; }
+  .secban .sbic { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .cocard2 { border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; background: #fff; }
+  .co-brand { width: 32%; text-align: center; padding-right: 14px; }
+  .co-brand .logo { margin: 0 auto 6px; width: 46px; height: 46px; font-size: 23px; }
+  .co-brand .logoimg { height: 52px; }
+  .co-name { margin-top: 6px; font-size: 15px; font-weight: 800; color: var(--orange); }
+  .co-name::after { content: ''; display: block; width: 130px; height: 1.5px; margin: 5px auto 0; background: #f2c9ab; }
+  .co-web { margin-top: 7px; font-size: 11px; font-weight: 600; color: #2c3d51; }
+  .co-col { flex: 1; border-left: 1px solid #dfe6ee; padding: 4px 18px; }
+  .co-h { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--deep); margin-bottom: 7px; }
+  .co-ic { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; background: #ffe9da; color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .co-v { font-size: 11.5px; color: #2c3d51; line-height: 1.9; }
+  .co-v .cv-ic { display: inline-block; width: 18px; color: var(--deep); }
+  .support2 { display: flex; align-items: center; gap: 13px; background: #e9f1fb; border-radius: 12px; padding: 10px 16px; margin-top: 12px; font-size: 11.5px; color: #2c3d51; line-height: 1.75; }
+  .support2 .sup-ic { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .support2 b { color: var(--deep); }
 
-  /* ---- T&C ---- */
-  .tab { display: inline-block; background: var(--blue); color: #fff; font-weight: 800; font-size: 15px; padding: 11px 26px; border-radius: 9px 9px 0 0; margin-top: 18px; }
-  .tccontent { border-top: 2.5px solid var(--blue); padding-top: 10px; }
-  .tcintro { font-size: 12.5px; color: #2c3d51; margin: 4px 0 8px; }
-  .tc-section { margin-top: 11px; break-inside: avoid; page-break-inside: avoid; }
-  .tc-section h3 { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 4px; }
-  .tctbl { width: 100%; border-collapse: collapse; margin: 4px 0 6px; }
-  .tctbl th, .tctbl td { border: 1px solid var(--line); padding: 4px 9px; font-size: 11px; text-align: left; }
-  .tctbl th { background: #eaf3fb; color: var(--navy); font-weight: 800; }
+  /* ---- T&C (numbered sections) ---- */
+  .tcintro2 { font-size: 12px; color: #2c3d51; margin: 2px 2px 10px; }
+  .tcsec { break-inside: avoid; page-break-inside: avoid; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #d9e2ec; }
+  .tcsec:first-of-type { border-top: 0; padding-top: 0; }
+  .tcsec-h { display: flex; align-items: center; gap: 9px; color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .tcnum { width: 21px; height: 21px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+  .tcsec-intro { margin: 5px 0 0 30px; font-size: 11.5px; color: #2c3d51; }
+  .tcp { border-left: 2px dotted #b9cbe0; padding-left: 12px; margin: 6px 0 0 30px; font-size: 11.3px; color: #2c3d51; line-height: 1.65; }
+  .tctbl2 { width: calc(100% - 30px); margin: 7px 0 0 30px; border-collapse: separate; border-spacing: 0; border: 1px solid #d8e2ee; border-radius: 8px; overflow: hidden; }
+  .tctbl2 th { background: #e8f0fb; color: var(--deep); font-weight: 800; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; padding: 6px 11px; }
+  .tctbl2.navyhead th { background: var(--deep); color: #fff; }
+  .tctbl2 td { padding: 6px 11px; font-size: 11px; color: #2c3d51; border-top: 1px solid #e8eef5; }
+  .tctbl2 td.c0 { font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .tcbox { margin: 8px 0 0 30px; background: #eef4fb; border-radius: 8px; padding: 8px 13px; }
+  .tcbox-t { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--deep); margin-bottom: 4px; }
+  .tcbox-i { font-size: 11px; color: #2c3d51; line-height: 1.65; margin-top: 2px; }
+  .tcnotes { margin-top: 14px; }
+  .tcnotes-pill { display: inline-block; background: var(--deep); color: #fff; font-weight: 800; font-size: 11px; letter-spacing: 0.06em; padding: 5px 18px; border-radius: 8px 8px 0 0; }
+  .tcnotes-body { background: #eef4fb; border-left: 3px solid var(--deep); border-radius: 0 8px 8px 8px; padding: 9px 14px; font-size: 11.3px; font-weight: 600; color: #22303f; line-height: 1.7; }
 
   /* ---- why us / client review posters ---- */
   .script { font-size: 14.5px; font-weight: 500; color: var(--ink); margin: 4px 0 12px; }
@@ -746,53 +939,81 @@ export function quotationHtml(q, org = null) {
 <!-- ===== COVER PAGE ===== -->
 <div class="page pb">
   ${LETTERHEAD}
-  ${heroImg ? `<div class="hero"><img src="${esc(heroImg)}" alt=""/></div>` : ''}
-  <div class="coverband">${q.nights} Nights ${(q.nights || 0) + 1} Days ${esc(pkg.name || 'Package')} Tour to Andaman${routeCode ? ` &nbsp;-&nbsp; ${routeCode}` : ''}</div>
+  ${heroImg ? `
+  <div class="hero2">
+    <img class="hero2-img" src="${esc(heroImg)}" alt=""/>
+    <div class="hero2-shade"></div>
+    <div class="hero2-body">
+      <div class="hx-script">Explore</div>
+      <div class="hx-title">ANDAMAN</div>
+      <div class="hx-why">Why Travel with <span>${esc(company.name)}?</span></div>
+      ${(company.coverPoints || []).map((p) => `<div class="hx-point"><span class="hx-check">&#10004;</span>${esc(p)}</div>`).join('')}
+      ${(company.coverIncludes || []).length ? `
+      <div class="hx-pillwrap"><span class="hx-pill">YOUR PACKAGE INCLUDES</span></div>
+      <div class="hx-icons">
+        ${company.coverIncludes.map((it) => `
+        <div class="hx-item">
+          <div class="hx-circle">${it.icon}</div>
+          <div class="hx-lbl">${esc(it.label)}${it.sub ? `<span class="hx-sub">${esc(it.sub)}</span>` : ''}</div>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>
+  </div>` : ''}
+  <div class="coverband"><span class="cb-ic">&#128197;</span> ${q.nights} Nights ${(q.nights || 0) + 1} Days ${esc(pkg.name || 'Package')} Tour to Andaman</div>
   <div class="covermeta">
     <span>Quotation Proposal</span>
     <span>Query ID:- &nbsp;M${esc(pad4(q.query?.queryNumber))}</span>
   </div>
   <div class="stats">
     <div class="stat">
+      <div class="statico">&#128100;</div>
       <div class="sk">GUEST</div>
       <div class="sv">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')}</div>
       ${guest.phones?.[0] ? `<div class="ss">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
     </div>
-    <div class="stat"><div class="sk">Tour Start Date</div><div class="sv">${fmtDate(start)}</div></div>
-    <div class="stat"><div class="sk">DURATION</div><div class="sv">${q.nights} Nights / ${(q.nights || 0) + 1} Days</div></div>
     <div class="stat">
+      <div class="statico">&#128197;</div>
+      <div class="sk">Tour Start Date</div><div class="sv">${fmtDate(start)}</div>
+    </div>
+    <div class="stat">
+      <div class="statico">&#128336;</div>
+      <div class="sk">DURATION</div><div class="sv">${q.nights} Nights / ${(q.nights || 0) + 1} Days</div>
+    </div>
+    <div class="stat">
+      <div class="statico">&#128101;</div>
       <div class="sk">TRAVELLERS</div>
       <div class="sv">${paxAdults} Adult${paxAdults === 1 ? '' : 's'}${paxChildren ? `, ${paxChildren} Child${paxChildren === 1 ? '' : 'ren'}` : ''}</div>
       <div class="ss">${pax} Pax total</div>
     </div>
   </div>
-  ${destCovered ? `<div class="destcov"><div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div></div>` : ''}
+  ${destCovered ? `<div class="destcov">
+    <div class="statico" style="width:30px;height:30px;font-size:14px;margin-bottom:5px">&#128506;</div>
+    <div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div>
+  </div>` : ''}
 
-  <div class="recog">
-    <div class="recogrow">
-      <div class="ratecard">
-        <div class="rctitle">Highest Rated</div>
-        <div class="rcitems">
-          <div class="rcitem">
-            <img class="rclogo" src="${assetUri('ta-logo.png')}" alt=""/>
-            <div class="rccap"><b>4.5+</b> (200+ Reviews)</div>
-          </div>
-          <div class="rcitem">
-            <img class="rclogo" src="${assetUri('google-logo.png')}" alt=""/>
-            <div class="rccap"><b>5.0 &#9733;</b> (400+ Reviews)</div>
-          </div>
+  <div class="recogrow">
+    <div class="ratecard">
+      <div class="rcpill">HIGHEST RATED</div>
+      <div class="rcitems">
+        <div class="rcitem">
+          <img class="rclogo" src="${assetUri('ta-logo.png')}" alt=""/>
+          <div class="rccap"><b>4.5+</b> (200+ Reviews)</div>
+        </div>
+        <div class="rcitem">
+          <img class="rclogo" src="${assetUri('google-logo.png')}" alt=""/>
+          <div class="rccap"><b>5.0 &#9733;</b> (400+ Reviews)</div>
         </div>
       </div>
-      ${(company.recognisedBy || []).length ? `
-      <div class="ratecard">
-        <div class="rctitle">Awarded</div>
-        <div class="awardrow">
-          ${company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')}
-        </div>
-      </div>` : ''}
     </div>
+    ${(company.recognisedBy || []).length ? `
+    <div class="ratecard">
+      <div class="rcpill">AWARDED</div>
+      <div class="awardrow">
+        ${company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')}
+      </div>
+    </div>` : ''}
   </div>
-  ${BOTTOMBAR}
+  ${BOTTOMBAR.replace('bottombar', 'bottombar navy')}
 </div>
 
 <!-- ===== PAGE 2 — Quote summary ===== -->
@@ -800,26 +1021,26 @@ export function quotationHtml(q, org = null) {
   ${LETTERHEAD}
 
   ${transferRows ? `<div class="seccard">
-    <div class="sechead"><span class="sicon">&#9972;</span> Cruise &amp; Ferry Information</div>
+    <div class="sechead"><span class="shic">&#9972;</span><span class="shnum">1</span> Cruise &amp; Ferry Information</div>
     <div class="tbl flat"><table>
       <thead><tr><th style="width:24%">Ferry</th><th style="width:26%">Ferry Sector</th><th style="width:16%">Category</th><th>Departure</th><th>Arrival</th></tr></thead>
       <tbody>${transferRows}</tbody></table>
-      ${ferryLegend ? `<div class="legend">${ferryLegend}</div>` : ''}
+      ${ferryLegend ? `<div class="legend"><span class="lgwave">&#8776;</span>&nbsp; ${ferryLegend} &nbsp;<span class="lgwave">&#8776;</span></div>` : ''}
     </div>
   </div>` : ''}
 
   ${hotelOptionCards}
 
   <div class="seccard">
-    <div class="sechead"><span class="sicon">&#128181;</span> ${pkg.name ? `${esc(pkg.name)} &mdash; ` : ''}Fare Summary</div>
+    <div class="sechead navy"><span class="shic">&#128181;</span><span class="shnum">3</span> ${pkg.name ? `${esc(pkg.name)} &mdash; ` : ''}Fare Summary</div>
     <table class="fare">
-      <tr><td class="k">Total Cost (without tax)</td><td class="v">${inr(taxable, 2)}</td></tr>
-      <tr><td class="k">Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
-      <tr><td class="k">Discount</td><td class="v">${p.discount ? `&minus; ${inr(p.discount, 2)}` : inr(0)}</td></tr>
-      <tr><td class="k">Tour Cost After Discount</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
-      <tr><td class="k">No. of Travellers</td><td class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</td></tr>
-      <tr><td class="k">Tour Total Cost</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
-      <tr><td class="k">GST (${gstPct}%)</td><td class="v">${inr(p.tax, 2)}</td></tr>
+      <tr><td class="k"><span class="fic">&#129534;</span>Total Cost (without tax)</td><td class="v">${inr(taxable, 2)}</td></tr>
+      <tr><td class="k"><span class="fic">&#128100;</span>Total Cost Per Person</td><td class="v">${inr(perPerson)}</td></tr>
+      <tr><td class="k"><span class="fic">&#127991;</span>Discount</td><td class="v">${p.discount ? `&minus; ${inr(p.discount, 2)}` : inr(0)}</td></tr>
+      <tr><td class="k"><span class="fic">&#128176;</span>Tour Cost After Discount</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
+      <tr><td class="k"><span class="fic">&#128101;</span>No. of Travellers</td><td class="v">${pax}${paxChildren ? ` &nbsp;(${paxAdults} Adult + ${paxChildren} Child)` : ''}</td></tr>
+      <tr><td class="k"><span class="fic">&#129518;</span>Tour Total Cost</td><td class="v">${inr(taxable - (p.discount || 0), 2)}</td></tr>
+      <tr><td class="k"><span class="fic">&#128202;</span>GST (${gstPct}%)</td><td class="v">${inr(p.tax, 2)}</td></tr>
       <tr class="final"><td class="k">Final Cost</td><td class="v">${inr(p.total, 2)}</td></tr>
     </table>
   </div>
@@ -839,7 +1060,8 @@ export function quotationHtml(q, org = null) {
   ${introRows ? `<div class="band" style="margin-top:14px">Itinerary Introduction</div>
   <div style="margin-bottom:16px">${introRows}</div>` : ''}
   <div class="band">${q.nights}N${(q.nights || 0) + 1}D Day Wise Itinerary:</div>
-  <div class="grow">${dayBlocks}</div>
+  <div class="grow">${dayBlocks}
+  ${company.itineraryNote ? `<div class="notestrip"><span class="ni">&#8505;</span><b>PLEASE NOTE</b><span class="nsdiv"></span><span>${esc(company.itineraryNote)}</span></div>` : ''}</div>
   ${extras ? `<div class="extra">
     <div class="el">EXTRA INCLUSIONS:</div>
     <div class="er">${esc(extras)}</div>
@@ -854,70 +1076,87 @@ ${hotelCards ? `<div class="page pb">
   ${BOTTOMBAR}
 </div>` : ''}
 
-<!-- ===== Optional Activities — upsell grid ===== -->
+<!-- ===== Optional Activities — poster-style card grid ===== -->
 ${optActs ? `<div class="page pb">
-  <div class="band">OPTIONAL ACTIVITIES (On Request &mdash; Not Included in Package Cost):</div>
-  <div class="oagrid">${optActs}</div>
-  <div class="infobox" style="margin-top:16px">
-    <div>Want to add any of these experiences to your trip? Let your travel consultant know and we will include it in your final itinerary.</div>
-    <div>All water activities are subject to weather conditions and slot availability on the day of the activity.</div>
+  <div class="oa-title"><span class="oa-t1">OPTIONAL</span>&nbsp;<span class="oa-t2">ACTIVITIES</span></div>
+  <div class="oa-sub">&mdash;&nbsp; On Request &mdash; Not Included in Package Cost &nbsp;&mdash;</div>
+  <div class="oagrid2">${optActs}</div>
+  <div class="oa-notes">
+    <div class="oa-note"><span class="oa-nic">&#8505;</span><div><b>Want to add any of these experiences to your trip?</b><br/>Let your travel consultant know and we will include it in your final itinerary.</div></div>
+    <div class="oa-note"><span class="oa-nic">&#9925;</span><div>All water activities are subject to weather conditions and slot availability on the day of the activity.</div></div>
   </div>
   ${BOTTOMBAR}
 </div>` : ''}
 
 <!-- ===== PAGE 3 — Additional Info / Payment ===== -->
 <div class="page pb">
-  <div class="band">ADDITIONAL INFORMATION:</div>
-  <div class="box"><h3>NOTE:</h3>${dash(company.notes)}</div>
-  <div class="box g"><h3>INCLUSIONS:</h3>${dash(inclusions)}</div>
-  <div class="box r"><h3>EXCLUSIONS:</h3>${dash(exclusions)}</div>
-  <div class="paybox">
-    <div class="ptitle"><span class="picon">&#128179;</span> Payment Information:</div>
-    <table class="banktbl">
-      <tr><td class="bk">Account Name</td><td>${esc(company.bank.holder)}</td></tr>
-      <tr><td class="bk">Bank</td><td>${esc(company.bank.bank)}</td></tr>
-      <tr><td class="bk">Branch Address</td><td>${esc(company.bank.address)}</td></tr>
-      <tr><td class="bk">Current A/C No.</td><td>${esc(company.bank.accNo)}</td></tr>
-      <tr><td class="bk">IFSC Code</td><td>${esc(company.bank.ifsc)}</td></tr>
-      <tr><td class="bk">GSTIN</td><td>${esc(company.gstin)}</td></tr>
-      <tr><td class="bk">Payment Link</td><td>${esc(company.bank.paymentLink)}</td></tr>
-    </table>
+  <div class="ai-banner">Additional Information</div>
+  <div class="ai3col">
+    ${aiCard('Note', 'navy', company.notes)}
+    ${aiCard('Inclusions', 'green', inclusions)}
+    ${aiCard('Exclusions', 'red', exclusions)}
   </div>
-  ${ecRows ? `<div class="h1" style="font-size:14px;margin-top:16px">Emergency Contact Information:</div>
-  <div class="tbl" style="margin-top:6px"><table>
-    <thead><tr><th>Contact Name</th><th>Mobile Number</th><th>Email Id</th><th>Available On</th></tr></thead>
-    <tbody>${ecRows}</tbody></table>
+  <div class="payrow">
+    <div class="paycard">
+      <div class="payh">Payment Information</div>
+      <table class="paytbl">
+        <tr><td class="pk">Account Name</td><td>${esc(company.bank.holder)}</td></tr>
+        <tr><td class="pk">Account Number</td><td>${esc(company.bank.accNo)}</td></tr>
+        <tr><td class="pk">IFSC Code</td><td>${esc(company.bank.ifsc)}</td></tr>
+        <tr><td class="pk">Branch</td><td>${esc(company.bank.address)}</td></tr>
+        <tr><td class="pk">Bank Name</td><td>${esc(company.bank.bank)}</td></tr>
+      </table>
+      <div class="paynote"><span>For payment made through bank transfer, please give us at least 30 minutes so we can confirm payment with the bank.</span></div>
+    </div>
+    ${paymentQr ? `<div class="paycard scancard">
+      <div class="payh">Scan to Pay</div>
+      <div class="scanbody"><img src="${esc(paymentQr)}" alt=""/></div>
+    </div>` : ''}
+  </div>
+  ${ecRows ? `<div class="emcard">
+    <div class="emh">Emergency Contact Information</div>
+    <table class="emtbl">
+      <thead><tr><th>Contact Name</th><th>Mobile Number</th><th>Email Id</th><th>Available On</th></tr></thead>
+      <tbody>${ecRows}</tbody>
+    </table>
   </div>` : ''}
-  <div class="infobox">
-    <div>For payment made through bank transfer, please give us at least 30 minutes so we can confirm payment with the bank.</div>
-    <div>For UPI transactions, please share the screenshot of the payment for instant confirmation.</div>
-    <div>For any questions regarding alternate payment methods, please contact us.</div>
+  <div class="thanks">
+    <div class="th1">THANK YOU!</div>
+    <div class="th2">Thank you for choosing ${esc(company.name)}!</div>
   </div>
   ${BOTTOMBAR}
 </div>
 
 <!-- ===== PAGE 4 — Company info + Terms & Conditions ===== -->
 <div class="page pb">
-  <div class="band">COMPANY &amp; CONTACT INFORMATION:</div>
-  <div class="cocard">
-    <div class="cbrand">
+  <div class="secban"><span class="sbic">&#127970;</span> Company &amp; Contact Information</div>
+  <div class="cocard2">
+    <div class="co-brand">
       ${logoIcon}
-      <div class="bn">${esc(company.name)}</div>
-      <div class="cweb">${esc(company.website)}</div>
+      <div class="co-name">${esc(company.name)}</div>
+      <div class="co-web">&#127760; ${esc(company.website)}</div>
     </div>
-    <div class="ccol"><b>ADDRESS:</b>${company.address.map(esc).join('<br/>')}</div>
-    <div class="ccol"><b>CONTACT:</b>${company.phones.map((ph) => `&#128222; ${esc(ph)}`).join('<br/>')}<br/>&#9993; ${esc(company.emails[0])}</div>
+    <div class="co-col">
+      <div class="co-h"><span class="co-ic">&#128205;</span> Address</div>
+      <div class="co-v">${company.address.map(esc).join('<br/>')}</div>
+    </div>
+    <div class="co-col">
+      <div class="co-h"><span class="co-ic">&#128222;</span> Contact</div>
+      <div class="co-v">
+        ${company.phones.map((ph) => `<span class="cv-ic">&#128222;</span>${esc(ph)}`).join('<br/>')}<br/>
+        <span class="cv-ic">&#9993;</span>${esc(company.emails[0])}
+      </div>
+    </div>
   </div>
-  <div class="support">
-    <div>For any support, changes or requests regarding this itinerary, please contact your assigned representative.</div>
-    <div>For any complaints or grievances, please email us at ${esc(company.emails[0])} or call us at ${esc(company.phones[0])}.</div>
+  <div class="support2">
+    <span class="sup-ic">&#127911;</span>
+    <div>For any support, changes or requests regarding this itinerary, please contact your assigned representative.
+    For any complaints or grievances, please email us at <b>${esc(company.emails[0])}</b> or call us at <b>${esc(company.phones[0])}</b>.</div>
   </div>
 
-  <div class="tab">Terms &amp; Conditions:</div>
-  <div class="tccontent">
-    <div class="tcintro">These terms and conditions apply to all services and bookings provided by ${esc(company.name)}.</div>
-    ${tcSections.map((s) => `<div class="tc-section"><h3>${esc(s.heading)}</h3>${s.intro ? `<div class="tcintro">${esc(s.intro)}</div>` : ''}${tcTable(s.table)}${tcDash(s.items)}</div>`).join('')}
-  </div>
+  <div class="secban" style="margin-top:14px"><span class="sbic">&#128196;</span> Terms &amp; Conditions</div>
+  <div class="tcintro2">These terms and conditions apply to all services and bookings provided by ${esc(company.name)}.</div>
+  ${tcSectionsHtml}
   ${BOTTOMBAR}
 </div>
 
