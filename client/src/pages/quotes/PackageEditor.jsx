@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hotel, Bus, Plus, Trash2, Copy, Sparkles, Star, ChevronDown, RefreshCw, AlertTriangle, Ticket } from 'lucide-react';
+import { Hotel, Bus, Plus, Trash2, Copy, Sparkles, Star, ChevronDown, RefreshCw, AlertTriangle, Ticket, CalendarDays, Clock } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import toast from 'react-hot-toast';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
@@ -161,10 +161,39 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         service: t.service ?? null,
         serviceLocation: t.serviceLocation || '',
         serviceType: n,
+        // The primary row carries the day's cab pricing — mirrored rows only
+        // hold the service name + its own timing.
+        items: [],
       });
       present.add(n);
     }
     update({ transports: [...kept, ...additions] });
+  };
+  const rmTrFamily = async (idxs) => {
+    if (await confirm({ title: 'Remove this service?', message: 'This transport service (with all its service types) will be removed from the package.', confirmLabel: 'Remove' })) {
+      update({ transports: pkg.transports.filter((_, idx) => !idxs.includes(idx)) });
+    }
+  };
+  // Inline "add another service type" draft row (per family primary index).
+  const [trDraft, setTrDraft] = useState({});
+  const draftFor = (ti) => trDraft[ti] || { type: '', time: '', mins: 60 };
+  const patchDraft = (ti, patch) => setTrDraft((s) => ({ ...s, [ti]: { ...draftFor(ti), ...patch } }));
+  const addTrTypeRow = (ti) => {
+    const t = pkg.transports[ti];
+    const d = draftFor(ti);
+    if (!d.type.trim()) return toast.error('Enter a service type name first');
+    update({
+      transports: [...pkg.transports, {
+        ...emptyTransport([...(Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1])]),
+        service: t.service ?? null,
+        serviceLocation: t.serviceLocation || '',
+        serviceType: d.type.trim(),
+        startTime: d.time || '',
+        durationMins: Number(d.mins) || 60,
+        items: [],
+      }],
+    });
+    setTrDraft((s) => ({ ...s, [ti]: { type: '', time: '', mins: 60 } }));
   };
 
   // Auto-fill cost rates from the Transport Prices master (needs a master service picked).
@@ -551,11 +580,23 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
 
         <div className="space-y-4">
           {dayGroups.map((g) => (
-            <div key={g.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <div className="flex gap-0 divide-x divide-gray-100">
+            <div key={g.key} className="overflow-hidden rounded-xl border-2 border-brand-200 bg-white shadow-sm">
+              {/* Gradient day banner */}
+              <div className="flex items-center gap-2.5 bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 px-4 py-2">
+                <CalendarDays size={14} className="text-white/85" />
+                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  {g.days.map((d) => `Day ${d}`).join(' · ')}
+                </span>
+                {startDate && (
+                  <span className="text-[11px] font-medium text-white/75">
+                    {g.days.map((d) => format(addDays(new Date(startDate), d - 1), 'EEE, d MMM')).join('  ·  ')}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-0 divide-x divide-brand-100">
                 {/* LEFT: Days — applies to every service in this group */}
-                <div className="w-44 shrink-0 p-4">
-                  <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Days</p>
+                <div className="w-44 shrink-0 bg-slate-50/70 p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-400">Days</p>
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {dayOptionsAll.map(({ n, label }) => (
                       <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', g.days.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
@@ -575,16 +616,24 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                 <div className="flex-1 divide-y divide-gray-100">
                   {g.tIdx.map((ti) => {
                     const t = pkg.transports[ti];
+                    // Rows sharing this location+days form one family — only the
+                    // first renders (as ONE card); the rest appear as timing
+                    // lines inside it.
+                    const famRows = t.serviceLocation
+                      ? g.tIdx.filter((i) => pkg.transports[i].serviceLocation === t.serviceLocation)
+                      : [ti];
+                    if (famRows[0] !== ti) return null;
                     const tDays = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : [1]);
                     const cabItems = pkg.sameCabType ? sharedItems : (t.items || []);
                     const firstDay = tDays[0] || 1;
                     const firstDate = startDate ? format(addDays(new Date(startDate), firstDay - 1), 'EEEE, d MMM') : `Day ${firstDay}`;
                     return (
                       <div key={`t-${ti}`}>
-                        <div className="flex items-center gap-2 px-4 pt-3">
-                          <Bus size={14} className="text-brand-500" />
-                          <span className="text-xs font-semibold text-brand-600">Transport Service</span>
-                          <button type="button" onClick={() => rmTr(ti)} title="Remove this service" className="ml-auto text-xs font-medium text-slate-300 hover:text-red-500">&#10005;</button>
+                        <div className="flex items-center gap-2.5 border-b border-brand-100 bg-gradient-to-r from-brand-50 to-white px-4 py-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"><Bus size={12} /></span>
+                          <span className="text-xs font-bold uppercase tracking-wide text-brand-700">Transport Service</span>
+                          {t.serviceLocation && <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700">{t.serviceLocation}</span>}
+                          <button type="button" onClick={() => rmTrFamily(famRows)} title="Remove this service" className="ml-auto text-xs font-medium text-slate-400 hover:text-red-500">&#10005;</button>
                         </div>
                         <div className="flex gap-0">
                           {/* Service details */}
@@ -595,7 +644,11 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         loadOptions={(q) => transportApi.list({ search: q }).then((r) =>
                           (r.data || []).map((s) => ({ _id: s._id, name: [s.from, s.to].filter(Boolean).join(' to ') || s.name, raw: s })))}
                         value={t.serviceLocation ? { _id: t.service || t.serviceLocation, name: t.serviceLocation } : null}
-                        onChange={(v) => setTr(ti, { service: v?.raw?._id || null, serviceLocation: v ? v.name : '' })}
+                        onChange={(v) => update({
+                          transports: pkg.transports.map((x, idx) => (famRows.includes(idx)
+                            ? { ...x, service: v?.raw?._id || null, serviceLocation: v ? v.name : '' }
+                            : x)),
+                        })}
                         creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
                         placeholder="Port Blair to Havelock"
                       />
@@ -619,32 +672,68 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         placeholder={t.service ? 'Type to search...' : 'Pick a service location first'}
                       />
                     </div>
+                    {famRows.length > 1 ? (
+                      <div>
+                        <label className="label">Service Timings <span className="text-[10.5px] font-normal normal-case text-slate-400">(per service type)</span></label>
+                        <div className="space-y-1.5">
+                          {famRows.map((fi) => {
+                            const ft = pkg.transports[fi];
+                            return (
+                              <div key={fi} className="flex items-center gap-2.5 rounded-lg border border-brand-200 border-l-4 border-l-brand-500 bg-brand-50/50 px-3 py-1.5">
+                                <Clock size={13} className="shrink-0 text-brand-400" />
+                                <span className="flex-1 truncate text-xs font-semibold text-slate-700" title={ft.serviceType}>{ft.serviceType || '—'}</span>
+                                <input type="time" className="input w-28 py-1.5 text-xs" value={ft.startTime || ''} onChange={(e) => setTr(fi, { startTime: e.target.value })} />
+                                <input type="number" min="0" className="input w-20 py-1.5 text-xs" placeholder="Mins" value={ft.durationMins} onChange={(e) => setTr(fi, { durationMins: Number(e.target.value) })} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Start Time</label>
-                        <input className="input" placeholder="14:00" value={t.startTime} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
+                        <input type="time" className="input" value={t.startTime || ''} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
                       </div>
                       <div>
                         <label className="label">Duration (Mins)</label>
-                        <input type="number" className="input" placeholder="60 Mins" value={t.durationMins} onChange={(e) => setTr(ti, { durationMins: Number(e.target.value) })} />
+                        <input type="number" min="0" className="input" placeholder="60 Mins" value={t.durationMins} onChange={(e) => setTr(ti, { durationMins: Number(e.target.value) })} />
                       </div>
+                    </div>
+                    )}
+                    {/* Quick add: another service type with its own time + duration */}
+                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-brand-300 bg-brand-50/30 px-2 py-2">
+                      <input
+                        className="input flex-1 py-1.5 text-xs"
+                        placeholder="Add another service type…"
+                        value={draftFor(ti).type}
+                        onChange={(e) => patchDraft(ti, { type: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTrTypeRow(ti); } }}
+                      />
+                      <input type="time" className="input w-28 py-1.5 text-xs" value={draftFor(ti).time} onChange={(e) => patchDraft(ti, { time: e.target.value })} />
+                      <input type="number" min="0" className="input w-20 py-1.5 text-xs" placeholder="Mins" value={draftFor(ti).mins} onChange={(e) => patchDraft(ti, { mins: e.target.value })} />
+                      <button type="button" title="Add service type" onClick={() => addTrTypeRow(ti)} className="btn-secondary px-2.5 py-1.5"><Plus size={14} /></button>
                     </div>
                           </div>
 
                           {/* Transportation and Prices */}
-                          <div className="w-80 shrink-0 border-l border-gray-100 p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-700">Transportation and Prices{firstDate ? ` — ${firstDate}` : ''}</p>
-                      <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
+                          <div className="w-80 shrink-0 border-l-2 border-brand-100 bg-gradient-to-b from-brand-50/60 to-slate-50/40 p-4">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-brand-700">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[10px] text-white">₹</span>
+                        Transportation and Prices
+                      </p>
+                      <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
+                    {firstDate && <p className="mb-2 inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700">{firstDate}</p>}
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-slate-200 text-slate-500">
-                          <th className="pb-1 text-left font-semibold">Transportation</th>
-                          <th className="pb-1 text-left font-semibold w-14">Date</th>
-                          <th className="pb-1 text-left font-semibold w-16">Rate</th>
-                          <th className="pb-1 text-left font-semibold w-16">Given</th>
-                          <th className="w-5" />
+                        <tr className="bg-brand-50 text-brand-700">
+                          <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
+                          <th className="py-1.5 text-left font-bold w-14">Date</th>
+                          <th className="py-1.5 text-left font-bold w-16">Rate</th>
+                          <th className="py-1.5 text-left font-bold w-16">Given</th>
+                          <th className="w-5 rounded-r-md" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -721,10 +810,11 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     const configOptions = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
                     return (
                       <div key={`a-${ai}`}>
-                        <div className="flex items-center gap-2 px-4 pt-3">
-                          <Ticket size={14} className="text-brand-500" />
-                          <span className="text-xs font-semibold text-brand-600">Activity/Ticket</span>
-                          <button type="button" onClick={() => rmAct(ai)} title="Remove this activity" className="ml-auto text-xs font-medium text-slate-300 hover:text-red-500">&#10005;</button>
+                        <div className="flex items-center gap-2.5 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white px-4 py-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white shadow-sm"><Ticket size={12} /></span>
+                          <span className="text-xs font-bold uppercase tracking-wide text-violet-700">Activity/Ticket</span>
+                          {a.name && <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">{a.name}</span>}
+                          <button type="button" onClick={() => rmAct(ai)} title="Remove this activity" className="ml-auto text-xs font-medium text-slate-400 hover:text-red-500">&#10005;</button>
                         </div>
                         <div className="flex gap-0">
                           {/* Activity details */}
@@ -760,7 +850,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Slot</label>
-                        <input className="input" placeholder="14:00" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
+                        <input type="time" className="input" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
                       </div>
                       <div>
                         <label className="label">Duration (Mins)</label>
@@ -770,20 +860,23 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           </div>
 
                           {/* Tickets and Prices */}
-                          <div className="w-96 shrink-0 border-l border-gray-100 p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-700">Tickets and Prices</p>
-                      <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="btn-secondary px-2 py-1 text-[11px]"><Sparkles size={11} /> Auto rate</button>
+                          <div className="w-96 shrink-0 border-l-2 border-violet-100 bg-gradient-to-b from-violet-50/60 to-slate-50/40 p-4">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-violet-700">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] text-white">₹</span>
+                        Tickets and Prices
+                      </p>
+                      <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
                     <table className="w-full table-fixed text-xs">
                       <thead>
-                        <tr className="border-b border-slate-200 text-slate-500">
-                          <th className="pb-1 text-left font-semibold">Type</th>
-                          <th className="pb-1 text-left font-semibold w-10">Qty.</th>
-                          <th className="pb-1 text-left font-semibold w-14">Date</th>
-                          <th className="pb-1 text-left font-semibold w-14">Rate</th>
-                          <th className="pb-1 text-left font-semibold w-14">Given</th>
-                          <th className="w-6" />
+                        <tr className="bg-violet-50 text-violet-700">
+                          <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Type</th>
+                          <th className="py-1.5 text-left font-bold w-10">Qty.</th>
+                          <th className="py-1.5 text-left font-bold w-14">Date</th>
+                          <th className="py-1.5 text-left font-bold w-14">Rate</th>
+                          <th className="py-1.5 text-left font-bold w-14">Given</th>
+                          <th className="w-6 rounded-r-md" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -837,9 +930,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   })}
 
                   {/* Add more services to this day */}
-                  <div className="flex gap-2 p-4">
-                    <button type="button" onClick={() => addTrToGroup(g.days)} className="btn-secondary text-xs"><Plus size={12} /> Transport Service</button>
-                    <button type="button" onClick={() => addAct(g.days)} className="btn-secondary text-xs"><Plus size={12} /> Activity/Ticket</button>
+                  <div className="flex gap-2 bg-slate-50/50 p-4">
+                    <button type="button" onClick={() => addTrToGroup(g.days)} className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-100"><Plus size={12} /> Transport Service</button>
+                    <button type="button" onClick={() => addAct(g.days)} className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"><Plus size={12} /> Activity/Ticket</button>
                   </div>
                 </div>
               </div>
@@ -888,8 +981,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       </Section>
 
       {/* Markup / Tax / Rounding */}
-      <Section title="Set Markup, Tax and Rounding">
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr_1fr]">
+      <Section title="Set Markup, Discount, Tax and Rounding">
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.6fr_1fr]">
           {/* Markup */}
           <div className="rounded-xl border border-slate-200 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Markup</p>
@@ -901,6 +994,19 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
               <span className="text-sm text-slate-400">{pkg.markupType === 'percent' ? '%' : currency}</span>
             </div>
             <p className="mt-2 text-xs text-slate-400">Markup amount: <span className="font-semibold text-slate-600">{money(c.markupAmount, currency)}</span></p>
+          </div>
+
+          {/* Discount */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-emerald-500">Discount</p>
+            <div className="flex items-center gap-2">
+              <select className="input w-36" value={pkg.discountType || 'flat'} onChange={(e) => update({ discountType: e.target.value })}>
+                <option value="flat">Flat</option><option value="percent">Percentage</option>
+              </select>
+              <input type="number" min="0" className="input w-24 text-center" value={pkg.discountValue ?? 0} onChange={(e) => update({ discountValue: Number(e.target.value) })} />
+              <span className="text-sm text-slate-400">{(pkg.discountType || 'flat') === 'percent' ? '%' : currency}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Discount amount: <span className="font-semibold text-emerald-600">&minus; {money(c.discountAmount, currency)}</span></p>
           </div>
 
           {/* Tax */}
@@ -937,6 +1043,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
           <span><span className="text-xs text-slate-400">Cost Price&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.costPrice, currency)}</span></span>
           <span className="text-slate-300">+</span>
           <span><span className="text-xs text-slate-400">Markup&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.markupAmount, currency)}</span></span>
+          <span className="text-slate-300">&minus;</span>
+          <span><span className="text-xs text-slate-400">Discount&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-emerald-600">{money(c.discountAmount, currency)}</span></span>
           <span className="text-slate-300">+</span>
           <span><span className="text-xs text-slate-400">{pkg.taxApplied ? `${pkg.taxName || 'GST'} ${pkg.taxPercent || 0}%` : 'Tax'}&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.taxAmount, currency)}</span></span>
           <span className="ml-auto flex items-baseline gap-2 rounded-lg bg-brand-600 px-4 py-1.5 text-white">

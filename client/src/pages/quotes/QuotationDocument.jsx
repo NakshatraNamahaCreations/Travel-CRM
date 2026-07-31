@@ -257,16 +257,33 @@ export default function QuotationDocument() {
                   <tr><Th>Sector / Transfer</Th><Th>Service</Th><Th>Start Time</Th></tr>
                 </thead>
                 <tbody>
-                  {pkg.transports.map((t, i) => {
-                    const days = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : []);
-                    return (
-                      <tr key={i} className="border-b border-slate-100 text-center text-brand-700">
-                        <Td className="font-semibold">{t.serviceLocation || (days.length ? `Day ${days.join(', ')}` : '—')}</Td>
-                        <Td>{t.serviceType || '—'}</Td>
-                        <Td>{t.startTime || '—'}</Td>
+                  {(() => {
+                    // Rows sharing the same days + location are one service with
+                    // multiple service types — merge into a single row, sorted by day.
+                    const groups = [];
+                    const byKey = new Map();
+                    pkg.transports.forEach((t, i) => {
+                      const days = Array.isArray(t.days) && t.days.length ? t.days : (t.day ? [t.day] : [i + 1]);
+                      const key = `${[...days].sort((a, b) => a - b).join(',')}|${t.serviceLocation || `#${i}`}`;
+                      if (!byKey.has(key)) {
+                        const g = { days, loc: t.serviceLocation, rows: [] };
+                        byKey.set(key, g);
+                        groups.push(g);
+                      }
+                      byKey.get(key).rows.push(t);
+                    });
+                    groups.sort((a, b) => (a.days[0] || 0) - (b.days[0] || 0));
+                    return groups.map((g, i) => (
+                      <tr key={i} className="border-b border-slate-100 text-center text-brand-700 align-top">
+                        <Td className="font-semibold">
+                          <span className="mr-1 text-[10px] font-bold uppercase text-slate-400">Day {g.days.join(', ')}</span>
+                          {g.loc || '—'}
+                        </Td>
+                        <Td>{g.rows.map((t, k) => <div key={k}>{t.serviceType || '—'}</div>)}</Td>
+                        <Td>{g.rows.map((t, k) => <div key={k}>{t.startTime || '—'}</div>)}</Td>
                       </tr>
-                    );
-                  })}
+                    ));
+                  })()}
                 </tbody>
               </table>
             )}

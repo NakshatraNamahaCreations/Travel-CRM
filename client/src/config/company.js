@@ -4,9 +4,9 @@ export const company = {
   shortName: 'ATC',
   gstin: '35BTEPK8670E1ZK',
   tagline: 'Quality Tours. Exceptional Service.',
-  address: ['M.A Road, Phoenix Bay,', 'Port Blair, A&N Islands,', 'PIN: 744101'],
+  address: ['22 AK Anarkali Street,', 'Near Community Hall,', 'Port Blair - 744102'],
   emails: ['info@andamantravelcare.com', 'bookings@andamantravelcare.com'],
-  phones: ['+91 89009 12121', '+91 94742 07541'],
+  phones: ['+91 89009 12121', '+91 89009 16161'],
   website: 'www.andamantravelcare.com',
 
   // Share-package (WhatsApp / Email) booking-link settings

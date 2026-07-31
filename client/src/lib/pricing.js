@@ -71,9 +71,15 @@ export function computePackage(pkg) {
   (pkg.flights || []).forEach((f) => { cost += Number(f.cost) || 0; });
   cost = r2(cost);
   const markup = pkg.markupType === 'flat' ? Number(pkg.markupValue) || 0 : r2((cost * (Number(pkg.markupValue) || 0)) / 100);
-  const taxBase = pkg.taxOn === 'markup' ? markup : cost + markup;
+  // Discount comes off Cost + Markup before tax (capped so totals never go negative).
+  const preDiscount = cost + markup;
+  let discount = pkg.discountType === 'percent'
+    ? r2((preDiscount * (Number(pkg.discountValue) || 0)) / 100)
+    : Number(pkg.discountValue) || 0;
+  discount = Math.min(r2(discount), preDiscount);
+  const taxBase = pkg.taxOn === 'markup' ? markup : preDiscount - discount;
   const tax = pkg.taxApplied ? r2((taxBase * (Number(pkg.taxPercent) || 0)) / 100) : 0;
-  return { costPrice: cost, markupAmount: markup, taxAmount: tax, sellingPrice: r2(cost + markup + tax, Number(pkg.rounding) || 1) };
+  return { costPrice: cost, markupAmount: markup, discountAmount: discount, taxAmount: tax, sellingPrice: r2(cost + markup - discount + tax, Number(pkg.rounding) || 1) };
 }
 
 // Misconfiguration warnings shown in the summary (informational).

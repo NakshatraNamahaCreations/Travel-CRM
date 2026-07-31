@@ -37,7 +37,6 @@ const arrTime = (hm, durMins) => {
   const h24 = Math.floor(total / 60) % 24;
   return fmtTime(`${h24}:${String(total % 60).padStart(2, '0')}`);
 };
-const linkify = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 // Master descriptions may contain rich-text HTML; reduce to plain text for the PDF.
 const stripHtml = (s) => String(s || '')
   .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n')
@@ -243,7 +242,7 @@ export function quotationHtml(q, org = null) {
       const totalWithGst = p.taxApplied ? (p.sellingPrice || 0) : Math.round((p.sellingPrice || 0) * (1 + gstPct / 100));
       const payable = Math.round(totalWithGst / 2);
       return `<div class="seccard">
-        <div class="sechead teal"><span class="shic">&#127976;</span><span class="shnum">2</span> ${label}</div>
+        <div class="sechead teal"><span class="shic">&#127976;</span><span class="shnum">2</span> ${label}${company.hotelOptionNote ? `<span class="shnote">(${esc(company.hotelOptionNote)})</span>` : ''}</div>
         <div class="tbl flat"><table>
           <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
@@ -255,43 +254,6 @@ export function quotationHtml(q, org = null) {
     // Divider between option cards — a dashed line so the packages read as
     // separate choices.
     .join('<div class="ordivide"></div>');
-
-  // ---- Hotels / Accommodations cards (own section — image + details) ----
-  const ordinalPdf = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
-  const hotelCards = hotels.map((h) => {
-    const master = h.hotel && typeof h.hotel === 'object' ? h.hotel : {};
-    const nightsArr = (h.nights || []).length ? h.nights : [1];
-    const badges = nightsArr.map((n) => `<span class="nbadge">${ordinalPdf(n)}</span>`).join(' ');
-    const checkIn = start ? fmtDate(addDays(start, nightsArr[0] - 1)) : '';
-    const nameHtml = master.detailsLink
-      ? `<a href="${esc(linkify(master.detailsLink))}" class="cardname">${esc(h.hotelName)} <span class="ext">&#8599;</span></a>`
-      : `<span class="cardname">${esc(h.hotelName)}</span>`;
-    const st = Math.min(master.stars || 3, 5);
-    const desc = master.notes || master.address || '';
-    const paxTotal = (Number(h.paxPerRoom) || 2) * (Number(h.rooms) || 1);
-    return `<div class="hcard">
-      <div class="hinfo">
-        <div class="hnights">${h.isAlternative ? 'Alternative Option &mdash; ' : ''}${badges} Night${nightsArr.length > 1 ? 's' : ''} at <b>${esc(h.city || master.location?.city || '')}</b></div>
-        ${checkIn ? `<div class="hcheckin">Check-in on ${checkIn}</div>` : ''}
-        <div>${nameHtml}</div>
-        <div class="cardstars">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></div>
-        ${desc ? `<div class="carddesc">${esc(String(desc).slice(0, 140))}</div>` : ''}
-        <div class="hmeta">
-          <div>
-            <p class="k">ROOMS</p>
-            <p class="v">${h.rooms || 1} ${esc(h.roomType || 'Room')}</p>
-            <p class="s">${paxTotal} Pax${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</p>
-          </div>
-          <div>
-            <p class="k">MEAL PLAN</p>
-            <p class="v">${esc(h.mealPlan || '—')}</p>
-          </div>
-        </div>
-      </div>
-      ${master.imageUrl ? `<img class="hphoto" src="${esc(master.imageUrl)}" alt=""/>` : ''}
-    </div>`;
-  }).join('');
-  const hotelLegend = primaryHotels.map((h) => placeCode(h.city)).filter(Boolean).join(' &nbsp;&#124;&nbsp; ');
 
   // ---- Cover page data ----
   const fmtDateWD = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }) : '');
@@ -360,7 +322,7 @@ export function quotationHtml(q, org = null) {
     : '');
   const tlRow = (icon, photo, inner) => `
     <div class="tlrow">
-      <div class="tlicon"><span class="tlcirc">${icon}</span></div>
+      <div class="tlicon"><span class="tlcirc"><span class="tlemoji">${icon}</span></span></div>
       <div class="tlbody">
         ${photo ? `<img class="tlphoto" src="${esc(photo)}" alt=""/>` : ''}
         <div class="tlinfo">${inner}</div>
@@ -453,8 +415,7 @@ export function quotationHtml(q, org = null) {
         <div class="hdr"><span class="hlab">&#127860; Meal Plan</span><span class="hval">${esc(h.mealPlan || '—')}</span></div>
         <div class="hdr"><span class="hlab">&#128682; Rooms</span><span class="hval">${h.rooms || 1} Room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</span></div>
       </div>`;
-      const inner = `<div class="tltitle">Hotel${h.isAlternative ? ' (Alternative Option)' : ''}</div>
-        <div class="tlname">${esc(h.hotelName)}</div>${det}`;
+      const inner = `<div class="tltitle">Hotel${h.isAlternative ? ' (Alternative Option)' : ''} &mdash; ${esc(h.hotelName)}</div>${det}`;
       return tlRow('&#128716;', master.imageUrl || '', inner);
     }).join('');
     const sight = sightBlock(d);
@@ -613,6 +574,7 @@ export function quotationHtml(q, org = null) {
   .sechead.navy { background: var(--deep); }
   .sechead .shic { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .sechead .shnum { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; }
+  .sechead .shnote { margin-left: 16px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 2px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; text-transform: none; color: #fff; white-space: nowrap; }
   .secprice { margin-left: auto; background: var(--yellow); color: var(--ink); border: 1px solid #e6d98f; border-radius: 999px; padding: 2px 13px; font-size: 12.5px; font-weight: 800; letter-spacing: 0; text-transform: none; }
   .tbl.flat { border: 0; border-radius: 0; margin-top: 0; }
   .tbl.flat.sep { border-top: 1px solid var(--line); }
@@ -660,23 +622,9 @@ export function quotationHtml(q, org = null) {
   .tstars { color: #f5a623; font-size: 11px; letter-spacing: 1px; }
   .ext { font-size: 8px; }
 
-  /* ---- Hotels / Accommodations cards ---- */
-  .hcard { display: flex; align-items: stretch; gap: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: #f8fbfe; }
-  .hinfo { flex: 1; min-width: 0; }
-  .nbadge { display: inline-block; border: 1.4px solid var(--blue); color: var(--blue-dark); font-weight: 800; font-size: 10.5px; border-radius: 6px; padding: 1.5px 7px; }
-  .hnights { font-size: 14.5px; color: #2c3d51; margin-bottom: 2px; }
-  .hnights b { font-size: 15.5px; color: var(--ink); }
-  .hcheckin { font-size: 11px; color: #64748b; margin-bottom: 7px; }
-  .cardname { font-size: 16.5px; font-weight: 800; color: var(--blue-dark); text-decoration: none; }
-  a.cardname { text-decoration: underline; }
+  /* ---- star row (itinerary hotel details) ---- */
   .cardstars { color: #f5a623; font-size: 14px; letter-spacing: 1.5px; margin: 2px 0 4px; }
   .cardstars .dim { color: #d7dde5; }
-  .carddesc { font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 6px; }
-  .hmeta { display: flex; gap: 34px; margin-top: 6px; }
-  .hmeta .k { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8fa0b3; }
-  .hmeta .v { font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 1px; }
-  .hmeta .s { font-size: 10.5px; color: #64748b; }
-  .hphoto { width: 225px; height: 130px; object-fit: cover; border-radius: 9px; flex-shrink: 0; align-self: center; }
 
   /* ---- cost breakage + confirm bar ---- */
   .breakrow { display: flex; gap: 14px; margin-top: 10px; }
@@ -771,10 +719,13 @@ export function quotationHtml(q, org = null) {
   .dayhr { width: 1px; align-self: stretch; background: #d5dfe9; margin: 3px 2px; }
   .daydate { font-size: 12px; font-weight: 600; color: #37475a; }
   .tlwrap { position: relative; padding: 11px 16px 11px 8px; }
-  .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px dotted #b9cbe0; }
+  .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px solid #c5d5e8; }
   .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; }
   .tlicon { width: 44px; flex-shrink: 0; display: flex; justify-content: center; }
   .tlcirc { position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 0 3px #fff; }
+  /* Emoji glyphs render in their own colors — flatten them to pure white so
+     every rail icon reads as white-on-navy like the design. */
+  .tlemoji { filter: grayscale(1) brightness(0) invert(1); }
   .tlbody { flex: 1; min-width: 0; display: flex; gap: 15px; align-items: flex-start; }
   .tlphoto { width: 168px; height: 118px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.15); }
   .tlinfo { flex: 1; min-width: 0; }
@@ -1068,13 +1019,6 @@ export function quotationHtml(q, org = null) {
   </div>` : ''}
   ${BOTTOMBAR}
 </div>
-
-<!-- ===== Hotels / Accommodations — details with images ===== -->
-${hotelCards ? `<div class="page pb">
-  <div class="band">Hotels / Accommodations:</div>
-  ${hotelCards}
-  ${BOTTOMBAR}
-</div>` : ''}
 
 <!-- ===== Optional Activities — poster-style card grid ===== -->
 ${optActs ? `<div class="page pb">

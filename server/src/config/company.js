@@ -20,6 +20,10 @@ export const company = {
   paymentQrImage: 'scanner.png',
   advancePercent: 50,
 
+  // Note shown next to every hotel-option heading on the quotation summary
+  // page (e.g. "Option 1: Deluxe Package  (Breakfast included from Day 2)").
+  hotelOptionNote: 'Breakfast included from Day 2',
+
   // Quotation cover page — "Why Travel with us" bullets over the hero photo.
   coverPoints: [
     'Government Licensed & Local Tour Operator',

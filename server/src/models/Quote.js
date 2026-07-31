@@ -118,6 +118,9 @@ const packageSchema = new mongoose.Schema(
 
     markupType: { type: String, enum: ['percent', 'flat'], default: 'percent' },
     markupValue: { type: Number, default: 0 },
+    // Discount applied on Cost + Markup, before tax.
+    discountType: { type: String, enum: ['percent', 'flat'], default: 'flat' },
+    discountValue: { type: Number, default: 0 },
     taxName: { type: String, default: 'GST' },
     taxPercent: { type: Number, default: 5 },
     taxApplied: { type: Boolean, default: true },
@@ -130,6 +133,7 @@ const packageSchema = new mongoose.Schema(
     // computed
     costPrice: { type: Number, default: 0 },
     markupAmount: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     sellingPrice: { type: Number, default: 0 },
   },
@@ -172,6 +176,7 @@ const quoteSchema = new mongoose.Schema(
     pricing: {
       subtotal: { type: Number, default: 0 },
       markup: { type: Number, default: 0 },
+      discount: { type: Number, default: 0 },
       tax: { type: Number, default: 0 },
       total: { type: Number, default: 0 },
     },
@@ -235,12 +240,19 @@ function computePackage(pkg) {
   for (const f of pkg.flights || []) cost += f.cost || 0;
 
   const markup = pkg.markupType === 'flat' ? pkg.markupValue || 0 : round((cost * (pkg.markupValue || 0)) / 100);
-  const taxBase = pkg.taxOn === 'markup' ? markup : cost + markup;
+  // Discount comes off Cost + Markup before tax (capped so totals never go negative).
+  const preDiscount = cost + markup;
+  let discount = pkg.discountType === 'percent'
+    ? round((preDiscount * (pkg.discountValue || 0)) / 100)
+    : (pkg.discountValue || 0);
+  discount = Math.min(round(discount), preDiscount);
+  const taxBase = pkg.taxOn === 'markup' ? markup : preDiscount - discount;
   const tax = pkg.taxApplied ? round((taxBase * (pkg.taxPercent || 0)) / 100) : 0;
   pkg.costPrice = round(cost);
   pkg.markupAmount = markup;
+  pkg.discountAmount = discount;
   pkg.taxAmount = tax;
-  pkg.sellingPrice = round(cost + markup + tax, pkg.rounding || 1);
+  pkg.sellingPrice = round(cost + markup - discount + tax, pkg.rounding || 1);
 }
 
 // Flatten the selected package into legacy costItems/days/pricing.
@@ -306,7 +318,7 @@ function flattenSelected(doc) {
   doc.markupType = pkg.markupType;
   doc.markupValue = pkg.markupValue;
   doc.taxPercent = pkg.taxApplied ? pkg.taxPercent : 0;
-  doc.pricing = { subtotal: pkg.costPrice, markup: pkg.markupAmount, tax: pkg.taxAmount, total: pkg.sellingPrice };
+  doc.pricing = { subtotal: pkg.costPrice, markup: pkg.markupAmount, discount: pkg.discountAmount || 0, tax: pkg.taxAmount, total: pkg.sellingPrice };
 }
 
 quoteSchema.pre('validate', function compute(next) {

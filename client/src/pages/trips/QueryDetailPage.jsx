@@ -462,21 +462,39 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
               <div className="card p-5">
                 <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bus size={16} className="text-brand-500" /> Transportation &amp; Activities</h3>
                 <div className="space-y-2">
-                  {pkg.transports.map((t, i) => {
-                    const dayNos = Array.isArray(t.days) && t.days.length ? t.days : [t.day || i + 1];
-                    return (
+                  {(() => {
+                    // Rows sharing the same days + location are one service with
+                    // multiple service types — merge them into a single card.
+                    const groups = [];
+                    const byKey = new Map();
+                    pkg.transports.forEach((t, i) => {
+                      const dayNos = Array.isArray(t.days) && t.days.length ? t.days : [t.day || i + 1];
+                      const key = `${[...dayNos].sort((a, b) => a - b).join(',')}|${t.serviceLocation || `#${i}`}`;
+                      if (!byKey.has(key)) {
+                        const g = { dayNos, loc: t.serviceLocation, types: [], items: [] };
+                        byKey.set(key, g);
+                        groups.push(g);
+                      }
+                      const g = byKey.get(key);
+                      if (t.serviceType && !g.types.includes(t.serviceType)) g.types.push(t.serviceType);
+                      (t.items || []).forEach((it) => { if (it.type) g.items.push(`${it.qty}× ${it.type}`); });
+                    });
+                    groups.sort((a, b) => (a.dayNos[0] || 0) - (b.dayNos[0] || 0));
+                    return groups.map((g, i) => (
                       <div key={i} className="rounded-lg border border-gray-100 p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-semibold text-brand-600">Day {dayNos.join(', ')}</span>
-                            <p className="font-medium text-gray-900">{t.serviceLocation || 'Service'}</p>
-                            {t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-brand-600">Day {g.dayNos.join(', ')}</span>
+                            <p className="font-medium text-gray-900">{g.loc || 'Service'}</p>
+                            {g.types.map((ty, k) => (
+                              <p key={k} className="text-xs text-gray-500">• {ty}</p>
+                            ))}
                           </div>
-                          <div className="text-right text-xs text-gray-500">{(t.items || []).map((it) => `${it.qty}× ${it.type}`).join(', ')}</div>
+                          <div className="shrink-0 text-right text-xs text-gray-500">{g.items.join(', ')}</div>
                         </div>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
