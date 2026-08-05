@@ -67,6 +67,12 @@ function priceAdvancedFilter(q) {
 function activityAdvancedFilter(q) {
   const f = {};
   if (q.destinations) f.destinations = { $in: asArray(q.destinations) };
+  // ?city= matches the activity name or its pickup/drop locations ($and so it
+  // composes with the search $or built by crudFactory).
+  if (q.city) {
+    const rx = new RegExp(escapeRx(q.city.trim()), 'i');
+    f.$and = [{ $or: [{ name: rx }, { pickupLocations: rx }, { dropLocations: rx }] }];
+  }
   if (q.isActive === 'false') f.isActive = false;
   return f;
 }
@@ -189,6 +195,7 @@ export const hotelPriceRoutes = makeCrudRouter(
 export const transportRoutes = makeCrudRouter(
   crudFactory(TransportService, {
     searchFields: ['name', 'from', 'to'],
+    sort: 'from to name', // A→Z by route, not newest-first
     populate: [{ path: 'destinations', select: 'name' }, { path: 'createdBy', select: 'name' }],
     injectOnCreate: stampCreator,
     advancedFilter: transportAdvancedFilter,

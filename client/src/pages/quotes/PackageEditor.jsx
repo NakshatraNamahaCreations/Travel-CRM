@@ -71,6 +71,18 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     if (r) { setHotel(i, { cardRate: r.basePrice, ratePerNight: r.basePrice, awebRate: r.aweb, cwebRate: r.cweb, cnbRate: r.cwoeb }); toast.success(`Rate: ${money(r.basePrice, currency)}/night`); }
     else toast('No matching rate — enter manually', { icon: '✏️' });
   };
+  // Fetch the rate automatically once hotel + room type + meal plan are all
+  // chosen (patch = the field change that triggered this, applied together
+  // with the fetched rates so the async update doesn't clobber it).
+  const maybeAutoRate = async (i, patch) => {
+    const h = { ...pkg.hotels[i], ...patch };
+    if (!h.hotel || !h.roomType || !h.mealPlan) return;
+    const r = await lookupApi.hotelRate({ hotel: h.hotel?._id || h.hotel, roomType: h.roomType, mealPlan: h.mealPlan, date: startDate }).catch(() => null);
+    if (r) {
+      setHotel(i, { ...patch, cardRate: r.basePrice, ratePerNight: r.basePrice, awebRate: r.aweb, cwebRate: r.cweb, cnbRate: r.cwoeb });
+      toast.success(`Rate: ${money(r.basePrice, currency)}/night`);
+    }
+  };
 
   const toggleNight = (i, n) => {
     const cur = pkg.hotels[i].nights || [];
@@ -173,27 +185,6 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     if (await confirm({ title: 'Remove this service?', message: 'This transport service (with all its service types) will be removed from the package.', confirmLabel: 'Remove' })) {
       update({ transports: pkg.transports.filter((_, idx) => !idxs.includes(idx)) });
     }
-  };
-  // Inline "add another service type" draft row (per family primary index).
-  const [trDraft, setTrDraft] = useState({});
-  const draftFor = (ti) => trDraft[ti] || { type: '', time: '', mins: 60 };
-  const patchDraft = (ti, patch) => setTrDraft((s) => ({ ...s, [ti]: { ...draftFor(ti), ...patch } }));
-  const addTrTypeRow = (ti) => {
-    const t = pkg.transports[ti];
-    const d = draftFor(ti);
-    if (!d.type.trim()) return toast.error('Enter a service type name first');
-    update({
-      transports: [...pkg.transports, {
-        ...emptyTransport([...(Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1])]),
-        service: t.service ?? null,
-        serviceLocation: t.serviceLocation || '',
-        serviceType: d.type.trim(),
-        startTime: d.time || '',
-        durationMins: Number(d.mins) || 60,
-        items: [],
-      }],
-    });
-    setTrDraft((s) => ({ ...s, [ti]: { type: '', time: '', mins: 60 } }));
   };
 
   // Auto-fill cost rates from the Transport Prices master (needs a master service picked).
@@ -380,7 +371,26 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     </div>
                     <div>
                       <label className="label">Meal Plan</label>
-                      <CreatableSelect category="mealPlan" value={h.mealPlan} onChange={(v) => setHotel(i, { mealPlan: v })} placeholder="Type to search..." />
+                      <AsyncSelect
+                        loadOptions={async (s) => {
+                          // The picked hotel's own meal plans (from its rate sheet);
+                          // generic options only when no hotel is linked yet.
+                          let hotel = h.hotel;
+                          const hid = hotel?._id || hotel;
+                          if (hotel && !hotel.mealPlans && hid) hotel = await hotelsApi.get(hid).catch(() => null);
+                          const term = (s || '').toLowerCase();
+                          if (hotel?.mealPlans?.length) {
+                            return hotel.mealPlans.filter((p) => p.toLowerCase().includes(term)).map((p) => ({ _id: p, name: p }));
+                          }
+                          const opts = await optionsApi.search('mealPlan', s).catch(() => []);
+                          return opts.map((o) => ({ _id: o.value, name: o.value }));
+                        }}
+                        value={h.mealPlan ? { _id: h.mealPlan, name: h.mealPlan } : null}
+                        onChange={(v) => { const val = v ? v._id : ''; setHotel(i, { mealPlan: val }); maybeAutoRate(i, { mealPlan: val }); }}
+                        creatable
+                        onCreate={async (name) => ({ _id: name, name })}
+                        placeholder="Type to search..."
+                      />
                       {!h.mealPlan && <RequiredHint>Meal Plan field is required</RequiredHint>}
                     </div>
                     <div>
@@ -394,7 +404,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           return (hotel?.roomTypes || []).filter((r) => r.name.toLowerCase().includes(s.toLowerCase())).map((r) => ({ _id: r.name, name: r.name }));
                         }}
                         value={h.roomType ? { _id: h.roomType, name: h.roomType } : null}
-                        onChange={(v) => setHotel(i, { roomType: v ? v._id : '' })}
+                        onChange={(v) => { const val = v ? v._id : ''; setHotel(i, { roomType: val }); maybeAutoRate(i, { roomType: val }); }}
                         creatable
                         onCreate={async (name) => ({ _id: name, name })}
                         placeholder="Type to search..."
@@ -701,23 +711,10 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       </div>
                     </div>
                     )}
-                    {/* Quick add: another service type with its own time + duration */}
-                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-brand-300 bg-brand-50/30 px-2 py-2">
-                      <input
-                        className="input flex-1 py-1.5 text-xs"
-                        placeholder="Add another service type…"
-                        value={draftFor(ti).type}
-                        onChange={(e) => patchDraft(ti, { type: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTrTypeRow(ti); } }}
-                      />
-                      <input type="time" className="input w-28 py-1.5 text-xs" value={draftFor(ti).time} onChange={(e) => patchDraft(ti, { time: e.target.value })} />
-                      <input type="number" min="0" className="input w-20 py-1.5 text-xs" placeholder="Mins" value={draftFor(ti).mins} onChange={(e) => patchDraft(ti, { mins: e.target.value })} />
-                      <button type="button" title="Add service type" onClick={() => addTrTypeRow(ti)} className="btn-secondary px-2.5 py-1.5"><Plus size={14} /></button>
-                    </div>
                           </div>
 
                           {/* Transportation and Prices */}
-                          <div className="w-80 shrink-0 border-l-2 border-brand-100 bg-gradient-to-b from-brand-50/60 to-slate-50/40 p-4">
+                          <div className="w-96 shrink-0 border-l-2 border-brand-100 bg-gradient-to-b from-brand-50/60 to-slate-50/40 p-4">
                     <div className="mb-2.5 flex items-center justify-between gap-2">
                       <p className="flex items-center gap-1.5 text-xs font-bold text-brand-700">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[10px] text-white">₹</span>
@@ -726,14 +723,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
                     {firstDate && <p className="mb-2 inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700">{firstDate}</p>}
-                    <table className="w-full text-xs">
+                    <table className="w-full table-fixed text-xs">
                       <thead>
                         <tr className="bg-brand-50 text-brand-700">
                           <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
-                          <th className="py-1.5 text-left font-bold w-14">Date</th>
-                          <th className="py-1.5 text-left font-bold w-16">Rate</th>
-                          <th className="py-1.5 text-left font-bold w-16">Given</th>
-                          <th className="w-5 rounded-r-md" />
+                          <th className="py-1.5 text-left font-bold w-12">Date</th>
+                          <th className="py-1.5 text-left font-bold w-[4.5rem]">Rate</th>
+                          <th className="py-1.5 text-left font-bold w-[4.5rem]">Given</th>
+                          <th className="w-6 rounded-r-md" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -819,16 +816,22 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <div className="flex gap-0">
                           {/* Activity details */}
                           <div className="flex-1 p-4 space-y-3">
-                    <div>
-                      <label className="label">Name</label>
-                      <AsyncSelect
-                        loadOptions={(q) => activitiesApi.list({ search: q }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
-                        value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
-                        onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
-                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
-                        placeholder="Type to search..."
-                      />
-                      {a.activity && <p className="mt-1 text-[11px] text-green-600">✓ Linked to activity master — prices can auto-fill</p>}
+                    <div className="grid gap-3 sm:grid-cols-[190px_1fr]">
+                      <div>
+                        <label className="label">Location</label>
+                        <CreatableSelect category="city" value={a._city || ''} onChange={(v) => setAct(ai, { _city: v })} placeholder="Any city" />
+                      </div>
+                      <div>
+                        <label className="label">Name</label>
+                        <AsyncSelect
+                          loadOptions={(q) => activitiesApi.list({ search: q, ...(a._city ? { city: a._city } : {}) }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
+                          value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
+                          onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
+                          creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                          placeholder={a._city ? `Activities in ${a._city}...` : 'Type to search...'}
+                        />
+                        {a.activity && <p className="mt-1 text-[11px] text-green-600">✓ Linked to activity master — prices can auto-fill</p>}
+                      </div>
                     </div>
                     <div>
                       <label className="label">Ticket/Package Type</label>

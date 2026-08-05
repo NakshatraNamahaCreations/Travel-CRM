@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
 import { protect, authorize } from '../middleware/auth.js';
+import { retenant } from '../tenant/middleware.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/apiResponse.js';
@@ -17,6 +18,7 @@ router.post(
   '/',
   authorize('admin', 'manager', 'operations'),
   upload.single('file'),
+  retenant, // multer loses the tenant ALS context — re-enter it
   asyncHandler(async (req, res) => {
     if (!req.file) throw ApiError.badRequest('No file uploaded');
     let wb;

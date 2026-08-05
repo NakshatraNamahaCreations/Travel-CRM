@@ -15,3 +15,15 @@ export function tenantContext(req, res, next) {
   }
   return runWithTenant(req.user.organization, () => next());
 }
+
+// Multer (file uploads) parses the request from raw socket events, which do
+// NOT inherit the AsyncLocalStorage context set by tenantContext — everything
+// after `upload.single(...)` would run unscoped and save org-less documents.
+// Place this middleware immediately AFTER any multer middleware to re-enter
+// the caller's tenant context.
+export function retenant(req, res, next) {
+  if (req.user && req.user.role !== 'owner' && req.user.organization) {
+    return runWithTenant(req.user.organization, () => next());
+  }
+  return next();
+}

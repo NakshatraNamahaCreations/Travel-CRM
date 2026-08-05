@@ -5,28 +5,35 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok } from '../utils/apiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 
-const onDate = (date) => {
+// Season-aware lookup with fallback: prefer the season covering the date;
+// otherwise the most recent past season; otherwise the earliest future one.
+// Uploaded rate sheets often end before the travel date — a stale rate the
+// user can adjust beats returning nothing.
+const findRate = async (Model, filter, date) => {
   const d = date ? new Date(date) : new Date();
-  return { startDate: { $lte: d }, endDate: { $gte: d } };
+  let price = await Model.findOne({ ...filter, startDate: { $lte: d }, endDate: { $gte: d } }).sort('-startDate');
+  if (!price) price = await Model.findOne({ ...filter, startDate: { $lte: d } }).sort('-startDate');
+  if (!price) price = await Model.findOne(filter).sort('startDate');
+  return price;
 };
 
 // GET /api/lookups/hotel-rate?hotel=&roomType=&mealPlan=&date=
 export const hotelRate = asyncHandler(async (req, res) => {
   const { hotel, roomType, mealPlan, date } = req.query;
-  const filter = { hotel, ...onDate(date) };
+  const filter = { hotel };
   if (roomType) filter.roomType = roomType;
   if (mealPlan) filter.mealPlan = mealPlan;
-  const price = await HotelPrice.findOne(filter).sort('-startDate');
+  const price = await findRate(HotelPrice, filter, date);
   return ok(res, price);
 });
 
 // GET /api/lookups/activity-rate?activity=&service=&config=&date=
 export const activityRate = asyncHandler(async (req, res) => {
   const { activity, service, config, date } = req.query;
-  const filter = { activity, ...onDate(date) };
+  const filter = { activity };
   if (service) filter.service = service;
   if (config) filter.config = config;
-  const price = await TravelActivityPrice.findOne(filter).sort('-startDate');
+  const price = await findRate(TravelActivityPrice, filter, date);
   return ok(res, price);
 });
 
@@ -37,13 +44,12 @@ export const activityRate = asyncHandler(async (req, res) => {
 export const transportRate = asyncHandler(async (req, res) => {
   const { service, config, date } = req.query;
   if (!service) throw ApiError.badRequest('service is required');
-  const base = { service, ...onDate(date) };
   let price = null;
   if (config) {
     const escaped = config.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    price = await TransportPrice.findOne({ ...base, config: new RegExp(`^${escaped}$`, 'i') }).sort('-startDate');
-    if (!price) price = await TransportPrice.findOne({ ...base, config: new RegExp(escaped, 'i') }).sort('-startDate');
+    price = await findRate(TransportPrice, { service, config: new RegExp(`^${escaped}$`, 'i') }, date);
+    if (!price) price = await findRate(TransportPrice, { service, config: new RegExp(escaped, 'i') }, date);
   }
-  if (!price) price = await TransportPrice.findOne(base).sort('-startDate');
+  if (!price) price = await findRate(TransportPrice, { service }, date);
   return ok(res, price);
 });

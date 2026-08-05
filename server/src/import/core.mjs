@@ -10,7 +10,10 @@ import { TravelActivityPrice } from '../models/TravelActivityPrice.js';
 import { Destination } from '../models/Destination.js';
 import { parseRange, parsePersons, parseStar, num, parseLoc, pickSheets } from './lib.mjs';
 
-const cell = (r, c) => { const v = r && r[c]; return v == null ? '' : String(v).trim(); };
+// Also repairs common UTF-8-as-cp1252 mojibake from client CSVs ("Corbynâ€™s").
+const MOJIBAKE = [['â€™', '’'], ['â€˜', '‘'], ['â€œ', '“'], ['â€', '”'], ['â€"', '–'], ['â€“', '–'], ['â€”', '—'], ['Â', '']];
+const demojibake = (s) => MOJIBAKE.reduce((out, [bad, good]) => out.split(bad).join(good), s);
+const cell = (r, c) => { const v = r && r[c]; return v == null ? '' : demojibake(String(v).trim()); };
 const sheetRows = (ws) => XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
 // Case-insensitive, whitespace-tolerant exact-name filter, so CSV spelling
@@ -79,17 +82,19 @@ export function parseHotelSheet(rows, displayName) {
 export async function importHotels(wb, opts = {}) {
   const sheets = pickSheets(wb.SheetNames);
   let hotels = 0, priceRows = 0, skipped = 0;
-  const cityCache = new Map();
-  const extraDest = (opts.destinations || []).filter(Boolean).map(String);
+  // Tag imported hotels with the destinations picked in the upload form,
+  // falling back to Andaman. Cities are NOT turned into Destination records —
+  // Destinations stay trip-level (states/regions); city filtering uses the
+  // hotel's location.city instead.
+  let extraDest = (opts.destinations || []).filter(Boolean).map(String);
+  if (!extraDest.length) {
+    const andaman = await Destination.findOne({ name: /andaman/i });
+    if (andaman) extraDest = [String(andaman._id)];
+  }
   for (const { sheet, name } of sheets) {
     const parsed = parseHotelSheet(sheetRows(wb.Sheets[sheet]), name);
     if (!parsed || !parsed.name || !parsed.prices.length) { skipped++; continue; }
-    let destId = cityCache.get(parsed.location.city);
-    if (parsed.location.city && !destId) {
-      const d = await Destination.findOneAndUpdate({ name: nameEq(parsed.location.city) }, { $set: { region: 'Andaman' }, $setOnInsert: { name: parsed.location.city } }, { upsert: true, new: true, setDefaultsOnInsert: true });
-      destId = d._id; cityCache.set(parsed.location.city, destId);
-    }
-    const dests = [...new Set([...(destId ? [String(destId)] : []), ...extraDest])];
+    const dests = [...new Set(extraDest)];
     const hotel = await Hotel.findOneAndUpdate({ name: nameEq(parsed.name) }, { $set: { location: parsed.location, stars: parsed.stars, mealPlans: parsed.mealPlans, roomTypes: parsed.roomTypes, destinations: dests }, $setOnInsert: { name: parsed.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
     await HotelPrice.deleteMany({ hotel: hotel._id });
     const rows = parsed.prices.map((p) => ({ hotel: hotel._id, startDate: p.start, endDate: p.end, mealPlan: p.mealPlan, roomType: p.roomType, basePrice: p.basePrice, persons: p.persons, aweb: p.aweb, cweb: p.cweb, cwoeb: p.cwoeb }));
@@ -181,26 +186,38 @@ export function parseTransportSheet(rows) {
   // all ranges for legacy sheets where dates couldn't be matched to a group.
   for (const g of groups) for (let c = g.start; c < g.end; c++) { const v = cell(rows[V], c); if (v) vehicles.push({ col: c, name: v, ranges: g.ranges }); }
   const dateRanges = ranges.length ? ranges : [null];
-  const routes = new Map(); let curRoute = '';
+  // Routes are keyed by START city (col A) + END city (col B) — "Port Blair"
+  // and "Port Blair → Havelock" are DIFFERENT services with their own items.
+  // A "-" or empty B means the service has no end city (local sightseeing).
+  const routes = new Map(); let curFrom = ''; let curTo = '';
   for (let i = V + 1; i < rows.length; i++) {
     const r = rows[i];
-    if (cell(r, 1)) curRoute = cell(r, 1);
+    if (cell(r, 1)) { curFrom = cell(r, 1); curTo = cell(r, 2); }
+    else if (cell(r, 2)) curTo = cell(r, 2);
     const service = cell(r, 3);
-    if (!service || !curRoute) continue;
-    if (!routes.has(curRoute)) routes.set(curRoute, { items: [], prices: [] });
-    const route = routes.get(curRoute);
+    if (!service || !curFrom) continue;
+    const to = curTo && curTo !== '-' ? curTo : '';
+    const key = `${curFrom.toLowerCase()}|${to.toLowerCase()}`;
+    if (!routes.has(key)) routes.set(key, { from: curFrom, to, name: to ? `${curFrom} to ${to}` : curFrom, items: [], prices: [] });
+    const route = routes.get(key);
     route.items.push({ name: service, description: cell(r, 7) });
     for (const v of vehicles) { const price = num(cell(r, v.col)); if (!price) continue; for (const range of (v.ranges || dateRanges)) if (range) route.prices.push({ itemName: service, config: v.name, price, ...range }); }
   }
-  return [...routes.entries()].map(([name, v]) => ({ name, ...v }));
+  return [...routes.values()];
 }
 
-export async function importTransport(wb) {
-  const andaman = await Destination.findOne({ name: 'Andaman' });
+export async function importTransport(wb, { destinations = [] } = {}) {
+  // Tag imported services with the destinations chosen in the upload form,
+  // falling back to the Andaman destination when none were picked.
+  let destIds = (destinations || []).filter(Boolean);
+  if (!destIds.length) {
+    const andaman = await Destination.findOne({ name: 'Andaman' });
+    if (andaman) destIds = [andaman._id];
+  }
   let services = 0, priceRows = 0;
   for (const { sheet } of pickSheets(wb.SheetNames)) {
     for (const route of parseTransportSheet(sheetRows(wb.Sheets[sheet]))) {
-      const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: andaman ? [andaman._id] : [], items: route.items.slice(0, 50) }, $setOnInsert: { name: route.name, from: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: destIds, items: route.items.slice(0, 50), from: route.from || route.name, to: route.to || '' }, $setOnInsert: { name: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TransportPrice.deleteMany({ service: doc._id });
       const rows = route.prices.map((p) => ({ service: doc._id, itemName: p.itemName, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TransportPrice.insertMany(rows);
@@ -306,8 +323,13 @@ export function parseHotelsMasterSheet(rows) {
 }
 
 export async function importHotelsMaster(wb, opts = {}) {
-  const extraDest = (opts.destinations || []).filter(Boolean).map(String);
-  const cityCache = new Map();
+  // Destinations stay trip-level (states/regions) — cities are never turned
+  // into Destination records; city filtering uses the hotel's location.city.
+  let extraDest = (opts.destinations || []).filter(Boolean).map(String);
+  if (!extraDest.length) {
+    const andaman = await Destination.findOne({ name: /andaman/i });
+    if (andaman) extraDest = [String(andaman._id)];
+  }
   let hotels = 0, skipped = 0;
   let totalRecordsParsed = 0;
   for (const sheetName of wb.SheetNames) {
@@ -315,16 +337,7 @@ export async function importHotelsMaster(wb, opts = {}) {
     totalRecordsParsed += records.length;
     for (const rec of records) {
       try {
-        const destIds = [...extraDest];
-        if (rec.location.city) {
-          let id = cityCache.get(rec.location.city);
-          if (!id) {
-            const d = await Destination.findOneAndUpdate({ name: nameEq(rec.location.city) }, { name: rec.location.city }, { upsert: true, new: true, setDefaultsOnInsert: true });
-            id = d._id; cityCache.set(rec.location.city, id);
-          }
-          destIds.push(String(id));
-        }
-        const patch = { ...rec, destinations: [...new Set(destIds)] };
+        const patch = { ...rec, destinations: [...new Set(extraDest)] };
         Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
         delete patch.name;
         await Hotel.findOneAndUpdate({ name: nameEq(rec.name) }, { $set: patch, $setOnInsert: { name: rec.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
@@ -347,6 +360,6 @@ export async function importWorkbook(wb, type = 'auto', opts = {}) {
   if (t === 'hotels-master') return { type: t, ...(await importHotelsMaster(wb, opts)) };
   if (t === 'hotels') return { type: t, ...(await importHotels(wb, opts)) };
   if (t === 'activities') return { type: t, ...(await importActivities(wb, opts)) };
-  if (t === 'transport') return { type: t, ...(await importTransport(wb)) };
+  if (t === 'transport') return { type: t, ...(await importTransport(wb, opts)) };
   throw new Error('Unrecognized file format — expected a Hotels, Transport, or Activities sheet');
 }
