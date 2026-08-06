@@ -13,6 +13,7 @@ export const quotesApi = {
   voucherHtml: (id, params) => api.get(`/quotes/${id}/voucher`, { params: { ...params, format: 'html' }, responseType: 'text' }).then((r) => r.data),
   voucherPdf: (id, params) => api.get(`/quotes/${id}/voucher`, { params, responseType: 'blob' }).then((r) => r.data),
   email: (id, email) => api.post(`/quotes/${id}/email`, email ? { email } : {}).then((r) => r.data.data),
+  shareEmail: (id, payload) => api.post(`/quotes/${id}/share-email`, payload).then((r) => r.data.data),
   emailStatus: () => api.get('/quotes/email-status').then((r) => r.data.data),
 };
 

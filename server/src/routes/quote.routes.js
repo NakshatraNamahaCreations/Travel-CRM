@@ -9,6 +9,7 @@ import {
   quotePdf,
   quoteVoucher,
   emailQuote,
+  shareEmail,
   emailStatus,
   quoteSuggestions,
   cloneQuote,
@@ -26,6 +27,7 @@ router.get('/:id', getQuote);
 router.get('/:id/pdf', quotePdf);
 router.get('/:id/voucher', quoteVoucher);
 router.post('/:id/email', emailQuote);
+router.post('/:id/share-email', shareEmail);
 router.post('/', createQuote);
 router.put('/:id', updateQuote);
 router.patch('/:id/status', updateQuoteStatus);

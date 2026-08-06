@@ -258,6 +258,37 @@ export const emailQuote = asyncHandler(async (req, res) => {
   return ok(res, { sent: true, to, quoteNumber: quote.quoteNumber });
 });
 
+// POST /api/quotes/:id/share-email — email the composed Share Package summary
+// (the HTML built in the share modal), optionally attaching the quotation PDF.
+export const shareEmail = asyncHandler(async (req, res) => {
+  const quote = await loadFullQuote(req.params.id);
+  const obj = quote.toObject();
+  const to = req.body.email || obj.query?.guest?.email;
+  if (!to) throw ApiError.badRequest('No recipient — guest has no email on file and none was provided');
+  const html = String(req.body.html || '').trim();
+  if (!html) throw ApiError.badRequest('Nothing to send');
+
+  const attachments = [];
+  if (req.body.attachPdf) {
+    const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
+    const pdf = await htmlToPdf(quotationHtml(obj, org?.toObject()));
+    attachments.push({ filename: `Package-${quote.quoteNumber}.pdf`, content: pdf });
+  }
+
+  await sendMail({
+    to,
+    subject: req.body.subject || `Your Andaman Package #${quote.quoteNumber} — ${company.name}`,
+    html,
+    attachments,
+  });
+
+  if (quote.status === 'draft') {
+    quote.status = 'sent';
+    await quote.save();
+  }
+  return ok(res, { sent: true, to, quoteNumber: quote.quoteNumber });
+});
+
 // DELETE /api/quotes/:id
 export const deleteQuote = asyncHandler(async (req, res) => {
   const quote = await Quote.findByIdAndDelete(req.params.id);

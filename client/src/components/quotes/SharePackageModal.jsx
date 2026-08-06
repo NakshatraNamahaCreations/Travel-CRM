@@ -54,6 +54,8 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
   const [wa, setWa] = useState({ hideTotalPrice: false, includeItinerary: false, attachPdf: false });
   const [em, setEm] = useState({ removeItinerary: false, removeTerms: false, removeTransports: false, attachPdf: false });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [toEmail, setToEmail] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
 
   const { data: q, isLoading } = useQuery({
     queryKey: ['quote', quoteId, 'share'],
@@ -96,6 +98,20 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
       toast.error(e.message || 'Could not generate PDF');
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    const to = (toEmail || guest.email || '').trim();
+    if (!to) return toast.error('Enter a recipient email address');
+    try {
+      setEmailBusy(true);
+      await quotesApi.shareEmail(quoteId, { email: to, html: emailHtml, attachPdf: em.attachPdf });
+      toast.success(`Email sent to ${to}`);
+    } catch (e) {
+      toast.error(e.message || 'Could not send the email');
+    } finally {
+      setEmailBusy(false);
     }
   };
 
@@ -170,8 +186,28 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
               </div>
             </div>
             {/* Preview */}
-            <div className="max-h-[60vh] overflow-y-auto bg-white p-5">
+            <div className="max-h-[55vh] overflow-y-auto bg-white p-5">
               <div dangerouslySetInnerHTML={{ __html: emailHtml }} />
+            </div>
+            {/* Footer: send */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-3">
+              <input
+                type="email"
+                className="input min-w-[220px] flex-1 py-2 text-sm"
+                placeholder={guest.email || 'guest@email.com'}
+                value={toEmail}
+                onChange={(e) => setToEmail(e.target.value)}
+              />
+              <button
+                onClick={sendEmail}
+                disabled={emailBusy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                {emailBusy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send Email
+              </button>
+              {!guest.email && !toEmail && (
+                <span className="w-full text-xs text-amber-600">No guest email on file — enter the recipient above.</span>
+              )}
             </div>
           </div>
         )}

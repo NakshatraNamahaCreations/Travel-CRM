@@ -816,22 +816,16 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <div className="flex gap-0">
                           {/* Activity details */}
                           <div className="flex-1 p-4 space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-[190px_1fr]">
-                      <div>
-                        <label className="label">Location</label>
-                        <CreatableSelect category="city" value={a._city || ''} onChange={(v) => setAct(ai, { _city: v })} placeholder="Any city" />
-                      </div>
-                      <div>
-                        <label className="label">Name</label>
-                        <AsyncSelect
-                          loadOptions={(q) => activitiesApi.list({ search: q, ...(a._city ? { city: a._city } : {}) }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
-                          value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
-                          onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
-                          creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
-                          placeholder={a._city ? `Activities in ${a._city}...` : 'Type to search...'}
-                        />
-                        {a.activity && <p className="mt-1 text-[11px] text-green-600">✓ Linked to activity master — prices can auto-fill</p>}
-                      </div>
+                    <div>
+                      <label className="label">Name</label>
+                      <AsyncSelect
+                        loadOptions={(q) => activitiesApi.list({ search: q }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
+                        value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
+                        onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
+                        creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                        placeholder="Type to search..."
+                      />
+                      {a.activity && <p className="mt-1 text-[11px] text-green-600">✓ Linked to activity master — prices can auto-fill</p>}
                     </div>
                     <div>
                       <label className="label">Ticket/Package Type</label>
