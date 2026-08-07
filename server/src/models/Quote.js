@@ -82,6 +82,10 @@ const activityRowSchema = new mongoose.Schema(
     ticketType: { type: String, trim: true }, // "Scuba Diving" — the activity's ticket/package type
     slot: { type: String, trim: true }, // "14:00"
     durationMins: { type: Number },
+    // Service type this ticket belongs to (added via the 🎟 button on a
+    // transport service) — keeps the ticket rendered under its service in
+    // both the builder and the PDF itinerary.
+    forService: { type: String, trim: true },
     items: [transportItemSchema], // { type: 'Adult' | 'Child (6-12)', qty, rate, given }
   },
   { _id: true }

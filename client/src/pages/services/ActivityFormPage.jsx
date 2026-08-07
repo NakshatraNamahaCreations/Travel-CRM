@@ -3,7 +3,7 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, MapPin, Users, Ticket } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useQuery } from '@tanstack/react-query';
-import { activitiesApi } from '../../api/services.js';
+import { activitiesApi, transportApi } from '../../api/services.js';
 import { destinationsApi } from '../../api/masterData.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import FormSection from '../../components/form/FormSection.jsx';
@@ -11,7 +11,7 @@ import { LocationList, DayPicker, IntervalList } from '../../components/form/Rep
 import RichTextEditor from '../../components/form/RichTextEditor.jsx';
 
 const DURATION_UNITS = ['mins', 'hours', 'days'];
-const emptyTicket = () => ({ name: '', internalRefCode: '', slots: '', duration: '', durationUnit: 'mins', details: '', closedDays: [], closedDates: [] });
+const emptyTicket = () => ({ name: '', internalRefCode: '', forService: '', slots: '', duration: '', durationUnit: 'mins', details: '', closedDays: [], closedDates: [] });
 
 export default function ActivityFormPage() {
   const { id } = useParams();
@@ -21,6 +21,7 @@ export default function ActivityFormPage() {
   const [quickAdd, setQuickAdd] = useState(false);
   const [form, setForm] = useState({
     name: '',
+    kind: 'activity',
     details: '',
     destinations: [],
     useSamePickDrop: true,
@@ -46,6 +47,7 @@ export default function ActivityFormPage() {
     if (!existing) return;
     setForm({
       name: existing.name || '',
+      kind: existing.kind || 'activity',
       details: existing.details || '',
       destinations: existing.destinations || [],
       useSamePickDrop: existing.useSamePickDrop ?? true,
@@ -63,6 +65,7 @@ export default function ActivityFormPage() {
             _id: t._id,
             name: t.name || '',
             internalRefCode: t.internalRefCode || '',
+            forService: t.forService || '',
             slots: t.slots || '',
             duration: t.duration ?? '',
             durationUnit: t.durationUnit || 'mins',
@@ -86,6 +89,7 @@ export default function ActivityFormPage() {
 
   const buildPayload = () => ({
     name: form.name,
+    kind: form.kind || 'activity',
     details: form.details || undefined,
     destinations: form.destinations.map((d) => d._id ?? d),
     useSamePickDrop: form.useSamePickDrop,
@@ -102,6 +106,7 @@ export default function ActivityFormPage() {
       ...(t._id ? { _id: t._id } : {}),
       name: t.name,
       internalRefCode: t.internalRefCode || undefined,
+      forService: t.forService || undefined,
       slots: t.slots || undefined,
       duration: t.duration !== '' ? Number(t.duration) : undefined,
       durationUnit: t.durationUnit,
@@ -153,7 +158,16 @@ export default function ActivityFormPage() {
 
           {/* Activity Details */}
           <FormSection icon={MapPin} title="Activity Details" description="Please provide basic details regarding the activity.">
-            <div><label className="label">Name</label><input className="input" value={form.name} onChange={setEvt('name')} placeholder="e.g. Port Blair To Havelock : Private Catamaran Ferry" /></div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
+              <div><label className="label">Name</label><input className="input" value={form.name} onChange={setEvt('name')} placeholder="e.g. Port Blair To Havelock : Private Catamaran Ferry" /></div>
+              <div>
+                <label className="label">Kind</label>
+                <select className="input" value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}>
+                  <option value="activity">Activity (experience)</option>
+                  <option value="ticket">Ticket (ferry / entry)</option>
+                </select>
+              </div>
+            </div>
             {!quickAdd && (
               <div>
                 <label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label>
@@ -224,6 +238,21 @@ export default function ActivityFormPage() {
 
                   {!quickAdd && (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <label className="label">For Service <span className="label-optional">(optional — links this ticket to a transport service, so it shows under that service in quotations)</span></label>
+                        <AsyncSelect
+                          loadOptions={async (qs) => {
+                            const list = (await transportApi.list({ search: qs, limit: 50 }).catch(() => ({ data: [] }))).data || [];
+                            const names = [...new Set(list.flatMap((s) => (s.items || []).map((it) => it.name)).filter(Boolean))];
+                            const term = (qs || '').toLowerCase();
+                            return names.filter((nm) => nm.toLowerCase().includes(term)).map((nm) => ({ _id: nm, name: nm }));
+                          }}
+                          value={t.forService ? { _id: t.forService, name: t.forService } : null}
+                          onChange={(v) => setTicket(i, { forService: v ? v.name : '' })}
+                          creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                          placeholder="e.g. Cellular Jail Visit with Sound & Light Show"
+                        />
+                      </div>
                       <div><label className="label">Internal Ref Code <span className="label-optional">(optional)</span></label><input className="input" value={t.internalRefCode} onChange={(e) => setTicket(i, { internalRefCode: e.target.value })} placeholder="e.g. 1PXABC" /></div>
                       <div><label className="label">Slots <span className="label-optional">(optional)</span></label><input className="input" value={t.slots} onChange={(e) => setTicket(i, { slots: e.target.value })} placeholder="11:00, 13:00" /></div>
                       <div>

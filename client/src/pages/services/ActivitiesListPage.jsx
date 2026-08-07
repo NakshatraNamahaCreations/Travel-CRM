@@ -12,13 +12,15 @@ import DataTable from '../../components/ui/DataTable.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import FilterDrawer, { countFilters } from '../../components/ui/FilterDrawer.jsx';
 
-const EMPTY_FILTERS = { destinations: [], disabledOnly: false };
+const EMPTY_FILTERS = { destinations: [], kind: '', disabledOnly: false };
 const FILTER_FIELDS = [
   { key: 'destinations', label: 'Destinations', type: 'async', isMulti: true, loadOptions: (s) => destinationsApi.search(s) },
+  { key: 'kind', label: 'Kind', type: 'select', options: [{ value: 'ticket', label: 'Tickets (ferry / entry)' }, { value: 'activity', label: 'Activities (experiences)' }] },
   { key: 'disabledOnly', label: 'Disabled Only', type: 'checkbox' },
 ];
 const filterParams = (f) => ({
   ...(f.destinations?.length ? { destinations: f.destinations.map((d) => d._id).join(',') } : {}),
+  ...(f.kind ? { kind: f.kind } : {}),
   ...(f.disabledOnly ? { isActive: 'false' } : {}),
 });
 
@@ -92,6 +94,13 @@ export default function ActivitiesListPage() {
           <Link to={`/services/activities/${a._id}`} className="font-semibold text-brand-600 hover:underline">{a.name}</Link>
         </div>
       ),
+    },
+    {
+      key: 'kind',
+      header: 'Kind',
+      render: (a) => (a.kind === 'ticket'
+        ? <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">Ticket</span>
+        : <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">Activity</span>),
     },
     {
       key: 'tickets',

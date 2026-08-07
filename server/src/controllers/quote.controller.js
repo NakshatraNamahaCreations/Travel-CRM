@@ -220,11 +220,18 @@ export const quoteVoucher = asyncHandler(async (req, res) => {
   return res.send(pdf);
 });
 
-// GET /api/quotes/:id/pdf — server-rendered PDF (inline download)
+// GET /api/quotes/:id/pdf — server-rendered PDF (inline download).
+// `?format=html` returns the document HTML instead, so the on-screen
+// quotation preview shows EXACTLY what the PDF will look like.
 export const quotePdf = asyncHandler(async (req, res) => {
   const quote = await loadFullQuote(req.params.id);
   const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
-  const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
+  const html = quotationHtml(quote.toObject(), org?.toObject());
+  if (req.query.format === 'html') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  }
+  const pdf = await htmlToPdf(html);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Quotation-${quote.quoteNumber}.pdf"`);
   return res.send(pdf);

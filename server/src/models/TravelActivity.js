@@ -8,6 +8,10 @@ const ticketTypeSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     internalRefCode: { type: String, trim: true }, // supplier / hidden reference
+    // Transport service type this ticket belongs to (e.g. "Cellular Jail
+    // Visit with Sound & Light Show") — quotes picking this ticket auto-link
+    // it so the PDF nests the ticket under that service.
+    forService: { type: String, trim: true },
     slots: { type: String, trim: true }, // e.g. "11:00, 13:00"
     duration: { type: Number }, // numeric duration
     durationUnit: { type: String, trim: true, default: 'mins' }, // mins / hours / days
@@ -23,6 +27,9 @@ const ticketTypeSchema = new mongoose.Schema(
 const travelActivitySchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
+    // 'ticket' = ferry / entry tickets (Makruzz classes, Cellular Jail entry…),
+    // 'activity' = experiences (scuba, jet ski, banana ride…).
+    kind: { type: String, enum: ['activity', 'ticket'], default: 'activity', index: true },
     details: { type: String, trim: true }, // activity-level itinerary / details
     destinations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Destination' }],
     imageUrl: { type: String },

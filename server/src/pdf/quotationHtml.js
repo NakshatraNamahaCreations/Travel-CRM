@@ -335,7 +335,17 @@ export function quotationHtml(q, org = null) {
     // Rich service rows: service name + "Day Schedule" description from the
     // transport master (imported from the Transport Excel), when available.
     const dayTs = transports.filter((t) => (Array.isArray(t.days) ? t.days : [t.day]).includes(n));
-    const svcBlocks = dayTs.map((t) => {
+    // Standard services carry a default ticket, shown as a chip inside the
+    // service block; the matching quote ticket is then NOT repeated separately.
+    const STD_TICKETS = [
+      { svc: /cellular\s*jail/i, act: /cellular\s*jail/i, label: 'Cellular Jail Ticket' },
+      { svc: /light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, act: /\bl\s*&\s*s\b|light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, label: 'L&S Ticket' },
+      { svc: /baratang|lime\s*stone|limestone/i, act: /lime\s*stone|limestone|baratang/i, label: 'Lime Stone Ticket' },
+      { svc: /elephant\s*beach/i, act: /speed\s*boat|elephant/i, label: 'Speed Boat Ticket' },
+      { svc: /ross\s*island/i, act: /\bboat\b|ross/i, label: 'Boat Ticket' },
+      { svc: /north\s*bay/i, act: /\bboat\b|north\s*bay/i, label: 'Boat Ticket' },
+    ];
+    const svcItems = dayTs.map((t) => {
       const master = t.service && typeof t.service === 'object' ? t.service : null;
       const item = (master?.items || []).find((it) => normName(it.name) === normName(t.serviceType));
       const desc = stripHtml(item?.description || '');
@@ -343,26 +353,37 @@ export function quotationHtml(q, org = null) {
       // Radhanagar...) — item image first, route master image, then the
       // keyword-matched stock photo from company.itineraryImages.
       const photo = item?.imageUrl || master?.imageUrl || svcImage(`${t.serviceType} ${t.serviceLocation}`);
-      if (!desc && !photo) return '';
+      if (!desc && !photo) return null;
       const paras = desc.split('\n').filter(Boolean)
         .map((p) => `<div class="tldesc">${esc(p)}</div>`).join('');
+      // Default ticket chips for standard services (a combined service like
+      // "...Sound & Light Show + Cellular Jail" gets every applicable one).
+      const stdChips = [...new Set(STD_TICKETS.filter((e) => e.svc.test(t.serviceType || '')).map((e) => e.label))]
+        .map((lbl) => tlChip('&#127903;', 'Ticket', esc(lbl))).join('');
       const chips = [
         tlChip('&#128205;', 'Route', esc(t.serviceLocation || '')),
         tlChip('&#128336;', 'Start Time', fmtTime(t.startTime)),
         tlChip('&#8986;', 'Duration', t.durationMins ? `${t.durationMins} mins` : ''),
+        stdChips,
       ].join('');
-      const inner = `<div class="tltitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`;
-      return tlRow(tlIcon(`${t.serviceType} ${t.serviceLocation}`), photo, inner);
-    }).filter(Boolean).join('');
-    // Activity rows (scuba, ferry tickets...) — photo from the activity
-    // master + details from the matching ticket type (or activity-level).
+      return {
+        icon: tlIcon(`${t.serviceType} ${t.serviceLocation}`),
+        photo,
+        inner: `<div class="tltitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`,
+        ferry: FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`),
+        keyNorm: normName(t.serviceType || ''),
+      };
+    }).filter(Boolean);
+    // Activity rows. Tickets already represented by a standard service chip
+    // (Cellular Jail / L&S / Limestone / Speed Boat / Boat) are NOT repeated
+    // as separate blocks; everything else renders as its own timeline row.
     const dayActs = activities.filter((a) => (Array.isArray(a.days) && a.days.length ? a.days : [1]).includes(n));
-    const actBlocks = dayActs.map((a) => {
+    const standaloneActs = [];
+    dayActs.forEach((a) => {
       const master = a.activity && typeof a.activity === 'object' ? a.activity : null;
       const tk = (master?.ticketTypes || []).find((t2) => normName(t2.name) === normName(a.ticketType));
       const desc = stripHtml(tk?.details || master?.details || '');
       const photo = master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
-      if (!desc && !photo) return '';
       // Title shows the ferry/operator name without its category suffix; the
       // full ticket type stays in the chip below.
       const tkName = String(a.ticketType || '').split(':')[0].trim();
@@ -374,10 +395,37 @@ export function quotationHtml(q, org = null) {
         tlChip('&#128336;', 'Slot', fmtTime(a.slot)),
         tlChip('&#8986;', 'Duration', a.durationMins ? `${a.durationMins} mins` : ''),
       ].join('');
-      const inner = `<div class="tltitle">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`;
-      return tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, inner);
-    }).filter(Boolean).join('');
-    const richBlocks = svcBlocks + actBlocks;
+      const actText = `${a.name} ${a.ticketType} ${a.forService || tk?.forService || ''}`;
+      const isFerryAct = FERRY_RX.test(`${a.name} ${a.ticketType}`);
+      // Covered = one of the day's services already shows this ticket as its
+      // default chip (matched by keyword pair or the explicit forService link).
+      const covered = !isFerryAct && svcItems.some((s) =>
+        STD_TICKETS.some((e) => e.svc.test(s.keyNorm)
+          && (e.act.test(actText) || (a.forService && normName(a.forService) === s.keyNorm))));
+      if (covered) return;
+      if (desc || photo) {
+        standaloneActs.push({
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, `<div class="tltitle">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          ferry: isFerryAct,
+        });
+      } else if (a.name || a.ticketType) {
+        // No details/photo — still show the ticket as a compact row rather
+        // than dropping it from the itinerary.
+        standaloneActs.push({
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), '', `<div class="tltitle">${title2}</div>${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          ferry: isFerryAct,
+        });
+      }
+    });
+    // Ferry/cruise transfers lead the day (you travel first, then check in /
+    // sightsee) — everything else keeps its authored order.
+    const richItems = [
+      ...svcItems.map((s) => ({ html: tlRow(s.icon, s.photo, s.inner), ferry: s.ferry })),
+      ...standaloneActs,
+    ];
+    const ferryRows = richItems.filter((r) => r.ferry).map((r) => r.html).join('');
+    const otherRows = richItems.filter((r) => !r.ferry).map((r) => r.html).join('');
+    const richBlocks = ferryRows + otherRows;
     const describedKeys = new Set([
       ...dayTs
         .filter((t) => {
@@ -386,13 +434,9 @@ export function quotationHtml(q, org = null) {
           return stripHtml(item?.description || '') || item?.imageUrl || master?.imageUrl || svcImage(`${t.serviceType} ${t.serviceLocation}`);
         })
         .map((t) => normName(t.serviceType)),
-      ...dayActs
-        .filter((a) => {
-          const master = a.activity && typeof a.activity === 'object' ? a.activity : null;
-          const tk = (master?.ticketTypes || []).find((t2) => normName(t2.name) === normName(a.ticketType));
-          return stripHtml(tk?.details || master?.details || '') || master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
-        })
-        .flatMap((a) => [normName(a.name), normName([a.name, a.ticketType].filter(Boolean).join(' — '))]),
+      // Every activity renders as a block (nested or standalone) now, so all
+      // of their auto-built description lines are redundant.
+      ...dayActs.flatMap((a) => [normName(a.name), normName([a.name, a.ticketType].filter(Boolean).join(' — '))]),
     ]);
     const lines = String(d.description || '').split(/\n|·|•/).filter((x) => x.trim())
       .filter((l) => !describedKeys.has(lineKey(l)))
@@ -425,7 +469,7 @@ export function quotationHtml(q, org = null) {
         <span class="daycity">${esc(cityOfDay(n))}</span>
         ${date ? `<span class="dayhr"></span><span class="daydate">&#128197;&nbsp; ${fmtDateWD(date)}</span>` : ''}
       </div>
-      <div class="tlwrap">${hotelRows}${richBlocks}${lineRow}</div>
+      <div class="tlwrap">${hotelRows}${ferryRows}${otherRows}${lineRow}</div>
       ${sight ? `<div class="tlextra">${sight}</div>` : ''}
     </div>`;
   }).join('') || '<p class="muted">No day-wise itinerary added.</p>';
@@ -738,6 +782,9 @@ export function quotationHtml(q, org = null) {
   .hlab { min-width: 112px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue); }
   .hval { font-weight: 600; }
   .tchips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  /* Ticket nested under its matching service block */
+  .tksub { border-top: 1px dashed #cfdce9; margin-top: 10px; padding-top: 8px; }
+  .tksub-t { color: var(--blue); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; }
   .tchip { border: 1px solid #e2e9f0; background: #fbfcfe; border-radius: 10px; padding: 7px 15px; min-width: 96px; }
   .tclab { display: flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue); }
   .tcval { margin-top: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink); }

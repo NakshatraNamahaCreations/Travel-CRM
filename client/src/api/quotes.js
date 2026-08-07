@@ -10,6 +10,8 @@ export const quotesApi = {
   setStatus: (id, status) => api.patch(`/quotes/${id}/status`, { status }).then((r) => r.data.data),
   remove: (id) => api.delete(`/quotes/${id}`).then((r) => r.data.data),
   pdf: (id) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
+  // Same document as the PDF, as raw HTML — powers the on-screen preview.
+  pdfHtml: (id) => api.get(`/quotes/${id}/pdf`, { params: { format: 'html' }, responseType: 'text', transformResponse: [(d) => d] }).then((r) => r.data),
   voucherHtml: (id, params) => api.get(`/quotes/${id}/voucher`, { params: { ...params, format: 'html' }, responseType: 'text' }).then((r) => r.data),
   voucherPdf: (id, params) => api.get(`/quotes/${id}/voucher`, { params, responseType: 'blob' }).then((r) => r.data),
   email: (id, email) => api.post(`/quotes/${id}/email`, email ? { email } : {}).then((r) => r.data.data),

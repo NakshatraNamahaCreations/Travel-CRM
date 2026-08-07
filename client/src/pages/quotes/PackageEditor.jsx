@@ -129,9 +129,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   /* ----- Multi service-type support -----
      The Service Type field is a multi-select: the row keeps one type, and every
      additional tick mirrors into its own transport row (same master/location/
-     days) so each service keeps separate timings and price rows. The chips
-     show every type of the same location+days family; unticking one removes
-     that service row. */
+     days) so each service keeps separate timings. The chips show every type of
+     the same location+days family; unticking one removes that service row. */
   const trDaysKey = (t) => daysKey(t.days, [t.day || 1]);
   const trFamily = (t) => {
     const key = trDaysKey(t);
@@ -217,6 +216,13 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   /* ----- Activities / Tickets ----- */
   const setAct = (i, patch) => update({ activities: pkg.activities.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) });
   const addAct = (days = [1]) => update({ activities: [...(pkg.activities || []), emptyActivity(days)] });
+  // Add an Activity/Ticket pre-scoped to ONE service type — its Name picker
+  // then suggests only activities matching that service, and the PDF nests
+  // the ticket under that service's itinerary block.
+  const addActForService = (days = [1], serviceType = '') => {
+    update({ activities: [...(pkg.activities || []), { ...emptyActivity([...days]), forService: serviceType }] });
+    if (serviceType) toast(`Pick the ticket for “${serviceType}”`, { icon: '🎟️' });
+  };
   const rmAct = async (i) => { if (await confirm({ title: 'Remove this activity?', message: `${pkg.activities[i]?.name || 'This activity'} will be removed from the package.`, confirmLabel: 'Remove' })) update({ activities: pkg.activities.filter((_, idx) => idx !== i) }); };
   const setActItem = (ai, ii, patch) => setAct(ai, { items: (pkg.activities[ai].items || []).map((it, idx) => (idx === ii ? { ...it, ...patch } : it)) });
   const addActItem = (ai) => setAct(ai, { items: [...(pkg.activities[ai].items || []), { type: '', qty: 1, rate: 0, given: 0 }] });
@@ -280,6 +286,33 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const a = pkg.activities[ai];
     const actId = a.activity?._id || a.activity;
     if (!name || !actId) return setAct(ai, { ticketType: name || '' });
+
+    // Auto-fill Slot + Duration from the ticket type's master entry (the
+    // "Slots" / "Duration" fields authored on the activity, e.g. from the
+    // Excel import: "11:00-12:00" → slot 11:00, duration 60).
+    let master = a.activity;
+    if (master && !master.ticketTypes) master = await activitiesApi.get(actId).catch(() => null);
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const tk = (master?.ticketTypes || []).find((t) => norm(t.name) === norm(name));
+    const extra = {};
+    if (tk?.slots) {
+      const first = String(tk.slots).match(/(\d{1,2}):(\d{2})/);
+      if (first) extra.slot = `${first[1].padStart(2, '0')}:${first[2]}`;
+      // A "11:00-12:00" range implies the duration when none is authored.
+      const range = String(tk.slots).match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
+      if (range && !tk.duration) {
+        const mins = (+range[3] * 60 + +range[4]) - (+range[1] * 60 + +range[2]);
+        if (mins > 0) extra.durationMins = mins;
+      }
+    }
+    if (tk?.duration) {
+      const unit = norm(tk.durationUnit);
+      extra.durationMins = unit.startsWith('hour') ? tk.duration * 60 : unit.startsWith('day') ? tk.duration * 1440 : tk.duration;
+    }
+    // Master-authored service link: nests this ticket under its transport
+    // service in the PDF (the 🎟 button's explicit link keeps priority).
+    if (tk?.forService && !a.forService) extra.forService = tk.forService;
+
     // Child/infant ticket rows only when the trip actually has children.
     const hasChildren = (pax?.children?.length || 0) > 0;
     const configs = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean)
@@ -292,8 +325,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       if (r) hits++;
       items.push({ type: cfg, qty: 1, rate: r?.price || 0, given: r?.price || 0 });
     }
-    setAct(ai, { ticketType: name, items });
-    if (hits) toast.success(`Fetched ${hits} rate(s) from the activity price list`);
+    setAct(ai, { ticketType: name, items, ...extra });
+    const filled = [hits && `${hits} rate(s)`, extra.slot && `slot ${extra.slot}`, extra.durationMins && `${extra.durationMins} mins`].filter(Boolean);
+    if (filled.length) toast.success(`Auto-filled ${filled.join(' · ')} from the master`);
     else toast('No matching rate — enter manually', { icon: '✏️' });
   };
 
@@ -622,9 +656,13 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   </div>
                 </div>
 
-                {/* RIGHT: the day's services stacked inside one card */}
+                {/* RIGHT: the day's services stacked inside one card. An
+                    activity added for a specific service renders DIRECTLY
+                    under that service's section (matched via a.forService);
+                    unrelated activities go after all services. */}
                 <div className="flex-1 divide-y divide-gray-100">
-                  {g.tIdx.map((ti) => {
+                  {(() => {
+                  const renderTransport = (ti) => {
                     const t = pkg.transports[ti];
                     // Rows sharing this location+days form one family — only the
                     // first renders (as ONE card); the rest appear as timing
@@ -643,7 +681,10 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"><Bus size={12} /></span>
                           <span className="text-xs font-bold uppercase tracking-wide text-brand-700">Transport Service</span>
                           {t.serviceLocation && <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700">{t.serviceLocation}</span>}
-                          <button type="button" onClick={() => rmTrFamily(famRows)} title="Remove this service" className="ml-auto text-xs font-medium text-slate-400 hover:text-red-500">&#10005;</button>
+                          {famRows.length === 1 && t.serviceType && (
+                            <button type="button" title={`Add activity/ticket for ${t.serviceType}`} onClick={() => addActForService(g.days, t.serviceType)} className="ml-auto flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-600 transition hover:bg-violet-100"><Ticket size={12} /> Ticket</button>
+                          )}
+                          <button type="button" onClick={() => rmTrFamily(famRows)} title="Remove this service" className={cn('text-xs font-medium text-slate-400 hover:text-red-500', !(famRows.length === 1 && t.serviceType) && 'ml-auto')}>&#10005;</button>
                         </div>
                         <div className="flex gap-0">
                           {/* Service details */}
@@ -665,7 +706,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       {t.service && <p className="mt-1 text-[11px] text-green-600">✓ Linked to transport master — rates can auto-fill</p>}
                     </div>
                     <div>
-                      <label className="label">Service Type <span className="text-[10.5px] font-normal normal-case text-slate-400">(select one or more — each gets its own service row)</span></label>
+                      <label className="label">Service Type <span className="text-[10.5px] font-normal normal-case text-slate-400">(select one or more — each gets its own timing row)</span></label>
                       <AsyncSelect
                         isMulti
                         loadOptions={async (q) => {
@@ -694,6 +735,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                 <span className="flex-1 truncate text-xs font-semibold text-slate-700" title={ft.serviceType}>{ft.serviceType || '—'}</span>
                                 <input type="time" className="input w-28 py-1.5 text-xs" value={ft.startTime || ''} onChange={(e) => setTr(fi, { startTime: e.target.value })} />
                                 <input type="number" min="0" className="input w-20 py-1.5 text-xs" placeholder="Mins" value={ft.durationMins} onChange={(e) => setTr(fi, { durationMins: Number(e.target.value) })} />
+                                <button type="button" title={`Add activity/ticket for ${ft.serviceType || 'this service'}`} onClick={() => addActForService(g.days, ft.serviceType)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-600 transition hover:bg-violet-100"><Ticket size={13} /></button>
                               </div>
                             );
                           })}
@@ -799,9 +841,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         </div>
                       </div>
                     );
-                  })}
+                  };
                   {/* Activity / Ticket sub-blocks of this day */}
-                  {g.aIdx.map((ai) => {
+                  const renderActivity = (ai) => {
                     const a = pkg.activities[ai];
                     const aDays = Array.isArray(a.days) && a.days.length ? a.days : [1];
                     const configOptions = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean);
@@ -811,15 +853,35 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white shadow-sm"><Ticket size={12} /></span>
                           <span className="text-xs font-bold uppercase tracking-wide text-violet-700">Activity/Ticket</span>
                           {a.name && <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">{a.name}</span>}
+                          {a.forService && <span className="max-w-[280px] truncate rounded-full border border-violet-200 px-2.5 py-0.5 text-[11px] font-medium text-violet-500" title={a.forService}>for: {a.forService}</span>}
                           <button type="button" onClick={() => rmAct(ai)} title="Remove this activity" className="ml-auto text-xs font-medium text-slate-400 hover:text-red-500">&#10005;</button>
                         </div>
                         <div className="flex gap-0">
                           {/* Activity details */}
                           <div className="flex-1 p-4 space-y-3">
                     <div>
-                      <label className="label">Name</label>
+                      <label className="label">Name <span className="text-[10.5px] font-normal normal-case text-slate-400">(matched to this day's services)</span></label>
                       <AsyncSelect
-                        loadOptions={(q) => activitiesApi.list({ search: q }).then((r) => (r.data || []).map((x) => ({ _id: x._id, name: x.name, raw: x })))}
+                        loadOptions={async (qs) => {
+                          const list = ((await activitiesApi.list({ search: qs })).data || [])
+                            .map((x) => ({ _id: x._id, name: x.name, raw: x }));
+                          // Scope suggestions to the day's transport services:
+                          // an activity is relevant when its name shares a word
+                          // with the group's service locations/types (e.g. a
+                          // "Port Blair Arrival" day surfaces the Port Blair
+                          // activity). Falls back to the full list when nothing
+                          // matches so no activity is ever unreachable.
+                          // A ticket added from a specific service type scopes
+                          // to that service alone; otherwise the whole day.
+                          const ctx = (a.forService || g.tIdx
+                            .map((i2) => pkg.transports[i2])
+                            .flatMap((t2) => [t2.serviceLocation, t2.serviceType])
+                            .filter(Boolean).join(' ')).toLowerCase();
+                          if (!ctx) return list;
+                          const relevant = list.filter((o) =>
+                            o.name.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.length > 3 && ctx.includes(w)));
+                          return relevant.length ? relevant : list;
+                        }}
                         value={a.name ? { _id: a.activity?._id || a.activity || a.name, name: a.name } : null}
                         onChange={(v) => setAct(ai, { activity: v?.raw || null, name: v ? v.name : '', ticketType: '', items: [] })}
                         creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
@@ -924,7 +986,24 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         </div>
                       </div>
                     );
-                  })}
+                  };
+                  // Activities created from a service (🎟 button) slot in right
+                  // after that service's section; the rest go at the end.
+                  const attachedByHost = new Map();
+                  const looseActs = [];
+                  g.aIdx.forEach((ai2) => {
+                    const svc = pkg.activities[ai2]?.forService;
+                    const hostTi = svc ? g.tIdx.find((ti2) => pkg.transports[ti2].serviceType === svc) : undefined;
+                    if (hostTi !== undefined) {
+                      if (!attachedByHost.has(hostTi)) attachedByHost.set(hostTi, []);
+                      attachedByHost.get(hostTi).push(ai2);
+                    } else looseActs.push(ai2);
+                  });
+                  return [
+                    ...g.tIdx.flatMap((ti2) => [renderTransport(ti2), ...(attachedByHost.get(ti2) || []).map(renderActivity)]),
+                    ...looseActs.map(renderActivity),
+                  ];
+                  })()}
 
                   {/* Add more services to this day */}
                   <div className="flex gap-2 bg-slate-50/50 p-4">

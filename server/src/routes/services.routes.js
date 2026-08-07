@@ -67,6 +67,7 @@ function priceAdvancedFilter(q) {
 function activityAdvancedFilter(q) {
   const f = {};
   if (q.destinations) f.destinations = { $in: asArray(q.destinations) };
+  if (q.kind) f.kind = q.kind; // 'ticket' | 'activity'
   // ?city= matches the activity name or its pickup/drop locations ($and so it
   // composes with the search $or built by crudFactory).
   if (q.city) {
