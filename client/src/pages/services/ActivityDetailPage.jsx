@@ -4,15 +4,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Pencil, MoreVertical, Power, Trash2, ImagePlus, ImageOff, RefreshCw, GripVertical, User } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { activitiesApi } from '../../api/services.js';
+import { activitiesApi, transportApi } from '../../api/services.js';
 import Modal from '../../components/ui/Modal.jsx';
 import ImageUrlInput from '../../components/form/ImageUrlInput.jsx';
+import RichTextEditor from '../../components/form/RichTextEditor.jsx';
+import { DayPicker, IntervalList } from '../../components/form/Repeaters.jsx';
+import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
+const DURATION_UNITS = ['mins', 'hours', 'days'];
+
 const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : null);
 
-function TicketMenu({ ticket, onImage, onToggle, onDelete, editTo }) {
+function TicketMenu({ ticket, onImage, onToggle, onDelete, onEdit }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -20,18 +25,16 @@ function TicketMenu({ ticket, onImage, onToggle, onDelete, editTo }) {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
-  const Item = ({ icon: Icon, children, onClick, to, danger }) => {
+  const Item = ({ icon: Icon, children, onClick, danger }) => {
     const cls = cn('flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm', danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50');
-    return to
-      ? <Link to={to} onClick={() => setOpen(false)} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} />{children}</Link>
-      : <button onClick={() => { setOpen(false); onClick(); }} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} />{children}</button>;
+    return <button onClick={() => { setOpen(false); onClick(); }} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} />{children}</button>;
   };
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><MoreVertical size={16} /></button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-          <Item icon={Pencil} to={editTo}>Edit</Item>
+          <Item icon={Pencil} onClick={onEdit}>Edit</Item>
           <Item icon={ImagePlus} onClick={onImage}>{ticket.imageUrl ? 'Change Image' : 'Add Image'}</Item>
           <Item icon={Power} onClick={onToggle}>{ticket.isActive === false ? 'Enable' : 'Disable'}</Item>
           <div className="my-1 border-t border-slate-100" />
@@ -39,6 +42,90 @@ function TicketMenu({ ticket, onImage, onToggle, onDelete, editTo }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Edits ONE ticket/package type in a focused popup instead of the whole
+// multi-ticket form — some activities (ferry routes) have 15+ ticket types.
+function EditTicketTypeModal({ ticket, useSameClosing, onClose, onSave, isPending }) {
+  const [f, setF] = useState({
+    name: ticket.name || '',
+    internalRefCode: ticket.internalRefCode || '',
+    forService: ticket.forService || '',
+    slots: ticket.slots || '',
+    duration: ticket.duration ?? '',
+    durationUnit: ticket.durationUnit || 'mins',
+    details: ticket.details || '',
+    closedDays: ticket.closedDays || [],
+    closedDates: ticket.closedDates || [],
+  });
+  const set = (patch) => setF((s) => ({ ...s, ...patch }));
+  const submit = () => onSave({
+    ...ticket,
+    name: f.name,
+    internalRefCode: f.internalRefCode || undefined,
+    forService: f.forService || undefined,
+    slots: f.slots || undefined,
+    duration: f.duration !== '' ? Number(f.duration) : undefined,
+    durationUnit: f.durationUnit,
+    details: f.details || undefined,
+    closedDays: useSameClosing ? [] : f.closedDays,
+    closedDates: useSameClosing ? [] : f.closedDates.filter((d) => d.start && d.end),
+  });
+  return (
+    <Modal open onClose={onClose} title="Edit Ticket / Package" width="max-w-2xl">
+      <div className="space-y-3">
+        <div><label className="label">Name</label><input className="input" value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Premium" /></div>
+        <div>
+          <label className="label">For Service <span className="label-optional">(optional — links this ticket to a transport service, so it shows under that service in quotations)</span></label>
+          <AsyncSelect
+            loadOptions={async (qs) => {
+              const list = (await transportApi.list({ search: qs, limit: 50 }).catch(() => ({ data: [] }))).data || [];
+              const names = [...new Set(list.flatMap((s) => (s.items || []).map((it) => it.name)).filter(Boolean))];
+              const term = (qs || '').toLowerCase();
+              return names.filter((nm) => nm.toLowerCase().includes(term)).map((nm) => ({ _id: nm, name: nm }));
+            }}
+            value={f.forService ? { _id: f.forService, name: f.forService } : null}
+            onChange={(v) => set({ forService: v ? v.name : '' })}
+            creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+            placeholder="e.g. Cellular Jail Visit with Sound & Light Show"
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label className="label">Internal Ref Code <span className="label-optional">(optional)</span></label><input className="input" value={f.internalRefCode} onChange={(e) => set({ internalRefCode: e.target.value })} placeholder="e.g. 1PXABC" /></div>
+          <div><label className="label">Slots <span className="label-optional">(optional)</span></label><input className="input" value={f.slots} onChange={(e) => set({ slots: e.target.value })} placeholder="11:00, 13:00" /></div>
+        </div>
+        <div>
+          <label className="label">Duration <span className="label-optional">(optional)</span></label>
+          <div className="flex gap-2">
+            <input type="number" min="0" className="input" value={f.duration} onChange={(e) => set({ duration: e.target.value })} placeholder="30" />
+            <select className="input w-28" value={f.durationUnit} onChange={(e) => set({ durationUnit: e.target.value })}>
+              {DURATION_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="label">Itinerary/Details <span className="label-optional">(optional)</span></label>
+          <RichTextEditor value={f.details} onChange={(html) => set({ details: html })} placeholder="Some details regarding this ticket type" minHeight="90px" />
+        </div>
+        {!useSameClosing && (
+          <>
+            <div>
+              <label className="label">Closed on Days of Week <span className="label-optional">(optional)</span></label>
+              <DayPicker value={f.closedDays} onChange={(v) => set({ closedDays: v })} />
+            </div>
+            <div>
+              <label className="label">Closed on Dates / Intervals</label>
+              <IntervalList value={f.closedDates} onChange={(v) => set({ closedDates: v })} />
+            </div>
+          </>
+        )}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="btn-secondary">Cancel</button>
+        <button onClick={submit} disabled={isPending || !f.name.trim()} className="btn-primary">{isPending ? 'Saving…' : 'Save'}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -91,6 +178,7 @@ export default function ActivityDetailPage() {
   const [showRearrange, setShowRearrange] = useState(false);
   const [imgTarget, setImgTarget] = useState(null);
   const [imgUrl, setImgUrl] = useState('');
+  const [editTicket, setEditTicket] = useState(null); // ticket type being edited in the focused popup
 
   const { data: a, isLoading } = useQuery({ queryKey: ['activity', id], queryFn: () => activitiesApi.get(id) });
 
@@ -128,6 +216,10 @@ export default function ActivityDetailPage() {
     if (!(await confirm({ title: 'Delete ticket?', message: `"${ticket.name}" will be removed.`, confirmLabel: 'Delete', danger: true }))) return;
     const ticketTypes = (a.ticketTypes || []).filter((t) => t._id !== ticket._id);
     ticketsMut.mutate({ ticketTypes, msg: 'Ticket deleted' });
+  };
+  const saveEditedTicket = (updated) => {
+    const ticketTypes = (a.ticketTypes || []).map((t) => (t._id === updated._id ? updated : t));
+    ticketsMut.mutate({ ticketTypes, msg: 'Ticket updated' }, { onSuccess: () => setEditTicket(null) });
   };
 
   if (isLoading) return <div className="py-20 text-center text-gray-400">Loading…</div>;
@@ -227,7 +319,7 @@ export default function ActivityDetailPage() {
                         <h3 className="font-semibold text-gray-900">{t.name}</h3>
                         <TicketMenu
                           ticket={t}
-                          editTo={`/services/activities/${id}/edit`}
+                          onEdit={() => setEditTicket(t)}
                           onImage={() => openImg({ kind: 'ticket', ticket: t })}
                           onToggle={() => toggleTicket(t)}
                           onDelete={() => deleteTicket(t)}
@@ -309,6 +401,16 @@ export default function ActivityDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {editTicket && (
+        <EditTicketTypeModal
+          ticket={editTicket}
+          useSameClosing={a.useSameClosing ?? true}
+          isPending={ticketsMut.isPending}
+          onClose={() => setEditTicket(null)}
+          onSave={saveEditedTicket}
+        />
+      )}
     </div>
   );
 }

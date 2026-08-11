@@ -8,6 +8,8 @@ import { transportApi } from '../../api/services.js';
 import { activityLogApi } from '../../api/activities.js';
 import Modal from '../../components/ui/Modal.jsx';
 import ImageUrlInput from '../../components/form/ImageUrlInput.jsx';
+import RichTextEditor from '../../components/form/RichTextEditor.jsx';
+import { DayPicker, IntervalList } from '../../components/form/Repeaters.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
@@ -15,7 +17,7 @@ const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : '—');
 // Avoid "Route - Route" when the item name equals the route name.
 const serviceTitle = (route, item) => (item.name === route ? item.name : `${route} - ${item.name}`);
 
-function ServiceMenu({ item, editTo, onImage, onToggle, onDelete }) {
+function ServiceMenu({ item, onEdit, onImage, onToggle, onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -23,18 +25,16 @@ function ServiceMenu({ item, editTo, onImage, onToggle, onDelete }) {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
-  const Item = ({ icon: Icon, children, onClick, to, danger }) => {
+  const Item = ({ icon: Icon, children, onClick, danger }) => {
     const cls = cn('flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm', danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50');
-    return to
-      ? <Link to={to} onClick={() => setOpen(false)} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} /> {children}</Link>
-      : <button onClick={() => { setOpen(false); onClick(); }} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} /> {children}</button>;
+    return <button onClick={() => { setOpen(false); onClick(); }} className={cls}><Icon size={15} className={danger ? '' : 'text-slate-400'} /> {children}</button>;
   };
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Options"><MoreVertical size={16} /></button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-          <Item icon={Pencil} to={editTo}>Edit Service</Item>
+          <Item icon={Pencil} onClick={onEdit}>Edit Service</Item>
           <Item icon={ImagePlus} onClick={onImage}>{item.imageUrl ? 'Change Image' : 'Add Image'}</Item>
           <Item icon={Power} onClick={onToggle}>{item.isActive === false ? 'Enable' : 'Disable'}</Item>
           <div className="my-1 border-t border-slate-100" />
@@ -42,6 +42,66 @@ function ServiceMenu({ item, editTo, onImage, onToggle, onDelete }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Edits ONE service item in a focused popup — not the whole multi-item form,
+// which for a route with a dozen+ services was confusing to land on when you
+// only wanted to tweak one.
+function EditServiceItemModal({ item, onClose, onSave, isPending }) {
+  const [f, setF] = useState({
+    name: item.name || '',
+    serviceCode: item.serviceCode || '',
+    distanceKms: item.distanceKms || 0,
+    startTime: item.startTime || '',
+    durationMins: item.durationMins || 60,
+    closedDays: item.closedDays || [],
+    closedDates: item.closedDates || [],
+    description: item.description || '',
+  });
+  const set = (patch) => setF((s) => ({ ...s, ...patch }));
+  const submit = () => onSave({
+    ...item,
+    name: f.name,
+    serviceCode: f.serviceCode || undefined,
+    distanceKms: Number(f.distanceKms) || 0,
+    startTime: f.startTime || undefined,
+    durationMins: Number(f.durationMins) || 60,
+    closedDays: f.closedDays,
+    closedDates: f.closedDates.filter((d) => d.start && d.end),
+    description: f.description || undefined,
+  });
+  return (
+    <Modal open onClose={onClose} title="Edit Service" width="max-w-2xl">
+      <div className="space-y-3">
+        <div><label className="label">Service Name</label><input className="input" value={f.name} onChange={(e) => set({ name: e.target.value })} /></div>
+        <div>
+          <label className="label">Service Code Name <span className="label-optional">(optional)</span></label>
+          <input className="input" value={f.serviceCode} onChange={(e) => set({ serviceCode: e.target.value })} placeholder="e.g. SUPPLIER OR SPECIFIC HIDDEN DETAILS" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div><label className="label">Distance (kms) <span className="label-optional">(optional)</span></label><input type="number" className="input" value={f.distanceKms} onChange={(e) => set({ distanceKms: e.target.value })} /></div>
+          <div><label className="label">Start Time <span className="label-optional">(optional)</span></label><input className="input" value={f.startTime} onChange={(e) => set({ startTime: e.target.value })} placeholder="e.g. 13:00" /></div>
+          <div><label className="label">Duration (in mins) <span className="label-optional">(optional)</span></label><input type="number" className="input" value={f.durationMins} onChange={(e) => set({ durationMins: e.target.value })} /></div>
+        </div>
+        <div>
+          <label className="label">Closed on Days of Week <span className="label-optional">(optional)</span></label>
+          <DayPicker value={f.closedDays} onChange={(v) => set({ closedDays: v })} />
+        </div>
+        <div>
+          <label className="label">Closed on Dates / Intervals</label>
+          <IntervalList value={f.closedDates} onChange={(v) => set({ closedDates: v })} />
+        </div>
+        <div>
+          <label className="label">Description</label>
+          <RichTextEditor value={f.description} onChange={(html) => set({ description: html })} placeholder="Upon your arrival at the hotel, take some time to freshen up..." />
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="btn-secondary">Cancel</button>
+        <button onClick={submit} disabled={isPending || !f.name.trim()} className="btn-primary">{isPending ? 'Saving…' : 'Save Service'}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -111,6 +171,7 @@ export default function TransportDetailPage() {
   const [showRearrange, setShowRearrange] = useState(false);
   const [imgTarget, setImgTarget] = useState(null); // { kind:'header' } | { kind:'item', item } | null
   const [imgUrl, setImgUrl] = useState('');
+  const [editItem, setEditItem] = useState(null); // service item being edited in the focused popup
 
   const { data: t, isLoading } = useQuery({ queryKey: ['transport', id], queryFn: () => transportApi.get(id) });
   const { data: activities = [], isLoading: logLoading } = useQuery({
@@ -149,6 +210,10 @@ export default function TransportDetailPage() {
     if (!(await confirm({ title: 'Delete service?', message: `“${item.name}” will be removed from this transport service.`, confirmLabel: 'Delete', danger: true }))) return;
     const items = (t.items || []).filter((it) => it._id !== item._id);
     itemsMut.mutate({ items, msg: 'Service deleted' });
+  };
+  const saveEditedItem = (updated) => {
+    const items = (t.items || []).map((it) => (it._id === updated._id ? updated : it));
+    itemsMut.mutate({ items, msg: 'Service updated' }, { onSuccess: () => setEditItem(null) });
   };
 
   if (isLoading) return <div className="py-20 text-center text-gray-400">Loading…</div>;
@@ -229,7 +294,7 @@ export default function TransportDetailPage() {
                       <h3 className="font-semibold text-gray-900">{serviceTitle(t.name, it)}</h3>
                       <ServiceMenu
                         item={it}
-                        editTo={`/services/transport/${t._id}/edit`}
+                        onEdit={() => setEditItem(it)}
                         onImage={() => openImg({ kind: 'item', item: it })}
                         onToggle={() => toggleItem(it)}
                         onDelete={() => deleteItem(it)}
@@ -311,6 +376,15 @@ export default function TransportDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {editItem && (
+        <EditServiceItemModal
+          item={editItem}
+          isPending={itemsMut.isPending}
+          onClose={() => setEditItem(null)}
+          onSave={saveEditedItem}
+        />
+      )}
     </div>
   );
 }
