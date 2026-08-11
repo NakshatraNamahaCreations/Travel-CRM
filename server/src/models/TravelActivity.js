@@ -16,6 +16,7 @@ const ticketTypeSchema = new mongoose.Schema(
     duration: { type: Number }, // numeric duration
     durationUnit: { type: String, trim: true, default: 'mins' }, // mins / hours / days
     details: { type: String, trim: true }, // itinerary / inclusions (markdown)
+    imageUrl: { type: String }, // per-ticket photo (e.g. each ferry operator/class has its own)
     // Per-ticket closing (used when the activity does not share closing across tickets).
     closedDays: [{ type: String, trim: true }],
     closedDates: [intervalSchema],

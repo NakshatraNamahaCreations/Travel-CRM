@@ -389,7 +389,7 @@ export function quotationHtml(q, org = null) {
       return {
         icon: tlIcon(`${t.serviceType} ${t.serviceLocation}`),
         photo,
-        inner: `<div class="tltitle${isFerrySvc ? ' dark' : ''}">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`,
+        inner: `<div class="tltitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`,
         ferry: isFerrySvc,
         keyNorm: normName(t.serviceType || ''),
       };
@@ -403,7 +403,10 @@ export function quotationHtml(q, org = null) {
       const master = a.activity && typeof a.activity === 'object' ? a.activity : null;
       const tk = (master?.ticketTypes || []).find((t2) => normName(t2.name) === normName(a.ticketType));
       const desc = stripHtml(tk?.details || master?.details || '');
-      const photo = master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
+      // The specific ticket type's own photo first (e.g. each ferry
+      // operator/class has its own boat photo), then the activity's shared
+      // photo, then a keyword-matched stock image as a last resort.
+      const photo = tk?.imageUrl || master?.imageUrl || svcImage(`${a.name} ${a.ticketType}`);
       // Title shows the ferry/operator name without its category suffix; the
       // full ticket type stays in the chip below.
       const tkName = String(a.ticketType || '').split(':')[0].trim();
@@ -423,17 +426,16 @@ export function quotationHtml(q, org = null) {
         STD_TICKETS.some((e) => e.svc.test(s.keyNorm)
           && (e.act.test(actText) || (a.forService && normName(a.forService) === s.keyNorm))));
       if (covered) return;
-      const titleCls = `tltitle${isFerryAct ? ' dark' : ''}`;
       if (desc || photo) {
         standaloneActs.push({
-          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, `<div class="${titleCls}">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, `<div class="tltitle">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`),
           ferry: isFerryAct,
         });
       } else if (a.name || a.ticketType) {
         // No details/photo — still show the ticket as a compact row rather
         // than dropping it from the itinerary.
         standaloneActs.push({
-          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), '', `<div class="${titleCls}">${title2}</div>${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), '', `<div class="tltitle">${title2}</div>${chips ? `<div class="tchips">${chips}</div>` : ''}`),
           ferry: isFerryAct,
         });
       }
@@ -811,8 +813,7 @@ export function quotationHtml(q, org = null) {
   .tlbody { flex: 1; min-width: 0; display: flex; gap: 15px; align-items: flex-start; }
   .tlphoto { width: 168px; height: 118px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.15); }
   .tlinfo { flex: 1; min-width: 0; }
-  .tltitle { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
-  .tltitle.dark { color: var(--ink); }
+  .tltitle { color: #37475a; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
   .tlname { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
   .tldesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 6px; }
   .hdet { margin-top: 7px; }

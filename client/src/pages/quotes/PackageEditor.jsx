@@ -386,11 +386,19 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     if (master && !master.ticketTypes) master = await activitiesApi.get(actId).catch(() => null);
     const norm = (s) => String(s || '').trim().toLowerCase();
     const tk = (master?.ticketTypes || []).find((t) => norm(t.name) === norm(name));
-    const extra = {};
+    const extra = { slotOptions: [] };
     if (tk?.slots) {
       // Slot is free text now (matches the master's own format, e.g. "11:00,
-      // 13:00" or "10:00 AM-11:00 AM") — no HH:MM normalisation needed.
-      extra.slot = tk.slots;
+      // 13:00" or "10:00 AM-11:00 AM") — no HH:MM normalisation needed. A
+      // comma-separated list of distinct times (not a "start-end" range)
+      // becomes a dropdown of choices instead of a single auto-filled value.
+      const commaOpts = String(tk.slots).split(',').map((s) => s.trim()).filter(Boolean);
+      if (commaOpts.length > 1) {
+        extra.slotOptions = commaOpts;
+        extra.slot = commaOpts[0];
+      } else {
+        extra.slot = tk.slots;
+      }
       // A "11:00-12:00" range implies the duration when none is authored.
       const range = String(tk.slots).match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
       if (range && !tk.duration) {
@@ -1032,7 +1040,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Slot</label>
-                        <input type="text" className="input" placeholder="e.g. 10:00 AM" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
+                        {a.slotOptions?.length > 1 ? (
+                          <select className="input" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })}>
+                            {!a.slotOptions.includes(a.slot) && <option value={a.slot}>{a.slot || 'Select…'}</option>}
+                            {a.slotOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        ) : (
+                          <input type="text" className="input" placeholder="e.g. 10:00 AM" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
+                        )}
                       </div>
                       <div>
                         <label className="label">Duration (Mins)</label>
