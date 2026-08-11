@@ -492,7 +492,7 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
       },
       buyer: { name: guestName, address: '', email: '', gstin: '' },
       placeOfSupply: (ctx.destinations || [])[0] || '',
-      dueDate: '',
+      paymentDate: ctx.paidOn ? format(new Date(ctx.paidOn), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       paymentMode: '',
       invoiceDate: format(new Date(), 'yyyy-MM-dd'),
       particulars: `Payment received towards Trip# ${ctx.tripId || ''} - ${(ctx.destinations || []).join(', ')} Package`,
@@ -554,7 +554,7 @@ function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
   const [form, setForm] = useState(() => ({
     ...initial,
     invoiceDate: initial.invoiceDate ? format(new Date(initial.invoiceDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-    dueDate: initial.dueDate ? format(new Date(initial.dueDate), 'yyyy-MM-dd') : '',
+    paymentDate: initial.paymentDate ? format(new Date(initial.paymentDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
   }));
   const [confirmed, setConfirmed] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -574,7 +574,7 @@ function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
       seller: form.seller,
       buyer: form.buyer,
       placeOfSupply: form.placeOfSupply,
-      dueDate: form.dueDate || undefined,
+      paymentDate: form.paymentDate || undefined,
       paymentMode: form.paymentMode,
       invoiceDate: form.invoiceDate || undefined,
       particulars: form.particulars,
@@ -614,7 +614,7 @@ function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div><label className="label">Place of Supply</label><input className="input" placeholder="e.g. Andaman and Nicobar Islands" value={form.placeOfSupply || ''} onChange={(e) => set({ placeOfSupply: e.target.value })} /></div>
         <div><label className="label">Invoice Date</label><input type="date" className="input" value={form.invoiceDate || ''} onChange={(e) => set({ invoiceDate: e.target.value })} /></div>
-        <div><label className="label">Payment Due Date <span className="font-normal text-gray-400">(optional)</span></label><input type="date" className="input" value={form.dueDate || ''} onChange={(e) => set({ dueDate: e.target.value })} /></div>
+        <div><label className="label">Payment Date</label><input type="date" className="input" value={form.paymentDate || ''} onChange={(e) => set({ paymentDate: e.target.value })} /></div>
         <div><label className="label">Payment Mode <span className="font-normal text-gray-400">(optional)</span></label><input className="input" placeholder="e.g. Bank Transfer" value={form.paymentMode || ''} onChange={(e) => set({ paymentMode: e.target.value })} /></div>
       </div>
 

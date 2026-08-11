@@ -1583,6 +1583,9 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
   // it only becomes available once everything due has been paid.
   const isFullyPaid = effectiveTotal > 0 && paidTotal >= effectiveTotal;
   const [gstOpen, setGstOpen] = useState(false);
+  // Latest instalment's paid date — used to default the GST invoice's
+  // Payment Date to when the final payment actually came in.
+  const lastPaidOn = rows.filter((r) => r.paid && r.paidOn).map((r) => r.paidOn).sort().slice(-1)[0];
   const gstCtx = {
     query: id,
     booking: bookingId,
@@ -1591,6 +1594,7 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
     destinations: rows[0]?.destinations,
     paidAmount: paidTotal,
     amount: effectiveTotal,
+    paidOn: lastPaidOn,
   };
   const [waInst, setWaInst] = useState(null); // instalment being sent a WhatsApp template for
 

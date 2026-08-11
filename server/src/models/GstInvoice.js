@@ -36,7 +36,7 @@ const gstInvoiceSchema = new mongoose.Schema(
     },
 
     placeOfSupply: { type: String, trim: true },
-    dueDate: { type: Date },
+    paymentDate: { type: Date }, // when the payment this invoice documents was actually received
     paymentMode: { type: String, trim: true },
     particulars: { type: String, trim: true },
     hsn: { type: String, trim: true }, // HSN/SAC code

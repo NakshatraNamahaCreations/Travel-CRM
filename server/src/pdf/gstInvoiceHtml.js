@@ -87,7 +87,7 @@ export function gstInvoiceHtml(inv, org = null) {
         ${inv.placeOfSupply ? `<div class="line">Place of Supply: ${esc(inv.placeOfSupply)}</div>` : ''}
       </div>
       <div>
-        <div class="line">Payment Due Date: ${inv.dueDate ? fmtDate(inv.dueDate) : '—'}</div>
+        <div class="line">Payment Date: ${inv.paymentDate ? fmtDate(inv.paymentDate) : fmtDate(inv.invoiceDate || inv.createdAt)}</div>
         <div class="line">Payment Mode: ${esc(inv.paymentMode || '—')}</div>
       </div>
     </div>
