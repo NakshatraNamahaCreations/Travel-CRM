@@ -23,7 +23,7 @@ import Modal from '../../components/ui/Modal.jsx';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
 import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
 import ServiceBookingsTab from '../../components/trips/ServiceBookingsTab.jsx';
-import { ProformaSection, ProfitSection } from '../../components/trips/AccountingSections.jsx';
+import { ProformaSection, ProfitSection, GstInvoiceModal } from '../../components/trips/AccountingSections.jsx';
 import DocsVouchers from '../../components/trips/DocsVouchers.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 
@@ -1473,6 +1473,68 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
   );
 }
 
+// Sends a pre-approved WhatsApp template (e.g. a payment thank-you) via
+// Gallabox for a paid instalment. templateName + variable names must match
+// exactly what was created and approved in the Gallabox dashboard — this
+// just pre-fills sensible guesses (CustomerName/PaymentReceived/etc.) that
+// the agent can rename/edit before sending.
+function WhatsAppTemplateModal({ inst, onClose }) {
+  const guestName = [inst?.guest?.salutation, inst?.guest?.name].filter(Boolean).join(' ') || 'Guest';
+  const [templateName, setTemplateName] = useState('');
+  const [vars, setVars] = useState(() => [
+    { key: 'CustomerName', value: guestName },
+    { key: 'PaymentReceived', value: `₹${(inst?.paidAmount || inst?.amount || 0).toLocaleString('en-IN')}` },
+    { key: 'InvoiceNumber', value: inst?.tripId ? `Trip# ${inst.tripId}` : '' },
+    { key: 'CompanyName', value: company.name },
+  ]);
+  const setVar = (i, patch) => setVars((v) => v.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  const addVar = () => setVars((v) => [...v, { key: '', value: '' }]);
+  const rmVar = (i) => setVars((v) => v.filter((_, idx) => idx !== i));
+
+  const mut = useMutation({
+    mutationFn: () => installmentsApi.sendWhatsAppTemplate(inst._id, {
+      templateName: templateName.trim(),
+      bodyValues: Object.fromEntries(vars.filter((v) => v.key.trim()).map((v) => [v.key.trim(), v.value])),
+    }),
+    onSuccess: () => { toast.success('WhatsApp template sent'); onClose(); },
+    onError: (e) => toast.error(e.response?.data?.message || e.message || 'Could not send'),
+  });
+
+  if (!inst) return null;
+  return (
+    <Modal open onClose={onClose} title="Send WhatsApp Template" width="max-w-md">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-400">
+          Sends a template already created and approved in your Gallabox dashboard — the name and variables below must match it exactly.
+        </p>
+        <div>
+          <label className="label">Template Name</label>
+          <input className="input" placeholder="e.g. payment_thank_you" value={templateName} onChange={(e) => setTemplateName(e.target.value)} autoFocus />
+        </div>
+        <div>
+          <label className="label">Variables</label>
+          <div className="space-y-2">
+            {vars.map((v, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input className="input w-2/5 text-sm" placeholder="Variable name" value={v.key} onChange={(e) => setVar(i, { key: e.target.value })} />
+                <input className="input flex-1 text-sm" placeholder="Value" value={v.value} onChange={(e) => setVar(i, { value: e.target.value })} />
+                <button onClick={() => rmVar(i)} className="text-gray-300 hover:text-red-500">✕</button>
+              </div>
+            ))}
+          </div>
+          <button onClick={addVar} className="btn-secondary mt-2 text-xs">+ Add Variable</button>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending || !templateName.trim()} className="btn-primary">
+            {mut.isPending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 const ACCOUNTING_SECTIONS = [
   { key: 'payments', label: 'Payments' },
   { key: 'proforma', label: 'Proforma Invoice' },
@@ -1517,6 +1579,20 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
   const STATUS = { paid: 'text-green-700 bg-green-50', overdue: 'text-rose-700 bg-rose-50', unverified: 'text-amber-700 bg-amber-50', upcoming: 'text-slate-600 bg-slate-100' };
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [payInst, setPayInst] = useState(null); // instalment being paid
+  // GST Invoice covers the trip's full payment, not individual instalments —
+  // it only becomes available once everything due has been paid.
+  const isFullyPaid = effectiveTotal > 0 && paidTotal >= effectiveTotal;
+  const [gstOpen, setGstOpen] = useState(false);
+  const gstCtx = {
+    query: id,
+    booking: bookingId,
+    tripId: rows[0]?.tripId,
+    guest: rows[0]?.guest,
+    destinations: rows[0]?.destinations,
+    paidAmount: paidTotal,
+    amount: effectiveTotal,
+  };
+  const [waInst, setWaInst] = useState(null); // instalment being sent a WhatsApp template for
 
   const openReceipt = async (r) => {
     const t = toast.loading('Preparing receipt…');
@@ -1534,13 +1610,26 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
     <div>
       <div className="min-w-0 flex-1">
         <h3 className="mb-3 font-semibold text-gray-900">Payments from customer</h3>
-        <div className="mb-4 rounded-xl border border-gray-200 bg-white px-5 py-3">
-          <p className="text-xs uppercase tracking-wide text-gray-400">INR</p>
-          <p className="text-xl font-bold text-gray-900">
-            <span className="text-green-600">+ {paidTotal.toLocaleString('en-IN')}</span>
-            {' '}<span className="text-gray-300">/</span>{' '}
-            {effectiveTotal.toLocaleString('en-IN')}
-          </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-gray-400">INR</p>
+            <p className="text-xl font-bold text-gray-900">
+              <span className="text-green-600">+ {paidTotal.toLocaleString('en-IN')}</span>
+              {' '}<span className="text-gray-300">/</span>{' '}
+              {effectiveTotal.toLocaleString('en-IN')}
+            </p>
+          </div>
+          {isFullyPaid ? (
+            <button
+              onClick={() => setGstOpen(true)}
+              title="Create / download the GST tax invoice for the full payment received"
+              className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
+            >
+              <FileText size={13} className="mr-1 inline" /> GST Invoice
+            </button>
+          ) : (
+            <p className="text-xs text-gray-400">GST Invoice unlocks once the full amount is paid.</p>
+          )}
         </div>
         {isLoading ? <div className="py-10 text-center text-gray-400">Loading…</div> : !rows.length ? (
           <div className="card p-8 text-center text-sm text-gray-400">No instalment schedule yet. It is generated when the booking is created.</div>
@@ -1579,13 +1668,22 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
                           + Add Payment
                         </button>
                       ) : (
-                        <button
-                          onClick={() => openReceipt(r)}
-                          title="Download the payment receipt PDF"
-                          className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700"
-                        >
-                          <FileText size={12} className="mr-1 inline" /> Receipt
-                        </button>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => openReceipt(r)}
+                            title="Download the payment receipt PDF"
+                            className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700"
+                          >
+                            <FileText size={12} className="mr-1 inline" /> Receipt
+                          </button>
+                          <button
+                            onClick={() => setWaInst(r)}
+                            title="Send a WhatsApp template message for this payment"
+                            className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          >
+                            <MessageSquare size={12} className="mr-1 inline" /> WhatsApp
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1620,6 +1718,8 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
           onSaved={() => qc.invalidateQueries({ queryKey: ['inst', id] })}
         />
       )}
+      <GstInvoiceModal installment={gstCtx} open={gstOpen} onClose={() => setGstOpen(false)} />
+      {waInst && <WhatsAppTemplateModal inst={waInst} onClose={() => setWaInst(null)} />}
     </div>
   );
 }

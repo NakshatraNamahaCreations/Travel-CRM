@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { hotelsApi } from '../../api/services.js';
 import StarRating from '../../components/ui/StarRating.jsx';
 import Modal from '../../components/ui/Modal.jsx';
+import ImageUrlInput from '../../components/form/ImageUrlInput.jsx';
 import { cn } from '../../lib/cn.js';
 import { money } from '../../lib/pricing.js';
 import { tripNo } from '../../lib/format.js';
@@ -431,8 +432,7 @@ export default function HotelDetailPage() {
             )}
             <div>
               <label className="label">Image URL</label>
-              <input className="input" placeholder="https://example.com/hotel.jpg" value={imgUrl} onChange={(e) => setImgUrl(e.target.value)} autoFocus />
-              <p className="mt-1 text-xs text-gray-400">Paste any public image link (JPG, PNG, WebP).</p>
+              <ImageUrlInput value={imgUrl} onChange={setImgUrl} placeholder="https://example.com/hotel.jpg" />
             </div>
             <div className="flex justify-end gap-2">
               {h.imageUrl && (

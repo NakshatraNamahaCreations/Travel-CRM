@@ -105,7 +105,7 @@ export function voucherHtml(quote, { org = null, type = 'trip', options = {} } =
     return `<tr>
       <td><b>${ns.map(ordinal).join(', ') || '—'}</b> Night${ns.length > 1 ? 's' : ''}${checkIn ? `<br/><span class="dim">In: ${fmtShort(checkIn)}<br/>Out: ${fmtShort(checkOut)}</span>` : ''}</td>
       <td><b>${esc(h.hotelName || '')}</b><br/><span class="dim">${esc(h.city || '')}</span></td>
-      <td>${h.rooms || 1} × ${esc(h.roomType || 'Room')}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</td>
+      <td>${h.rooms || 1} × ${esc(h.roomType || 'Room')}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cweb ? ` + ${h.cweb} CWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</td>
       <td>${esc(h.mealPlan || '—')}</td>
       ${prices ? `<td class="amt">${h.amount ? inr(h.amount) : '—'}</td>` : ''}
     </tr>`;

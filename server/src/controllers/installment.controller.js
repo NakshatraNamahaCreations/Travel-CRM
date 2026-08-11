@@ -8,6 +8,7 @@ import { ok, created, paginate } from '../utils/apiResponse.js';
 import { createNotification } from './notification.controller.js';
 import { paymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
 import { htmlToPdf } from '../pdf/renderPdf.js';
+import { sendWhatsAppTemplate } from '../utils/whatsapp.js';
 
 function todayStart() {
   const d = new Date();
@@ -202,6 +203,26 @@ export const receiptPdf = asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="PaymentReceipt-${inst.installmentNumber}.pdf"`);
   return res.send(pdf);
+});
+
+// POST /api/installments/:id/whatsapp-template  { templateName, bodyValues }
+// Sends a pre-approved WhatsApp template (e.g. a "payment received" thank-you)
+// via Gallabox — templateName/bodyValues must match what's actually been
+// created and approved in the Gallabox dashboard.
+export const sendPaymentTemplate = asyncHandler(async (req, res) => {
+  const inst = await Installment.findById(req.params.id);
+  if (!inst) throw ApiError.notFound('Instalment not found');
+  if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment yet');
+
+  const { templateName, bodyValues } = req.body;
+  if (!String(templateName || '').trim()) throw ApiError.badRequest('Template name is required');
+
+  const phone0 = inst.guest?.phones?.[0];
+  const phone = phone0 ? `${phone0.countryCode || '91'}${phone0.number || ''}` : '';
+  const guestName = [inst.guest?.salutation, inst.guest?.name].filter(Boolean).join(' ') || 'Guest';
+
+  const result = await sendWhatsAppTemplate({ phone, name: guestName, templateName, bodyValues });
+  return ok(res, { sent: true, ...result });
 });
 
 // PATCH /api/installments/:id/verify

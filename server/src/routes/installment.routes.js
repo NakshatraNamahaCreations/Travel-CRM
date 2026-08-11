@@ -7,6 +7,7 @@ import {
   createInstallment,
   logPayment,
   receiptPdf,
+  sendPaymentTemplate,
   verifyInstallment,
   addComment,
   deleteInstallment,
@@ -21,6 +22,7 @@ router.get('/accounts', accountOptions);
 router.post('/', createInstallment);
 router.post('/:id/log-payment', logPayment);
 router.get('/:id/receipt', receiptPdf);
+router.post('/:id/whatsapp-template', sendPaymentTemplate);
 router.patch('/:id/verify', verifyInstallment);
 router.post('/:id/comments', addComment);
 router.delete('/:id', deleteInstallment);

@@ -11,6 +11,8 @@ import {
   emailQuote,
   shareEmail,
   emailStatus,
+  whatsappStatus,
+  shareWhatsApp,
   quoteSuggestions,
   cloneQuote,
 } from '../controllers/quote.controller.js';
@@ -20,6 +22,7 @@ const router = Router();
 router.use(protect);
 
 router.get('/email-status', emailStatus);
+router.get('/whatsapp-status', whatsappStatus);
 router.get('/suggestions', quoteSuggestions);
 router.get('/', listQuotes);
 router.post('/:id/clone', cloneQuote);
@@ -28,6 +31,7 @@ router.get('/:id/pdf', quotePdf);
 router.get('/:id/voucher', quoteVoucher);
 router.post('/:id/email', emailQuote);
 router.post('/:id/share-email', shareEmail);
+router.post('/:id/whatsapp-share', shareWhatsApp);
 router.post('/', createQuote);
 router.put('/:id', updateQuote);
 router.patch('/:id/status', updateQuoteStatus);

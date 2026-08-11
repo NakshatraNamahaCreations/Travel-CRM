@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { transportApi } from '../../api/services.js';
 import { activityLogApi } from '../../api/activities.js';
 import Modal from '../../components/ui/Modal.jsx';
+import ImageUrlInput from '../../components/form/ImageUrlInput.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
@@ -297,8 +298,7 @@ export default function TransportDetailPage() {
         <div className="space-y-3">
           <div>
             <label className="label">Image URL</label>
-            <input className="input" value={imgUrl} onChange={(e) => setImgUrl(e.target.value)} placeholder="https://…" autoFocus />
-            <p className="mt-1 text-xs text-slate-400">Paste a public image URL.</p>
+            <ImageUrlInput value={imgUrl} onChange={setImgUrl} />
           </div>
           {imgUrl.trim() && (
             <div className="overflow-hidden rounded-xl border border-slate-200">

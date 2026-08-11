@@ -35,6 +35,13 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY || '',
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   },
+  // Gallabox WhatsApp Business API (https://server.gallabox.com/devapi).
+  // All three must be set to enable in-app WhatsApp sending.
+  gallabox: {
+    apiKey: process.env.GALLABOX_API_KEY || '',
+    apiSecret: process.env.GALLABOX_API_SECRET || '',
+    channelId: process.env.GALLABOX_CHANNEL_ID || '',
+  },
   // Platform owner bootstrap (npm run bootstrap:owner / migration script).
   owner: {
     email: process.env.OWNER_EMAIL || '',

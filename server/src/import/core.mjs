@@ -8,6 +8,7 @@ import { TransportPrice } from '../models/TransportPrice.js';
 import { TravelActivity } from '../models/TravelActivity.js';
 import { TravelActivityPrice } from '../models/TravelActivityPrice.js';
 import { Destination } from '../models/Destination.js';
+import { Option } from '../models/Option.js';
 import { parseRange, parsePersons, parseStar, num, parseLoc, pickSheets } from './lib.mjs';
 
 // Also repairs common UTF-8-as-cp1252 mojibake from client CSVs ("Corbynâ€™s").
@@ -105,6 +106,10 @@ export async function importHotels(wb, opts = {}) {
 }
 
 /* ===================== ACTIVITIES ===================== */
+// Columns: Name, Service, Description, Open Time, Close Time, Duration (Mins),
+// Slots, then Season groups. Description/Duration/Slots feed the ticket type's
+// own fields so the quote builder can auto-fill them (and the PDF can show a
+// description) instead of falling back to defaults.
 export function parseActivitiesSheet(rows) {
   let H = -1;
   for (let i = 0; i < Math.min(rows.length, 6); i++) if (cell(rows[i], 0).toLowerCase() === 'name' && cell(rows[i], 1).toLowerCase() === 'service') { H = i; break; }
@@ -129,8 +134,16 @@ export function parseActivitiesSheet(rows) {
     if (cell(r, 0)) curName = cell(r, 0);
     const service = cell(r, 1);
     if (!service || !curName) continue;
-    if (!activities.has(curName)) activities.set(curName, { ticketTypes: new Set(), ageConfig: '' });
-    activities.get(curName).ticketTypes.add(service);
+    if (!activities.has(curName)) activities.set(curName, { ticketTypes: new Map(), ageConfig: '' });
+    if (!activities.get(curName).ticketTypes.has(service)) {
+      activities.get(curName).ticketTypes.set(service, {
+        details: cell(r, 2),
+        openTime: cell(r, 3),
+        closeTime: cell(r, 4),
+        duration: num(cell(r, 5)) || undefined,
+        slots: cell(r, 6),
+      });
+    }
     for (const g of groups) for (const cfg of g.configs) {
       const price = num(cell(r, cfg.col));
       if (!price) continue;
@@ -152,7 +165,14 @@ export async function importActivities(wb, { destinations = [] } = {}) {
   for (const sheetName of wb.SheetNames) {
     const { activities: acts, prices } = parseActivitiesSheet(sheetRows(wb.Sheets[sheetName]));
     for (const [name, info] of acts) {
-      const doc = await TravelActivity.findOneAndUpdate({ name: nameEq(name) }, { $set: { ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes: [...info.ticketTypes].map((t) => ({ name: t })) }, $setOnInsert: { name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const ticketTypes = [...info.ticketTypes].map(([tName, t]) => ({
+        name: tName,
+        details: t.details || undefined,
+        slots: t.slots || undefined,
+        duration: t.duration,
+        durationUnit: t.duration ? 'mins' : undefined,
+      }));
+      const doc = await TravelActivity.findOneAndUpdate({ name: nameEq(name) }, { $set: { ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes }, $setOnInsert: { name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TravelActivityPrice.deleteMany({ activity: doc._id });
       const rows = prices.filter((p) => p.activity === name && p.start && p.end).map((p) => ({ activity: doc._id, service: p.service, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TravelActivityPrice.insertMany(rows);
@@ -200,7 +220,15 @@ export function parseTransportSheet(rows) {
     const key = `${curFrom.toLowerCase()}|${to.toLowerCase()}`;
     if (!routes.has(key)) routes.set(key, { from: curFrom, to, name: to ? `${curFrom} to ${to}` : curFrom, items: [], prices: [] });
     const route = routes.get(key);
-    route.items.push({ name: service, description: cell(r, 7) });
+    // Columns: Duty Code, A, B, Service, Distance, Start Time, Duration(mins), Day Schedule.
+    const item = { name: service, description: cell(r, 7) };
+    const distance = num(cell(r, 4));
+    if (distance) item.distanceKms = distance;
+    const startTime = cell(r, 5);
+    if (startTime) item.startTime = startTime;
+    const durationMins = num(cell(r, 6));
+    if (durationMins) item.durationMins = durationMins;
+    route.items.push(item);
     for (const v of vehicles) { const price = num(cell(r, v.col)); if (!price) continue; for (const range of (v.ranges || dateRanges)) if (range) route.prices.push({ itemName: service, config: v.name, price, ...range }); }
   }
   return [...routes.values()];
@@ -215,14 +243,27 @@ export async function importTransport(wb, { destinations = [] } = {}) {
     if (andaman) destIds = [andaman._id];
   }
   let services = 0, priceRows = 0;
+  const vehicleNames = new Set();
   for (const { sheet } of pickSheets(wb.SheetNames)) {
     for (const route of parseTransportSheet(sheetRows(wb.Sheets[sheet]))) {
       const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: destIds, items: route.items.slice(0, 50), from: route.from || route.name, to: route.to || '' }, $setOnInsert: { name: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TransportPrice.deleteMany({ service: doc._id });
       const rows = route.prices.map((p) => ({ service: doc._id, itemName: p.itemName, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TransportPrice.insertMany(rows);
+      rows.forEach((r) => r.config && vehicleNames.add(r.config));
       services++; priceRows += rows.length;
     }
+  }
+  // Sync the vehicle/cab-type names used in the price sheet into the Option
+  // master list (category 'vehicleType') — the Quote Builder's cab-type
+  // picker searches that list, so an imported config is otherwise invisible
+  // there even though it's right in the Transport Service Prices table.
+  for (const name of vehicleNames) {
+    await Option.findOneAndUpdate(
+      { category: 'vehicleType', value: nameEq(name) },
+      { $setOnInsert: { category: 'vehicleType', value: name, label: name } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
   }
   return { services, priceRows };
 }

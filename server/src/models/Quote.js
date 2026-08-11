@@ -330,6 +330,19 @@ quoteSchema.pre('validate', function compute(next) {
     for (const pkg of this.packages) computePackage(pkg);
     if ((this.selectedPackageIndex || 0) >= this.packages.length) this.selectedPackageIndex = 0;
     flattenSelected(this);
+    // Growing "nights" elsewhere (e.g. Edit Basic Details) doesn't rewrite a
+    // hand-customized itinerary (flattenSelected skips it — see
+    // daysCustomized above) — top up with blank day entries so newly added
+    // nights still show up in the itinerary/PDF instead of silently
+    // vanishing. Never trims: shrinking nights doesn't delete authored days.
+    const wantDays = (this.nights || 0) + 1;
+    if ((this.days || []).length < wantDays) {
+      const existing = new Set((this.days || []).map((d) => d.dayNumber));
+      for (let i = 1; i <= wantDays; i++) {
+        if (!existing.has(i)) this.days.push({ dayNumber: i, title: '', description: '' });
+      }
+      this.days.sort((a, b) => a.dayNumber - b.dayNumber);
+    }
   } else {
     // Legacy path: compute from flat costItems.
     let subtotal = 0;

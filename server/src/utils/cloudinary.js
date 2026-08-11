@@ -42,3 +42,15 @@ export async function uploadImage(src, publicId) {
   });
   return res.secure_url;
 }
+
+/**
+ * Upload an ad-hoc image (e.g. a hotel/activity/transport photo picked from
+ * the user's device) into a folder, letting Cloudinary generate a unique
+ * public_id — unlike uploadImage, nothing here is ever meant to overwrite a
+ * previous asset. Returns the secure URL, or null when Cloudinary isn't configured.
+ */
+export async function uploadImageUnique(src, folder) {
+  if (!ensureConfig()) return null;
+  const res = await cloudinary.uploader.upload(src, { folder, resource_type: 'image' });
+  return res.secure_url;
+}

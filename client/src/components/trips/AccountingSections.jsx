@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -6,7 +6,9 @@ import { Plus, Pencil, Trash2, FileText, Info, RefreshCw } from 'lucide-react';
 import { queriesApi } from '../../api/queries.js';
 import { quotesApi } from '../../api/quotes.js';
 import { proformaApi } from '../../api/proforma.js';
+import { gstInvoiceApi } from '../../api/gstInvoice.js';
 import { orgProfileApi } from '../../api/orgProfile.js';
+import Modal from '../ui/Modal.jsx';
 import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import { installmentsApi } from '../../api/installments.js';
 import { company } from '../../config/company.js';
@@ -405,6 +407,258 @@ function ProformaForm({ initial, org, pending, onCancel, onSave }) {
         <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
           I confirm that all the details of this proforma invoice are correct
+        </label>
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={submit} disabled={!confirmed || pending} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? 'Saving…' : 'Save Details'}</button>
+        <button onClick={onCancel} className="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------- GST Invoice ------------------------------- */
+// A tax invoice raised against ONE payment already received (an Installment)
+// — unlike the Proforma Invoice above, which is billed before payment and
+// can list many particulars, this documents money actually collected, with
+// the GST backed out of that (GST-inclusive) amount.
+
+// `ctx` is either a specific paid Installment doc, or — for the "whole trip
+// fully paid" flow — a lightweight { query, booking, tripId, guest,
+// destinations, paidAmount, amount } object with no _id/installmentNumber.
+// Either way the invoice raised is scoped by `query` (and `installment` when
+// there is one) so history for that trip always shows up together.
+export function GstInvoiceModal({ installment: ctx, open, onClose }) {
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const { data: org } = useQuery({ queryKey: ['org-profile'], queryFn: orgProfileApi.get, enabled: open });
+  const { data: invoices = [], isLoading } = useQuery({
+    queryKey: ['gst-invoices', ctx?._id || ctx?.query],
+    queryFn: () => (ctx._id ? gstInvoiceApi.listForInstallment(ctx._id) : gstInvoiceApi.listForQuery(ctx.query)),
+    enabled: open && !!(ctx?._id || ctx?.query),
+  });
+  const [editing, setEditing] = useState(null); // 'new' | invoice doc | null
+
+  // Fresh modal open (or a different trip/instalment) — back to the list view.
+  useEffect(() => { if (open) setEditing(null); }, [open, ctx?._id, ctx?.query]);
+  // Nothing raised yet for this payment — skip straight to the form.
+  useEffect(() => {
+    if (open && !isLoading && !invoices.length && !editing) setEditing('new');
+  }, [open, isLoading, invoices.length, editing]);
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['gst-invoices', ctx?._id || ctx?.query] });
+
+  const saveMut = useMutation({
+    mutationFn: (payload) => (payload._id
+      ? gstInvoiceApi.update(payload._id, payload)
+      : gstInvoiceApi.create({ ...payload, query: ctx.query, booking: ctx.booking, installment: ctx._id || undefined })),
+    onSuccess: () => { toast.success('GST invoice saved'); setEditing(null); refresh(); },
+    onError: (e) => toast.error(e.response?.data?.message || e.message),
+  });
+  const delMut = useMutation({
+    mutationFn: (id) => gstInvoiceApi.remove(id),
+    onSuccess: () => { toast.success('Deleted'); refresh(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const askDelete = async (inv) => {
+    if (await confirm({ title: 'Delete this GST invoice?', message: `Invoice GST-${inv.invoiceNumber} will be permanently removed.`, confirmLabel: 'Delete' })) delMut.mutate(inv._id);
+  };
+  const openPdf = async (inv) => {
+    const t = toast.loading('Preparing PDF…');
+    try {
+      const blob = await gstInvoiceApi.pdf(inv._id);
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch {
+      toast.error('Could not generate the PDF');
+    } finally {
+      toast.dismiss(t);
+    }
+  };
+
+  const guestName = [ctx?.guest?.salutation, ctx?.guest?.name].filter(Boolean).join(' ') || 'Guest';
+  const defaults = useMemo(() => {
+    if (!ctx) return null;
+    const gstPercent = 5;
+    const paid = ctx.paidAmount || ctx.amount || 0;
+    return {
+      seller: {
+        name: org?.officialName || company.name,
+        address: (org?.billingAddresses || []).find((b) => b.primary)?.address || (company.address || []).join('\n'),
+        phone: org?.supportPhones?.[0] || company.phones?.[0] || '',
+        email: org?.emails?.[0] || company.emails?.[0] || '',
+        gstin: company.gstin || '',
+        pan: '',
+      },
+      buyer: { name: guestName, address: '', email: '', gstin: '' },
+      placeOfSupply: (ctx.destinations || [])[0] || '',
+      dueDate: '',
+      paymentMode: '',
+      invoiceDate: format(new Date(), 'yyyy-MM-dd'),
+      particulars: `Payment received towards Trip# ${ctx.tripId || ''} - ${(ctx.destinations || []).join(', ')} Package`,
+      hsn: '',
+      // Back into a taxable value that grosses up to what was actually paid,
+      // at the default rate — the agent can adjust either field.
+      taxableValue: Math.round((paid / (1 + gstPercent / 100)) * 100) / 100,
+      gstPercent,
+      taxType: 'intra',
+      amountReceived: paid,
+      terms: [
+        'This is a computer-generated invoice raised against payment received and does not require a signature.',
+        'GST is charged at the rate applicable and in force on the date of this invoice.',
+        'Payment received is subject to the cancellation and refund policy shared at the time of booking.',
+        'Please verify all details on this invoice and report any discrepancy within 7 days of receipt.',
+        'Subject to Port Blair jurisdiction only.',
+      ].join('\n'),
+      specialNotes: '',
+    };
+  }, [ctx, org, guestName]);
+
+  if (!open) return null;
+  return (
+    <Modal open onClose={onClose} title={ctx?.installmentNumber ? `GST Invoice — Instalment #${ctx.installmentNumber}` : 'GST Invoice — Full Payment'} width="max-w-2xl">
+      {editing ? (
+        <GstInvoiceForm
+          initial={editing === 'new' ? defaults : editing}
+          pending={saveMut.isPending}
+          onCancel={() => (invoices.length ? setEditing(null) : onClose())}
+          onSave={(payload) => saveMut.mutate(editing === 'new' ? payload : { ...payload, _id: editing._id })}
+        />
+      ) : isLoading ? (
+        <div className="py-10 text-center text-gray-400">Loading…</div>
+      ) : (
+        <div className="space-y-3">
+          {invoices.map((inv) => (
+            <div key={inv._id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-4 py-3">
+              <div>
+                <p className="font-semibold text-gray-900">GST-{inv.invoiceNumber}</p>
+                <p className="text-xs text-gray-500">
+                  {inr2(inv.amount)} &middot; {inv.taxType === 'inter' ? `IGST @ ${inv.gstPercent}%` : `CGST+SGST @ ${inv.gstPercent}%`} &middot; {dt(inv.createdAt)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openPdf(inv)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"><FileText size={14} /> PDF</button>
+                <button onClick={() => setEditing(inv)} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-100"><Pencil size={13} /> Edit</button>
+                <button onClick={() => askDelete(inv)} className="rounded-lg border border-gray-200 bg-white p-2 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => setEditing('new')} className="btn-secondary text-sm"><Plus size={13} /> New GST Invoice</button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
+  const [form, setForm] = useState(() => ({
+    ...initial,
+    invoiceDate: initial.invoiceDate ? format(new Date(initial.invoiceDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    dueDate: initial.dueDate ? format(new Date(initial.dueDate), 'yyyy-MM-dd') : '',
+  }));
+  const [confirmed, setConfirmed] = useState(false);
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  const taxableValue = Number(form.taxableValue) || 0;
+  const pct = Number(form.gstPercent) || 0;
+  const isInter = form.taxType === 'inter';
+  const cgst = isInter ? 0 : Math.round(taxableValue * (pct / 200) * 100) / 100;
+  const sgst = cgst;
+  const igst = isInter ? Math.round(taxableValue * (pct / 100) * 100) / 100 : 0;
+  const grandTotal = Math.round((taxableValue + cgst + sgst + igst) * 100) / 100;
+
+  const submit = () => {
+    if (!form.buyer?.name?.trim()) return toast.error('Buyer name is required');
+    if (!taxableValue) return toast.error('Taxable value is required');
+    onSave({
+      seller: form.seller,
+      buyer: form.buyer,
+      placeOfSupply: form.placeOfSupply,
+      dueDate: form.dueDate || undefined,
+      paymentMode: form.paymentMode,
+      invoiceDate: form.invoiceDate || undefined,
+      particulars: form.particulars,
+      hsn: form.hsn,
+      taxableValue,
+      gstPercent: pct,
+      taxType: form.taxType,
+      amountReceived: Number(form.amountReceived) || grandTotal,
+      terms: form.terms,
+      specialNotes: form.specialNotes,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-sm font-bold text-gray-800">Seller</p>
+          <input className="input" placeholder="Name" value={form.seller?.name || ''} onChange={(e) => set({ seller: { ...form.seller, name: e.target.value } })} />
+          <textarea rows={2} className="input" placeholder="Address" value={form.seller?.address || ''} onChange={(e) => set({ seller: { ...form.seller, address: e.target.value } })} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input" placeholder="GSTIN" value={form.seller?.gstin || ''} onChange={(e) => set({ seller: { ...form.seller, gstin: e.target.value } })} />
+            <input className="input" placeholder="PAN (optional)" value={form.seller?.pan || ''} onChange={(e) => set({ seller: { ...form.seller, pan: e.target.value } })} />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-bold text-gray-800">Buyer</p>
+          <input className="input" placeholder="Name" value={form.buyer?.name || ''} onChange={(e) => set({ buyer: { ...form.buyer, name: e.target.value } })} />
+          <textarea rows={2} className="input" placeholder="Address (optional)" value={form.buyer?.address || ''} onChange={(e) => set({ buyer: { ...form.buyer, address: e.target.value } })} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input" placeholder="Email (optional)" value={form.buyer?.email || ''} onChange={(e) => set({ buyer: { ...form.buyer, email: e.target.value } })} />
+            <input className="input" placeholder="GSTIN (optional)" value={form.buyer?.gstin || ''} onChange={(e) => set({ buyer: { ...form.buyer, gstin: e.target.value } })} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div><label className="label">Place of Supply</label><input className="input" placeholder="e.g. Andaman and Nicobar Islands" value={form.placeOfSupply || ''} onChange={(e) => set({ placeOfSupply: e.target.value })} /></div>
+        <div><label className="label">Invoice Date</label><input type="date" className="input" value={form.invoiceDate || ''} onChange={(e) => set({ invoiceDate: e.target.value })} /></div>
+        <div><label className="label">Payment Due Date <span className="font-normal text-gray-400">(optional)</span></label><input type="date" className="input" value={form.dueDate || ''} onChange={(e) => set({ dueDate: e.target.value })} /></div>
+        <div><label className="label">Payment Mode <span className="font-normal text-gray-400">(optional)</span></label><input className="input" placeholder="e.g. Bank Transfer" value={form.paymentMode || ''} onChange={(e) => set({ paymentMode: e.target.value })} /></div>
+      </div>
+
+      <div>
+        <label className="label">Particulars</label>
+        <textarea rows={2} className="input" value={form.particulars || ''} onChange={(e) => set({ particulars: e.target.value })} />
+      </div>
+      <div><label className="label">HSN/SAC <span className="font-normal text-gray-400">(optional)</span></label><input className="input" value={form.hsn || ''} onChange={(e) => set({ hsn: e.target.value })} /></div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div><label className="label">Taxable Value</label><input type="number" className="input" value={form.taxableValue} onChange={(e) => set({ taxableValue: e.target.value })} /></div>
+        <div><label className="label">GST %</label><input type="number" className="input" value={form.gstPercent} onChange={(e) => set({ gstPercent: e.target.value })} /></div>
+        <div>
+          <label className="label">Tax Type</label>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => set({ taxType: 'intra' })} className={cn('flex-1 rounded-lg border px-2 py-2 text-xs font-semibold', !isInter ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-500')}>CGST+SGST</button>
+            <button type="button" onClick={() => set({ taxType: 'inter' })} className={cn('flex-1 rounded-lg border px-2 py-2 text-xs font-semibold', isInter ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-500')}>IGST</button>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400">Same state as seller → CGST+SGST (split evenly). Different state (or an outstation buyer) → IGST.</p>
+
+      <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm">
+        <div className="flex justify-between"><span className="text-gray-500">Taxable Value</span><span className="font-semibold">{inr2(taxableValue)}</span></div>
+        {isInter ? (
+          <div className="flex justify-between"><span className="text-gray-500">IGST @ {pct || 0}%</span><span className="font-semibold">{inr2(igst)}</span></div>
+        ) : (
+          <>
+            <div className="flex justify-between"><span className="text-gray-500">CGST @ {pct ? pct / 2 : 0}%</span><span className="font-semibold">{inr2(cgst)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">SGST @ {pct ? pct / 2 : 0}%</span><span className="font-semibold">{inr2(sgst)}</span></div>
+          </>
+        )}
+        <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-base font-bold"><span>Grand Total</span><span>{inr2(grandTotal)}</span></div>
+      </div>
+
+      <div><label className="label">Amount Received <span className="font-normal text-gray-400">(defaults to the Grand Total)</span></label><input type="number" className="input" placeholder={grandTotal} value={form.amountReceived ?? ''} onChange={(e) => set({ amountReceived: e.target.value })} /></div>
+
+      <div><label className="label">Terms &amp; Conditions <span className="font-normal text-gray-400">(optional, one per line)</span></label><textarea rows={3} className="input" placeholder={'e.g.\nGoods once sold will not be taken back.\nSubject to Port Blair jurisdiction.'} value={form.terms || ''} onChange={(e) => set({ terms: e.target.value })} /></div>
+      <div><label className="label">Notes <span className="font-normal text-gray-400">(optional)</span></label><textarea rows={2} className="input" value={form.specialNotes || ''} onChange={(e) => set({ specialNotes: e.target.value })} /></div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
+          I confirm that all the details of this GST invoice are correct
         </label>
       </div>
 

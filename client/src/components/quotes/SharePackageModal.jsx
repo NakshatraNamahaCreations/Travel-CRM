@@ -56,11 +56,19 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [toEmail, setToEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
+  const [waApiBusy, setWaApiBusy] = useState(false);
 
   const { data: q, isLoading } = useQuery({
     queryKey: ['quote', quoteId, 'share'],
     queryFn: () => quotesApi.get(quoteId),
     enabled: open && !!quoteId,
+  });
+
+  const { data: waStatus } = useQuery({
+    queryKey: ['quotes', 'whatsapp-status'],
+    queryFn: () => quotesApi.whatsappStatus(),
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
   });
 
   const waText = useMemo(() => {
@@ -87,6 +95,19 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
   const sendWhatsApp = () => {
     const base = waNum ? `https://wa.me/${waNum}` : 'https://wa.me/';
     window.open(`${base}?text=${encodeURIComponent(waText)}`, '_blank');
+  };
+
+  const sendWhatsAppApi = async () => {
+    if (!waNum) return toast.error('No guest phone on file');
+    try {
+      setWaApiBusy(true);
+      await quotesApi.shareWhatsApp(quoteId, { phone: waNum, text: waText });
+      toast.success(`Sent to +${waNum}`);
+    } catch (e) {
+      toast.error(e.message || 'Could not send via WhatsApp API');
+    } finally {
+      setWaApiBusy(false);
+    }
   };
 
   const downloadPdf = async () => {
@@ -160,10 +181,20 @@ export default function SharePackageModal({ quoteId, open, onClose }) {
               />
             </div>
             {/* Footer */}
-            <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-3">
               <button onClick={sendWhatsApp} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600">
                 <Send size={15} /> Send via WhatsApp
               </button>
+              {waStatus?.enabled && (
+                <button
+                  onClick={sendWhatsAppApi}
+                  disabled={waApiBusy || !waNum}
+                  title={!waNum ? 'No guest phone on file' : 'Send directly, no app needed'}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {waApiBusy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send Directly (API)
+                </button>
+              )}
               <button onClick={() => navigator.clipboard.writeText(waText).then(() => toast.success('Copied'), () => toast.error('Copy failed'))} className="btn-secondary text-sm">
                 <Copy size={14} /> Copy
               </button>

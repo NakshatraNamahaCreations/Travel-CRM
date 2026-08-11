@@ -17,6 +17,8 @@ export const quotesApi = {
   email: (id, email) => api.post(`/quotes/${id}/email`, email ? { email } : {}).then((r) => r.data.data),
   shareEmail: (id, payload) => api.post(`/quotes/${id}/share-email`, payload).then((r) => r.data.data),
   emailStatus: () => api.get('/quotes/email-status').then((r) => r.data.data),
+  whatsappStatus: () => api.get('/quotes/whatsapp-status').then((r) => r.data.data),
+  shareWhatsApp: (id, payload) => api.post(`/quotes/${id}/whatsapp-share`, payload).then((r) => r.data.data),
 };
 
 export const lookupApi = {

@@ -7,6 +7,7 @@ export { SubscriptionPayment } from './SubscriptionPayment.js';
 export { OrgProfile } from './OrgProfile.js';
 export { Notification } from './Notification.js';
 export { ProformaInvoice } from './ProformaInvoice.js';
+export { GstInvoice } from './GstInvoice.js';
 export { InclusionExclusion } from './InclusionExclusion.js';
 export { Team } from './Team.js';
 export { Destination } from './Destination.js';

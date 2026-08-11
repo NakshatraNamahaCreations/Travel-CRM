@@ -37,19 +37,30 @@ export const activityRate = asyncHandler(async (req, res) => {
   return ok(res, price);
 });
 
-// GET /api/lookups/transport-rate?service=&config=&date=
+// GET /api/lookups/transport-rate?service=&config=&item=&date=
 // Config matching is forgiving: exact (case-insensitive) → substring → any config,
 // since uploaded price sheets label vehicles like "Wagon R (3 Pax)" while the
-// builder may just say "Wagon R".
+// builder may just say "Wagon R". A transport service route can carry several
+// priced items (e.g. "Cellular Jail Visit" vs "Ross Island" under the same
+// Port Blair route) — when `item` is given, the itemName must match too,
+// otherwise the lookup can silently return another item's price.
 export const transportRate = asyncHandler(async (req, res) => {
-  const { service, config, date } = req.query;
+  const { service, config, item, date } = req.query;
   if (!service) throw ApiError.badRequest('service is required');
+  const base = { service };
+  if (item) {
+    const escaped = item.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    base.itemName = new RegExp(`^${escaped}$`, 'i');
+  }
   let price = null;
   if (config) {
     const escaped = config.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    price = await findRate(TransportPrice, { service, config: new RegExp(`^${escaped}$`, 'i') }, date);
-    if (!price) price = await findRate(TransportPrice, { service, config: new RegExp(escaped, 'i') }, date);
+    price = await findRate(TransportPrice, { ...base, config: new RegExp(`^${escaped}$`, 'i') }, date);
+    if (!price) price = await findRate(TransportPrice, { ...base, config: new RegExp(escaped, 'i') }, date);
   }
-  if (!price) price = await findRate(TransportPrice, { service }, date);
+  if (!price) price = await findRate(TransportPrice, base, date);
+  // An item-scoped miss falls back to any item on the route, so a rate still
+  // surfaces for services imported before itemName was captured.
+  if (!price && item) price = await findRate(TransportPrice, { service }, date);
   return ok(res, price);
 });

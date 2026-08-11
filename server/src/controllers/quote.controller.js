@@ -9,6 +9,7 @@ import { voucherHtml } from '../pdf/voucherHtml.js';
 import { OrgProfile } from '../models/OrgProfile.js';
 import { htmlToPdf } from '../pdf/renderPdf.js';
 import { sendMail, emailEnabled } from '../utils/mailer.js';
+import { sendWhatsAppText, whatsappEnabled } from '../utils/whatsapp.js';
 import { company } from '../config/company.js';
 import { logActivity } from './activity.controller.js';
 
@@ -294,6 +295,30 @@ export const shareEmail = asyncHandler(async (req, res) => {
     await quote.save();
   }
   return ok(res, { sent: true, to, quoteNumber: quote.quoteNumber });
+});
+
+// GET /api/quotes/whatsapp-status — whether the Gallabox WhatsApp API is configured
+export const whatsappStatus = asyncHandler(async (req, res) => ok(res, { enabled: whatsappEnabled() }));
+
+// POST /api/quotes/:id/whatsapp-share — send the composed Share Package text
+// (built in the share modal) via the Gallabox WhatsApp Business API.
+export const shareWhatsApp = asyncHandler(async (req, res) => {
+  const quote = await Quote.findById(req.params.id)
+    .populate({ path: 'query', select: 'queryNumber guest' });
+  if (!quote) throw ApiError.notFound('Quote not found');
+
+  const guest = quote.query?.guest || {};
+  const phone = req.body.phone || (guest.phones?.[0] && `${guest.phones[0].countryCode || '91'}${guest.phones[0].number || ''}`);
+  const text = String(req.body.text || '').trim();
+  if (!text) throw ApiError.badRequest('Nothing to send');
+
+  const result = await sendWhatsAppText({ phone, name: guest.name, text });
+
+  if (quote.status === 'draft') {
+    quote.status = 'sent';
+    await quote.save();
+  }
+  return ok(res, { sent: true, ...result });
 });
 
 // DELETE /api/quotes/:id

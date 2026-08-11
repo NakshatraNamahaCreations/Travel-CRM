@@ -9,6 +9,7 @@ import { hotelsApi, transportApi, activitiesApi } from '../../api/services.js';
 import { lookupApi } from '../../api/quotes.js';
 import { optionsApi } from '../../api/options.js';
 import { hotelRowCost, hotelPerNight, hotelsBilledTotal, computePackage, money } from '../../lib/pricing.js';
+import { STD_TICKETS } from '../../lib/stdTickets.js';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
@@ -29,11 +30,23 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
   const setHotel = (i, patch) => update({ hotels: pkg.hotels.map((h, idx) => (idx === i ? { ...h, ...patch } : h)) });
   // Only primary rows claim nights — alternatives share their primary's nights.
   const primaryNightsUsed = () => new Set((pkg.hotels || []).flatMap((x) => (x.isAlternative ? [] : x.nights || [])));
+  // Rooms/beds implied by the trip's pax: 2 adults per room (min 1 room);
+  // children above the age cutoff need their own extra bed (CWEB) but still
+  // fit in that same room; children at/under the cutoff are complimentary,
+  // no bed (CNB) — starting point only, the agent can still adjust freely.
+  const CHILD_BED_AGE_CUTOFF = 5;
+  const paxOccupancy = () => {
+    const adults = pax?.adults || 0;
+    const kids = pax?.children || [];
+    const cweb = kids.filter((c) => (Number(c.age) || 0) > CHILD_BED_AGE_CUTOFF).length;
+    const cnb = kids.filter((c) => (Number(c.age) || 0) <= CHILD_BED_AGE_CUTOFF).length;
+    return { rooms: Math.max(1, Math.ceil(adults / 2)), aweb: 0, cweb, cnb };
+  };
   // New rows start on the first night nobody has claimed yet (empty if all taken).
   const addHotel = () => {
     const used = primaryNightsUsed();
     const free = Array.from({ length: Math.max(1, nights) }, (_, k) => k + 1).find((n) => !used.has(n));
-    update({ hotels: [...(pkg.hotels || []), { ...emptyHotel(), nights: free ? [free] : [] }] });
+    update({ hotels: [...(pkg.hotels || []), { ...emptyHotel(), ...paxOccupancy(), nights: free ? [free] : [] }] });
   };
   // Nights already assigned to OTHER primary rows — one primary hotel per night.
   const nightsTakenByOthers = (i) => {
@@ -141,11 +154,69 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const names = [t.serviceType, ...fam.filter((x) => x !== t).map((x) => x.serviceType)].filter(Boolean);
     return [...new Set(names)].map((n) => ({ _id: n, name: n }));
   };
-  const setTrServiceTypes = (ti, list) => {
+  const setTrServiceTypes = async (ti, list) => {
     const src = pkg.transports || [];
     const t = src[ti];
     const inFam = trFamily(t);
     const names = [...new Set((list || []).map((o) => o?.name).filter(Boolean))];
+
+    // Fetch the master service once so a newly-ticked type can auto-fill its
+    // own Start Time / Duration from the master item (Excel import or
+    // manually authored on the Transport Service master) instead of
+    // defaulting to blank/60 mins.
+    const serviceId = typeof t.service === 'object' ? t.service?._id : t.service;
+    const master = serviceId ? await transportApi.get(serviceId).catch(() => null) : null;
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const timingFor = (name) => {
+      const item = (master?.items || []).find((it) => norm(it.name) === norm(name));
+      if (!item) return {};
+      const extra = {};
+      if (item.startTime) extra.startTime = item.startTime;
+      if (item.durationMins) extra.durationMins = item.durationMins;
+      return extra;
+    };
+    // Cab price for the newly-picked service type — same lookup as the
+    // "Auto rate" button, using whichever cab type(s) are already configured
+    // (the shared "Same Cab Type for All" list, or this row's own items).
+    const dayNo = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
+    const rateDate = startDate ? format(addDays(new Date(startDate), dayNo - 1), 'yyyy-MM-dd') : undefined;
+    const cabSource = pkg.sameCabType ? sharedItems : (t.items || []);
+    const ratedItemsFor = async (name) => {
+      const cabs = (cabSource || []).filter((it) => it?.type);
+      if (!serviceId || !cabs.length) return null;
+      const rated = [];
+      for (const cab of cabs) {
+        // eslint-disable-next-line no-await-in-loop
+        const r = await lookupApi.transportRate({ service: serviceId, config: cab.type, item: name, date: rateDate }).catch(() => null);
+        rated.push({ type: cab.type, qty: cab.qty || 1, rate: r?.price || 0, given: r?.price || 0 });
+      }
+      return rated;
+    };
+    // Standard sightseeing tickets (Cellular Jail, L&S, Baratang, Elephant
+    // Beach, Ross Island, North Bay) auto-add a priced ticket row so the
+    // fixed entry fee actually counts toward the total — but only when the
+    // agent hasn't already got a matching ticket/activity for these days
+    // (their own price always wins, no duplicate).
+    const targetDays = Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1];
+    const pendingActs = [];
+    const stdTicketCovered = (entry) => [...(pkg.activities || []), ...pendingActs].some((a) => {
+      const days = Array.isArray(a.days) && a.days.length ? a.days : [1];
+      if (!days.some((d) => targetDays.includes(d))) return false;
+      return entry.act.test(`${a.name || ''} ${a.ticketType || ''} ${a.forService || ''}`);
+    });
+    const addStdTicketIfNeeded = (name) => {
+      const entry = STD_TICKETS.find((e) => e.svc.test(name));
+      if (!entry || stdTicketCovered(entry)) return;
+      const qty = (pax?.adults || 0) + (pax?.children || []).filter((c) => (Number(c.age) || 0) >= entry.minAge).length;
+      if (!qty) return;
+      pendingActs.push({
+        ...emptyActivity([...targetDays]),
+        name: entry.label,
+        ticketType: entry.label,
+        forService: name,
+        items: [{ type: 'Ticket', qty, rate: entry.price, given: entry.price }],
+      });
+    };
 
     const own = { ...t };
     if (own.serviceType && !names.includes(own.serviceType)) own.serviceType = '';
@@ -166,19 +237,35 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const additions = [];
     for (const n of names) {
       if (present.has(n)) continue;
-      if (!own.serviceType) { own.serviceType = n; present.add(n); continue; }
+      if (!own.serviceType) {
+        own.serviceType = n;
+        Object.assign(own, timingFor(n));
+        // eslint-disable-next-line no-await-in-loop
+        const rated = await ratedItemsFor(n);
+        if (rated) own.items = rated;
+        addStdTicketIfNeeded(n);
+        present.add(n); continue;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const rated = await ratedItemsFor(n);
       additions.push({
         ...emptyTransport([...(Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1])]),
         service: t.service ?? null,
         serviceLocation: t.serviceLocation || '',
         serviceType: n,
-        // The primary row carries the day's cab pricing — mirrored rows only
-        // hold the service name + its own timing.
-        items: [],
+        ...timingFor(n),
+        // Each service type in the family keeps its own cab pricing (same cab
+        // type/config, but the rate is looked up per item) so the price panel
+        // can show a clearly divided row per service.
+        items: rated || [],
       });
+      addStdTicketIfNeeded(n);
       present.add(n);
     }
-    update({ transports: [...kept, ...additions] });
+    update({
+      transports: [...kept, ...additions],
+      ...(pendingActs.length ? { activities: [...(pkg.activities || []), ...pendingActs] } : {}),
+    });
   };
   const rmTrFamily = async (idxs) => {
     if (await confirm({ title: 'Remove this service?', message: 'This transport service (with all its service types) will be removed from the package.', confirmLabel: 'Remove' })) {
@@ -186,30 +273,35 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     }
   };
 
-  // Auto-fill cost rates from the Transport Prices master (needs a master service picked).
-  const autoTrRate = async (ti) => {
-    const t = pkg.transports[ti];
-    const serviceId = typeof t.service === 'object' ? t.service?._id : t.service;
-    if (!serviceId) return toast.error('Pick a transport service from the master list first');
-    const dayNo = (Array.isArray(t.days) ? t.days[0] : t.day) || 1;
-    const date = startDate ? format(addDays(new Date(startDate), dayNo - 1), 'yyyy-MM-dd') : undefined;
-    const cabList = pkg.sameCabType ? sharedItems : (t.items || []);
-    const updated = [...(t.items || [])];
-    let hits = 0;
-    for (let ii = 0; ii < cabList.length; ii++) {
-      const type = cabList[ii]?.type;
-      if (!type) continue;
-      // eslint-disable-next-line no-await-in-loop
-      const r = await lookupApi.transportRate({ service: serviceId, config: type, date });
-      if (r) {
-        while (updated.length <= ii) updated.push({ type: '', qty: 1, rate: 0, given: 0 });
-        // Given follows the fetched rate unless the user already customised it.
-        const keepGiven = updated[ii].given && updated[ii].given !== updated[ii].rate;
-        updated[ii] = { ...updated[ii], rate: r.price, given: keepGiven ? updated[ii].given : r.price };
-        hits++;
+  // Auto-fill cost rates from the Transport Prices master (needs a master
+  // service picked). Runs across every service type in the family at once —
+  // each prices independently against its own item name — with one toast.
+  const autoTrRateFamily = async (idxs) => {
+    let total = 0;
+    for (const fi of idxs) {
+      const t = pkg.transports[fi];
+      const serviceId = typeof t.service === 'object' ? t.service?._id : t.service;
+      if (!serviceId) continue;
+      const dayNo = (Array.isArray(t.days) ? t.days[0] : t.day) || 1;
+      const date = startDate ? format(addDays(new Date(startDate), dayNo - 1), 'yyyy-MM-dd') : undefined;
+      const cabList = pkg.sameCabType ? sharedItems : (t.items || []);
+      const updated = [...(t.items || [])];
+      let hits = 0;
+      for (let ii = 0; ii < cabList.length; ii++) {
+        const type = cabList[ii]?.type;
+        if (!type) continue;
+        // eslint-disable-next-line no-await-in-loop
+        const r = await lookupApi.transportRate({ service: serviceId, config: type, item: t.serviceType, date });
+        if (r) {
+          while (updated.length <= ii) updated.push({ type: '', qty: 1, rate: 0, given: 0 });
+          const keepGiven = updated[ii].given && updated[ii].given !== updated[ii].rate;
+          updated[ii] = { ...updated[ii], type, rate: r.price, given: keepGiven ? updated[ii].given : r.price };
+          hits++;
+        }
       }
+      if (hits) { setTr(fi, { items: updated }); total += hits; }
     }
-    if (hits) { setTr(ti, { items: updated }); toast.success(`Fetched ${hits} rate(s) from price list`); }
+    if (total) toast.success(`Fetched ${total} rate(s) from price list`);
     else toast('No matching rate — enter manually', { icon: '✏️' });
   };
 
@@ -296,8 +388,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const tk = (master?.ticketTypes || []).find((t) => norm(t.name) === norm(name));
     const extra = {};
     if (tk?.slots) {
-      const first = String(tk.slots).match(/(\d{1,2}):(\d{2})/);
-      if (first) extra.slot = `${first[1].padStart(2, '0')}:${first[2]}`;
+      // Slot is free text now (matches the master's own format, e.g. "11:00,
+      // 13:00" or "10:00 AM-11:00 AM") — no HH:MM normalisation needed.
+      extra.slot = tk.slots;
       // A "11:00-12:00" range implies the duration when none is authored.
       const range = String(tk.slots).match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
       if (range && !tk.duration) {
@@ -317,13 +410,33 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     const hasChildren = (pax?.children?.length || 0) > 0;
     const configs = String(a.activity?.ageConfig || 'Adult, Child').split(',').map((s) => s.trim()).filter(Boolean)
       .filter((cfg) => hasChildren || !/child|infant|kid/i.test(cfg));
+
+    // Default Qty from the trip's pax count instead of always 1: adult rows
+    // get the adult count; child rows get the children whose age falls in
+    // that config's range (e.g. "Child (2-12)"), or — for a config with no
+    // explicit range — whatever children weren't claimed by a ranged one.
+    const childAges = (pax?.children || []).map((c) => Number(c.age) || 0);
+    const usedChildIdx = new Set();
+    const qtyFor = (cfg) => {
+      if (/adult/i.test(cfg)) return pax?.adults || 1;
+      if (!/child|infant|kid/i.test(cfg)) return 1;
+      const range = cfg.match(/(\d+)\s*-\s*(\d+)/);
+      const [lo, hi] = range ? [Number(range[1]), Number(range[2])] : [-Infinity, Infinity];
+      let n = 0;
+      childAges.forEach((age, idx) => {
+        if (usedChildIdx.has(idx) || age < lo || age > hi) return;
+        usedChildIdx.add(idx); n++;
+      });
+      return n;
+    };
+
     const items = [];
     let hits = 0;
     for (const cfg of configs) {
       // eslint-disable-next-line no-await-in-loop
       const r = await lookupApi.activityRate({ activity: actId, service: name, config: cfg, date: actDate(a) }).catch(() => null);
       if (r) hits++;
-      items.push({ type: cfg, qty: 1, rate: r?.price || 0, given: r?.price || 0 });
+      items.push({ type: cfg, qty: qtyFor(cfg), rate: r?.price || 0, given: r?.price || 0 });
     }
     setAct(ai, { ticketType: name, items, ...extra });
     const filled = [hits && `${hits} rate(s)`, extra.slot && `slot ${extra.slot}`, extra.durationMins && `${extra.durationMins} mins`].filter(Boolean);
@@ -672,7 +785,6 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       : [ti];
                     if (famRows[0] !== ti) return null;
                     const tDays = Array.isArray(t.days) ? t.days : (t.day ? [t.day] : [1]);
-                    const cabItems = pkg.sameCabType ? sharedItems : (t.items || []);
                     const firstDay = tDays[0] || 1;
                     const firstDate = startDate ? format(addDays(new Date(startDate), firstDay - 1), 'EEEE, d MMM') : `Day ${firstDay}`;
                     return (
@@ -733,7 +845,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                               <div key={fi} className="flex items-center gap-2.5 rounded-lg border border-brand-200 border-l-4 border-l-brand-500 bg-brand-50/50 px-3 py-1.5">
                                 <Clock size={13} className="shrink-0 text-brand-400" />
                                 <span className="flex-1 truncate text-xs font-semibold text-slate-700" title={ft.serviceType}>{ft.serviceType || '—'}</span>
-                                <input type="time" className="input w-28 py-1.5 text-xs" value={ft.startTime || ''} onChange={(e) => setTr(fi, { startTime: e.target.value })} />
+                                <input type="text" className="input w-28 py-1.5 text-xs" placeholder="e.g. 10:00 AM" value={ft.startTime || ''} onChange={(e) => setTr(fi, { startTime: e.target.value })} />
                                 <input type="number" min="0" className="input w-20 py-1.5 text-xs" placeholder="Mins" value={ft.durationMins} onChange={(e) => setTr(fi, { durationMins: Number(e.target.value) })} />
                                 <button type="button" title={`Add activity/ticket for ${ft.serviceType || 'this service'}`} onClick={() => addActForService(g.days, ft.serviceType)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-600 transition hover:bg-violet-100"><Ticket size={13} /></button>
                               </div>
@@ -745,7 +857,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Start Time</label>
-                        <input type="time" className="input" value={t.startTime || ''} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
+                        <input type="text" className="input" placeholder="e.g. 10:00 AM" value={t.startTime || ''} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
                       </div>
                       <div>
                         <label className="label">Duration (Mins)</label>
@@ -762,81 +874,92 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[10px] text-white">₹</span>
                         Transportation and Prices
                       </p>
-                      <button type="button" onClick={() => autoTrRate(ti)} title="Fetch rates from the transport price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
+                      <button type="button" onClick={() => autoTrRateFamily(famRows)} title="Fetch rates from the transport price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
                     {firstDate && <p className="mb-2 inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700">{firstDate}</p>}
-                    <table className="w-full table-fixed text-xs">
-                      <thead>
-                        <tr className="bg-brand-50 text-brand-700">
-                          <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
-                          <th className="py-1.5 text-left font-bold w-12">Date</th>
-                          <th className="py-1.5 text-left font-bold w-[4.5rem]">Rate</th>
-                          <th className="py-1.5 text-left font-bold w-[4.5rem]">Given</th>
-                          <th className="w-6 rounded-r-md" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {cabItems.map((cabIt, ii) => {
-                          // Per-transport rate/given (always from t.items)
-                          const priceIt = (t.items || [])[ii] || {};
-                          return (
-                            <tr key={ii}>
-                              <td className="py-1.5 pr-2">
-                                {pkg.sameCabType ? (
-                                  <span className="text-slate-700">{cabIt.qty > 1 ? `${cabIt.qty} - ` : ''}{cabIt.type || '—'}</span>
-                                ) : (
-                                  <AsyncSelect
-                                    loadOptions={(q) => optionsApi.search('vehicleType', q).then((r) => r.map((o) => ({ _id: o.value, name: o.value })))}
-                                    value={cabIt.type ? { _id: cabIt.type, name: cabIt.type } : null}
-                                    onChange={(v) => setTrItem(ti, ii, { type: v ? v.name : '' })}
-                                    creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
-                                    placeholder="Cab type…"
-                                  />
-                                )}
-                              </td>
-                              <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
-                                {tDays.map((d) => (
-                                  <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
-                                ))}
-                              </td>
-                              <td className="py-1.5 pr-1">
-                                <input
-                                  type="number"
-                                  className="input w-16 text-xs"
-                                  placeholder="0"
-                                  value={priceIt.rate ?? ''}
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    const keepGiven = priceIt.given && priceIt.given !== priceIt.rate;
-                                    setTrItem(ti, ii, keepGiven ? { rate: v } : { rate: v, given: v });
-                                  }}
-                                />
-                              </td>
-                              <td className="py-1.5">
-                                <input
-                                  type="number"
-                                  className="input w-16 text-xs"
-                                  placeholder="0"
-                                  value={priceIt.given ?? ''}
-                                  onChange={(e) => setTrItem(ti, ii, { given: Number(e.target.value) })}
-                                />
-                                {tDays.length > 1 && Number(priceIt.given) > 0 && (
-                                  <div className="mt-0.5 text-[10px] text-slate-400">× {tDays.length}d = {((Number(priceIt.given) || 0) * (Number(priceIt.qty) || 1) * tDays.length).toLocaleString('en-IN')}</div>
-                                )}
-                              </td>
-                              <td className="py-1.5 pl-1 text-center">
-                                {!pkg.sameCabType && (t.items || []).length > 1 && (
-                                  <button type="button" onClick={() => rmTrItem(ti, ii)} className="text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {!pkg.sameCabType && (
-                      <button type="button" onClick={() => addTrItem(ti)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
-                    )}
+                    {famRows.map((fi, fidx) => {
+                      const ft = pkg.transports[fi];
+                      const cabItems = pkg.sameCabType ? sharedItems : (ft.items || []);
+                      return (
+                        <div key={fi} className={fidx > 0 ? 'mt-3 border-t-2 border-brand-100 pt-3' : ''}>
+                          {famRows.length > 1 && (
+                            <p className="mb-1.5 truncate text-[11px] font-bold uppercase tracking-wide text-brand-600" title={ft.serviceType}>{ft.serviceType || 'Service'}</p>
+                          )}
+                          <table className="w-full table-fixed text-xs">
+                            <thead>
+                              <tr className="bg-brand-50 text-brand-700">
+                                <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
+                                <th className="py-1.5 text-left font-bold w-12">Date</th>
+                                <th className="py-1.5 text-left font-bold w-[4.5rem]">Rate</th>
+                                <th className="py-1.5 text-left font-bold w-[4.5rem]">Given</th>
+                                <th className="w-6 rounded-r-md" />
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {cabItems.map((cabIt, ii) => {
+                                // Per-transport rate/given (always from ft.items)
+                                const priceIt = (ft.items || [])[ii] || {};
+                                return (
+                                  <tr key={ii}>
+                                    <td className="py-1.5 pr-2">
+                                      {pkg.sameCabType ? (
+                                        <span className="text-slate-700">{cabIt.qty > 1 ? `${cabIt.qty} - ` : ''}{cabIt.type || '—'}</span>
+                                      ) : (
+                                        <AsyncSelect
+                                          loadOptions={(q) => optionsApi.search('vehicleType', q).then((r) => r.map((o) => ({ _id: o.value, name: o.value })))}
+                                          value={cabIt.type ? { _id: cabIt.type, name: cabIt.type } : null}
+                                          onChange={(v) => setTrItem(fi, ii, { type: v ? v.name : '' })}
+                                          creatable onCreate={(name) => Promise.resolve({ _id: name, name })}
+                                          placeholder="Cab type…"
+                                        />
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
+                                      {tDays.map((d) => (
+                                        <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
+                                      ))}
+                                    </td>
+                                    <td className="py-1.5 pr-1">
+                                      <input
+                                        type="number"
+                                        className="input w-16 text-xs"
+                                        placeholder="0"
+                                        value={priceIt.rate ?? ''}
+                                        onChange={(e) => {
+                                          const v = Number(e.target.value);
+                                          const keepGiven = priceIt.given && priceIt.given !== priceIt.rate;
+                                          setTrItem(fi, ii, keepGiven ? { rate: v } : { rate: v, given: v });
+                                        }}
+                                      />
+                                    </td>
+                                    <td className="py-1.5">
+                                      <input
+                                        type="number"
+                                        className="input w-16 text-xs"
+                                        placeholder="0"
+                                        value={priceIt.given ?? ''}
+                                        onChange={(e) => setTrItem(fi, ii, { given: Number(e.target.value) })}
+                                      />
+                                      {tDays.length > 1 && Number(priceIt.given) > 0 && (
+                                        <div className="mt-0.5 text-[10px] text-slate-400">× {tDays.length}d = {((Number(priceIt.given) || 0) * (Number(priceIt.qty) || 1) * tDays.length).toLocaleString('en-IN')}</div>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 pl-1 text-center">
+                                      {!pkg.sameCabType && (ft.items || []).length > 1 && (
+                                        <button type="button" onClick={() => rmTrItem(fi, ii)} className="text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {!pkg.sameCabType && (
+                            <button type="button" onClick={() => addTrItem(fi)} className="mt-2 btn-secondary text-xs"><Plus size={11} /> Add Item</button>
+                          )}
+                        </div>
+                      );
+                    })}
                           </div>
                         </div>
                       </div>
@@ -909,7 +1032,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Slot</label>
-                        <input type="time" className="input" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
+                        <input type="text" className="input" placeholder="e.g. 10:00 AM" value={a.slot || ''} onChange={(e) => setAct(ai, { slot: e.target.value })} />
                       </div>
                       <div>
                         <label className="label">Duration (Mins)</label>

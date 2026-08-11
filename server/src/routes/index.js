@@ -21,6 +21,7 @@ import paymentRoutes from './payment.routes.js';
 import installmentRoutes from './installment.routes.js';
 import accountRoutes from './account.routes.js';
 import proformaRoutes from './proforma.routes.js';
+import gstInvoiceRoutes from './gstInvoice.routes.js';
 import orgProfileRoutes from './orgProfile.routes.js';
 import transactionRoutes from './transaction.routes.js';
 import gatewayRoutes from './gateway.routes.js';
@@ -30,6 +31,7 @@ import commentRoutes from './comment.routes.js';
 import notificationRoutes from './notification.routes.js';
 import optionRoutes from './option.routes.js';
 import hotelNoteRoutes from './hotelNote.routes.js';
+import uploadRoutes from './upload.routes.js';
 import { cityRoutes, stateRoutes } from './location.routes.js';
 import {
   hotelRoutes,
@@ -74,10 +76,12 @@ router.use('/payments', paymentRoutes);
 router.use('/installments', installmentRoutes);
 router.use('/accounts', accountRoutes);
 router.use('/proforma-invoices', proformaRoutes);
+router.use('/gst-invoices', gstInvoiceRoutes);
 router.use('/org-profile', orgProfileRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/gateways', gatewayRoutes);
 router.use('/activity-log', activityLogRoutes);
+router.use('/uploads', uploadRoutes);
 
 // Location master data
 router.use('/states', stateRoutes);

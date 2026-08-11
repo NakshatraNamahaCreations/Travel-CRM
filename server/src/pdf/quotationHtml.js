@@ -20,20 +20,33 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'nume
 const fmtDateDM = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
-// "14:00" → "02:00 PM"; returns '' when unparsable.
-const fmtTime = (hm) => {
-  const m = String(hm || '').match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return '';
+// Start Time / Slot fields are free text now (master data or hand-typed —
+// "14:00", "10:00 AM", "10:00AM-11:00AM"…). Pulls the first clock time and
+// returns 24h { h, m }, honouring an AM/PM suffix if present so "2:00 PM"
+// isn't misread as 2 AM.
+const parseHour24 = (hm) => {
+  const s = String(hm || '');
+  const m = s.match(/(\d{1,2}):(\d{2})\s*([AaPp][Mm])?/);
+  if (!m) return null;
   let h = +m[1];
-  const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  return `${String(h).padStart(2, '0')}:${m[2]} ${ap}`;
+  const ap = m[3]?.toUpperCase();
+  if (ap === 'PM' && h < 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return { h, m: +m[2] };
+};
+// "14:00" / "2:00 PM" → "02:00 PM"; returns '' when unparsable.
+const fmtTime = (hm) => {
+  const t = parseHour24(hm);
+  if (!t) return '';
+  const ap = t.h >= 12 ? 'PM' : 'AM';
+  const h = t.h % 12 || 12;
+  return `${String(h).padStart(2, '0')}:${String(t.m).padStart(2, '0')} ${ap}`;
 };
 // Arrival = start time + duration minutes.
 const arrTime = (hm, durMins) => {
-  const m = String(hm || '').match(/^(\d{1,2}):(\d{2})/);
-  if (!m || !durMins) return '';
-  const total = (+m[1]) * 60 + (+m[2]) + Number(durMins);
+  const t = parseHour24(hm);
+  if (!t || !durMins) return '';
+  const total = t.h * 60 + t.m + Number(durMins);
   const h24 = Math.floor(total / 60) % 24;
   return fmtTime(`${h24}:${String(total % 60).padStart(2, '0')}`);
 };
@@ -227,7 +240,7 @@ export function quotationHtml(q, org = null) {
         <td class="bcell hcell">${nameCell}</td>
         <td>${roomChips}</td><td>${placeCell}</td>
         <td>${joined((o) => o.rooms || 0)}</td><td>${(h.nights || []).length || 1}</td>
-        <td>${joined((o) => o.aweb || 0)}</td><td>${joined((o) => o.cnb || 0)}</td>
+        <td>${joined((o) => o.aweb || 0)}</td><td>${joined((o) => o.cweb || 0)}</td><td>${joined((o) => o.cnb || 0)}</td>
         <td>${uniq(opts.map((o) => o.mealPlan)).map((m) => `<span class="pill navy">&#127860; ${esc(m)}</span>`).join(' ')}</td>
       </tr>`;
     }).join('');
@@ -244,7 +257,7 @@ export function quotationHtml(q, org = null) {
       return `<div class="seccard">
         <div class="sechead teal"><span class="shic">&#127976;</span><span class="shnum">2</span> ${label}${company.hotelOptionNote ? `<span class="shnote">(${esc(company.hotelOptionNote)})</span>` : ''}</div>
         <div class="tbl flat"><table>
-          <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Extra<br/>Mattress</th><th>W/O<br/>Mattress</th><th>Meal Plan</th></tr></thead>
+          <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Adult<br/>Extra Bed</th><th>Child<br/>Extra Bed</th><th>Child<br/>No Bed</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
           <div class="psrow"><span>Total Tour Cost with these Hotels (incl. ${gstPct}% ${esc(p.taxName || 'GST')})</span><span class="psval">${inr(totalWithGst)}</span></div>
           <div class="psrow pshl"><span>Total Payable Amount to Confirm Booking (50%)</span><span class="psval">${inr(payable)}</span></div>
@@ -338,12 +351,12 @@ export function quotationHtml(q, org = null) {
     // Standard services carry a default ticket, shown as a chip inside the
     // service block; the matching quote ticket is then NOT repeated separately.
     const STD_TICKETS = [
-      { svc: /cellular\s*jail/i, act: /cellular\s*jail/i, label: 'Cellular Jail Ticket' },
-      { svc: /light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, act: /\bl\s*&\s*s\b|light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, label: 'L&S Ticket' },
-      { svc: /baratang|lime\s*stone|limestone/i, act: /lime\s*stone|limestone|baratang/i, label: 'Lime Stone Ticket' },
-      { svc: /elephant\s*beach/i, act: /speed\s*boat|elephant/i, label: 'Speed Boat Ticket' },
-      { svc: /ross\s*island/i, act: /\bboat\b|ross/i, label: 'Boat Ticket' },
-      { svc: /north\s*bay/i, act: /\bboat\b|north\s*bay/i, label: 'Boat Ticket' },
+      { svc: /cellular\s*jail/i, act: /cellular\s*jail/i, label: 'Cellular Jail Ticket', price: 30 },
+      { svc: /light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, act: /\bl\s*&\s*s\b|light\s*(&|and)\s*sound|sound\s*(&|and)\s*light/i, label: 'L&S Ticket', price: 300, ageNote: 'above 5 yrs' },
+      { svc: /baratang|lime\s*stone|limestone/i, act: /lime\s*stone|limestone|baratang/i, label: 'Lime Stone Ticket', price: 1200, ageNote: 'above 3 yrs' },
+      { svc: /elephant\s*beach/i, act: /speed\s*boat|elephant/i, label: 'Speed Boat Ticket', price: 1200, ageNote: 'above 2 yrs' },
+      { svc: /ross\s*island/i, act: /\bboat\b|ross/i, label: 'Boat Ticket', price: 500, ageNote: 'above 2 yrs' },
+      { svc: /north\s*bay/i, act: /\bboat\b|north\s*bay/i, label: 'Boat Ticket', price: 600, ageNote: 'above 2 yrs' },
     ];
     const svcItems = dayTs.map((t) => {
       const master = t.service && typeof t.service === 'object' ? t.service : null;
@@ -358,19 +371,26 @@ export function quotationHtml(q, org = null) {
         .map((p) => `<div class="tldesc">${esc(p)}</div>`).join('');
       // Default ticket chips for standard services (a combined service like
       // "...Sound & Light Show + Cellular Jail" gets every applicable one).
-      const stdChips = [...new Set(STD_TICKETS.filter((e) => e.svc.test(t.serviceType || '')).map((e) => e.label))]
-        .map((lbl) => tlChip('&#127903;', 'Ticket', esc(lbl))).join('');
+      // Dedupe on label+price (not label alone — "Boat Ticket" prices differ
+      // between Ross Island and North Bay) but the price itself is never
+      // shown here — just the ticket name, no amount in the quotation.
+      const seenStd = new Set();
+      const stdChips = STD_TICKETS.filter((e) => e.svc.test(t.serviceType || ''))
+        .filter((e) => { const k = `${e.label}|${e.price}`; if (seenStd.has(k)) return false; seenStd.add(k); return true; })
+        .map((e) => tlChip('&#127903;', 'Ticket', esc(e.label)))
+        .join('');
       const chips = [
         tlChip('&#128205;', 'Route', esc(t.serviceLocation || '')),
         tlChip('&#128336;', 'Start Time', fmtTime(t.startTime)),
         tlChip('&#8986;', 'Duration', t.durationMins ? `${t.durationMins} mins` : ''),
         stdChips,
       ].join('');
+      const isFerrySvc = FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`);
       return {
         icon: tlIcon(`${t.serviceType} ${t.serviceLocation}`),
         photo,
-        inner: `<div class="tltitle">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`,
-        ferry: FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`),
+        inner: `<div class="tltitle${isFerrySvc ? ' dark' : ''}">${esc(t.serviceType || t.serviceLocation || '')}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`,
+        ferry: isFerrySvc,
         keyNorm: normName(t.serviceType || ''),
       };
     }).filter(Boolean);
@@ -403,16 +423,17 @@ export function quotationHtml(q, org = null) {
         STD_TICKETS.some((e) => e.svc.test(s.keyNorm)
           && (e.act.test(actText) || (a.forService && normName(a.forService) === s.keyNorm))));
       if (covered) return;
+      const titleCls = `tltitle${isFerryAct ? ' dark' : ''}`;
       if (desc || photo) {
         standaloneActs.push({
-          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, `<div class="tltitle">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), photo, `<div class="${titleCls}">${title2}</div>${paras}${chips ? `<div class="tchips">${chips}</div>` : ''}`),
           ferry: isFerryAct,
         });
       } else if (a.name || a.ticketType) {
         // No details/photo — still show the ticket as a compact row rather
         // than dropping it from the itinerary.
         standaloneActs.push({
-          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), '', `<div class="tltitle">${title2}</div>${chips ? `<div class="tchips">${chips}</div>` : ''}`),
+          html: tlRow(tlIcon(`${a.name} ${a.ticketType}`), '', `<div class="${titleCls}">${title2}</div>${chips ? `<div class="tchips">${chips}</div>` : ''}`),
           ferry: isFerryAct,
         });
       }
@@ -440,6 +461,18 @@ export function quotationHtml(q, org = null) {
     ]);
     const lines = String(d.description || '').split(/\n|·|•/).filter((x) => x.trim())
       .filter((l) => !describedKeys.has(lineKey(l)))
+      // Fuzzy fallback: a free-text line that just restates an already-
+      // configured activity/ticket (e.g. "Port Blair To Havelock — Nautika :
+      // Luxury Class" typed into the day's notes, duplicating the real ferry
+      // entry) rarely matches the exact joined key above — drop it if it
+      // simply contains that activity's full name.
+      .filter((l) => !dayActs.some((a) => a.name && lineKey(l).includes(normName(a.name))))
+      // Ferries are always meant to be a real Activity/Transport entry (shown
+      // with its own photo/chips, or in the Ferry Details table) — a leftover
+      // free-text line naming a ferry operator (e.g. "Port Blair To Havelock
+      // — Nautika: Luxury Class") is stale/duplicate notes even when there's
+      // no matching activity left to compare it against, so drop it outright.
+      .filter((l) => !FERRY_RX.test(l))
       .filter((l) => !(richBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
       .map((l) => `<div class="ditem">&bull;&nbsp; ${esc(l.trim())}</div>`).join('')
       || (richBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
@@ -457,7 +490,7 @@ export function quotationHtml(q, org = null) {
         <div class="hdr"><span class="hlab">&#127991; Category</span><span class="cardstars" style="font-size:12px;margin:0">${'&#9733;'.repeat(st)}<span class="dim">${'&#9734;'.repeat(5 - st)}</span></span></div>
         <div class="hdr"><span class="hlab">&#128716; Room Type</span><span class="hval">${esc(h.roomType || '—')}</span></div>
         <div class="hdr"><span class="hlab">&#127860; Meal Plan</span><span class="hval">${esc(h.mealPlan || '—')}</span></div>
-        <div class="hdr"><span class="hlab">&#128682; Rooms</span><span class="hval">${h.rooms || 1} Room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</span></div>
+        <div class="hdr"><span class="hlab">&#128682; Rooms</span><span class="hval">${h.rooms || 1} Room${(h.rooms || 1) > 1 ? 's' : ''}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cweb ? ` + ${h.cweb} CWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</span></div>
       </div>`;
       const inner = `<div class="tltitle">Hotel${h.isAlternative ? ' (Alternative Option)' : ''} &mdash; ${esc(h.hotelName)}</div>${det}`;
       return tlRow('&#128716;', master.imageUrl || '', inner);
@@ -650,6 +683,7 @@ export function quotationHtml(q, org = null) {
   .fare td.v { text-align: right; font-weight: 700; color: var(--blue-dark); }
   .fare tr.final td { background: linear-gradient(90deg, #fde68a, #fdf3c0); border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); font-size: 14px; }
   .tbl td.bcell { font-weight: 700; }
+  .tbl td.bcell.fname { font-weight: 600; }
   .tbl td.dkcell { color: var(--ink); }
   .tbl .legend { background: #fff; border-top: 1px solid var(--line); padding: 5.5px; text-align: center; font-size: 11px; font-weight: 800; color: var(--blue); }
   .tbl .legend .lgwave { color: #7fb4e8; letter-spacing: -2px; }
@@ -756,7 +790,11 @@ export function quotationHtml(q, org = null) {
   .introday { display: inline-block; min-width: 52px; font-weight: 800; color: var(--blue-dark); }
 
   /* ---- day-wise itinerary (timeline cards) ---- */
-  .dayblk { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; }
+  /* No break-inside:avoid here on purpose — a tall day card that can't fit
+     the remaining page space would otherwise get pushed whole onto the next
+     page, leaving a large blank gap above it. Letting it split keeps content
+     flowing continuously; individual rows inside (.tlrow) still avoid splits. */
+  .dayblk { margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; }
   .dwhead { display: flex; align-items: center; gap: 13px; background: #f7f9fc; border-bottom: 1px solid #e8eef5; padding: 8px 16px 8px 8px; }
   .daytab { background: var(--deep); color: #fff; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 17px; border-radius: 8px; white-space: nowrap; }
   .daycity { color: var(--blue); font-weight: 800; font-size: 15.5px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -764,7 +802,7 @@ export function quotationHtml(q, org = null) {
   .daydate { font-size: 12px; font-weight: 600; color: #37475a; }
   .tlwrap { position: relative; padding: 11px 16px 11px 8px; }
   .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px solid #c5d5e8; }
-  .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; }
+  .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; break-inside: avoid; page-break-inside: avoid; }
   .tlicon { width: 44px; flex-shrink: 0; display: flex; justify-content: center; }
   .tlcirc { position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 0 3px #fff; }
   /* Emoji glyphs render in their own colors — flatten them to pure white so
@@ -774,6 +812,7 @@ export function quotationHtml(q, org = null) {
   .tlphoto { width: 168px; height: 118px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.15); }
   .tlinfo { flex: 1; min-width: 0; }
   .tltitle { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
+  .tltitle.dark { color: var(--ink); }
   .tlname { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
   .tldesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 6px; }
   .hdet { margin-top: 7px; }
@@ -1019,7 +1058,7 @@ export function quotationHtml(q, org = null) {
   ${LETTERHEAD}
 
   ${transferRows ? `<div class="seccard">
-    <div class="sechead"><span class="shic">&#9972;</span><span class="shnum">1</span> Cruise &amp; Ferry Information</div>
+    <div class="sechead"><span class="shic">&#9972;</span><span class="shnum">1</span> Ferry Details</div>
     <div class="tbl flat"><table>
       <thead><tr><th style="width:24%">Ferry</th><th style="width:26%">Ferry Sector</th><th style="width:16%">Category</th><th>Departure</th><th>Arrival</th></tr></thead>
       <tbody>${transferRows}</tbody></table>
