@@ -42,6 +42,13 @@ const installmentSchema = new mongoose.Schema(
     paidAmount: { type: Number, default: 0 },
     paidOn: { type: Date },
     reference: { type: String, trim: true },
+
+    // Set when this payment was logged as a tax bill (GST-inclusive amount
+    // entered directly) — paidAmount = taxableValue + taxAmount. Reused by
+    // the GST Invoice form so the agent doesn't have to re-enter/back-compute it.
+    taxableValue: { type: Number },
+    gstPercent: { type: Number },
+    taxAmount: { type: Number },
     debitAccount: { type: String, trim: true },
     creditAccount: { type: String, trim: true },
     payment: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },

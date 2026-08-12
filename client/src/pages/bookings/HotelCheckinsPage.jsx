@@ -15,7 +15,9 @@ import { tripNo } from '../../lib/format.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import Modal from '../../components/ui/Modal.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
-import RichTextEditor from '../../components/form/RichTextEditor.jsx';
+import GenerateVoucherModal from '../../components/trips/GenerateVoucherModal.jsx';
+import UpdateBookingStatusModal from '../../components/trips/UpdateBookingStatusModal.jsx';
+import TagCommentModal from '../../components/trips/TagCommentModal.jsx';
 import { cn } from '../../lib/cn.js';
 
 const PAGE_SIZE = 15;
@@ -33,11 +35,11 @@ const INTERVALS = [
 
 const STATUS = {
   initialized: { label: 'Initialized', cls: 'bg-slate-100 text-slate-600' },
-  booked: { label: 'Booked', cls: 'bg-amber-50 text-amber-700' },
-  confirmed: { label: 'Confirmed', cls: 'bg-green-50 text-green-700' },
-  cancelled: { label: 'Cancelled', cls: 'bg-red-50 text-red-600' },
+  in_progress: { label: 'In Progress', cls: 'bg-blue-50 text-blue-700' },
+  booked: { label: 'Booked', cls: 'bg-green-50 text-green-700' },
+  changed: { label: 'Changed', cls: 'bg-orange-50 text-orange-700' },
+  cancelled: { label: 'Dropped', cls: 'bg-red-50 text-red-600' },
 };
-const STATUS_KEYS = Object.keys(STATUS);
 const money = (n, c = 'INR') => `${c} ${new Intl.NumberFormat('en-IN').format(Math.round(n || 0))}`;
 const dt = (d) => (d ? format(new Date(d), 'd MMM') : '—');
 const ago = (d) => (d ? `${formatDistanceToNow(new Date(d))} ago` : '');
@@ -58,118 +60,6 @@ function rangeLabel(interval, after, before) {
   return `${format(after, 'EEE d MMM')} – ${format(before, 'EEE d MMM')}`;
 }
 
-// "Please BOOK & CONFIRM" voucher for a single hotel stay — mirrors the trip's
-// Docs/Vouchers options (Price Bifurcation = prices, Remove Branding) but
-// scoped to one row, with a confirmation number / contact / notes attached.
-function GenerateVoucherModal({ row, onClose }) {
-  const [confirmationNumber, setConfirmationNumber] = useState(row.confirmationNumber || '');
-  const [voucherContact, setVoucherContact] = useState('');
-  const [voucherNotes, setVoucherNotes] = useState('');
-  const [prices, setPrices] = useState(false);
-  const [removeBranding, setRemoveBranding] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const { data: info } = useQuery({
-    queryKey: ['service-booking-hotel-info', row._id],
-    queryFn: () => serviceBookingsApi.hotelInfo(row._id),
-  });
-
-  const generate = async () => {
-    setBusy(true);
-    try {
-      const blob = await serviceBookingsApi.voucherPdf(row._id, { confirmationNumber, voucherContact, voucherNotes, prices, removeBranding });
-      window.open(URL.createObjectURL(blob), '_blank');
-      toast.success('Voucher generated');
-      onClose();
-    } catch {
-      toast.error('Could not generate the voucher');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal open onClose={onClose} title={`Generate Voucher for ${row.hotelName || 'Hotel'}`} width="max-w-xl">
-      <div className="space-y-4">
-        <div>
-          <label className="label">Hotel Confirmation Details</label>
-          <input className="input" value={confirmationNumber} onChange={(e) => setConfirmationNumber(e.target.value)} placeholder="e.g. No. TSK123 by Contact Person" />
-        </div>
-
-        <div>
-          <label className="label">Booking Confirmed by Hotel's Contact Person <span className="font-normal text-gray-400">(optional)</span></label>
-          <input className="input" value={voucherContact} onChange={(e) => setVoucherContact(e.target.value)} placeholder="Type contact name…" />
-          <p className="mt-1 text-xs text-gray-400">Contact details will be included in the Voucher PDF</p>
-        </div>
-
-        <div>
-          <label className="label">Voucher Notes <span className="font-normal text-gray-400">(optional)</span></label>
-          <RichTextEditor value={voucherNotes} onChange={setVoucherNotes} placeholder="Example: Please pay 50% at the time of checkin" minHeight="80px" />
-        </div>
-
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <label className="flex cursor-pointer items-start gap-2 text-sm">
-            <input type="checkbox" checked={prices} onChange={(e) => setPrices(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600" />
-            <span>
-              <span className="font-medium text-slate-800">Include Price Bifurcation</span>
-              <span className="block text-xs text-gray-400">Select the checkbox to include the booking price bifurcation in the generated pdf</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 text-sm">
-            <input type="checkbox" checked={removeBranding} onChange={(e) => setRemoveBranding(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600" />
-            <span>
-              <span className="font-medium text-slate-800">Remove Branding</span>
-              <span className="block text-xs text-gray-400">Select the checkbox to remove the branding from the generated pdf and booking price bifurcation will not be included</span>
-            </span>
-          </label>
-        </div>
-
-        <div className="border-t border-slate-100 pt-3">
-          <p className="mb-2 text-xs text-gray-500">Please verify hotel details that will be used in voucher. Edit if required.</p>
-          <div className="grid grid-cols-3 gap-3 rounded-lg bg-slate-50 p-3 text-sm">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Hotel Address</div>
-              <div className="text-slate-700">{info?.address || row.city || '—'}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Checkin Time</div>
-              <div className="text-slate-700">{info?.checkIn || '—'}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Checkout Time</div>
-              <div className="text-slate-700">{info?.checkOut || '—'}</div>
-            </div>
-          </div>
-          {info?.hotelId && (
-            <Link to={`/services/hotels/${info.hotelId}/edit`} className="btn-secondary mt-2 text-xs">Edit Hotel details</Link>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <button onClick={generate} disabled={busy} className="btn-primary">{busy ? 'Generating…' : 'Generate Voucher'}</button>
-          <button onClick={onClose} className="btn-secondary">Close</button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function TagCommentModal({ row, onClose, onSave, saving }) {
-  const [tag, setTag] = useState(row.tag || '');
-  const [comment, setComment] = useState(row.comment || '');
-  return (
-    <Modal open onClose={onClose} title={`Tag / Comments — ${row.hotelName || 'Hotel'}`} width="max-w-sm">
-      <div className="space-y-3">
-        <div><label className="label">Tag</label><input className="input" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="e.g. Paid" /></div>
-        <div><label className="label">Comment</label><textarea rows={3} className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Notes / follow-up…" /></div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={() => onSave({ tag, comment })} disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save'}</button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 export default function HotelCheckinsPage() {
   const [tab, setTab] = useState('upcoming');
@@ -181,6 +71,7 @@ export default function HotelCheckinsPage() {
   const [page, setPage] = useState(1);
   const [voucherRow, setVoucherRow] = useState(null);
   const [tagRow, setTagRow] = useState(null);
+  const [statusRow, setStatusRow] = useState(null);
   const qc = useQueryClient();
   const debouncedSearch = useDebounced(search);
 
@@ -210,7 +101,7 @@ export default function HotelCheckinsPage() {
 
   const updMut = useMutation({
     mutationFn: ({ id, patch }) => serviceBookingsApi.update(id, patch),
-    onSuccess: () => { setTagRow(null); qc.invalidateQueries({ queryKey: ['hotel-checkins'] }); },
+    onSuccess: () => { setTagRow(null); setStatusRow(null); qc.invalidateQueries({ queryKey: ['hotel-checkins'] }); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -295,17 +186,19 @@ export default function HotelCheckinsPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-700">{s.rooms || 1} {s.roomType || 'Room'}{s.mealPlan ? <div className="text-xs text-slate-400">{s.mealPlan}</div> : null}</td>
                       <td className="px-4 py-3">
-                        <select
-                          value={s.status}
-                          onChange={(e) => updMut.mutate({ id: s._id, patch: { status: e.target.value } })}
-                          className={cn('cursor-pointer rounded-md border-0 px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-brand-300', STATUS[s.status]?.cls)}
+                        <button
+                          type="button"
+                          onClick={() => setStatusRow(s)}
+                          className={cn('cursor-pointer rounded-md border-0 px-2 py-1 text-xs font-semibold', STATUS[s.status]?.cls)}
                         >
-                          {STATUS_KEYS.map((k) => <option key={k} value={k}>{STATUS[k].label}</option>)}
-                        </select>
-                        <div className="mt-1 text-[11px] text-gray-400">{s.bookedBy?.name || '—'}{s.updatedAt ? ` • ${ago(s.updatedAt)}` : ''}</div>
-                        <button onClick={() => setVoucherRow(s)} className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700">
-                          <FileText size={11} /> {s.voucherGeneratedAt ? 'Regenerate' : 'Generate'}
+                          {STATUS[s.status]?.label || s.status}
                         </button>
+                        <div className="mt-1 text-[11px] text-gray-400">{s.bookedBy?.name || '—'}{s.updatedAt ? ` • ${ago(s.updatedAt)}` : ''}</div>
+                        {s.status === 'booked' && (
+                          <button onClick={() => setVoucherRow(s)} className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700">
+                            <FileText size={11} /> {s.voucherGeneratedAt ? 'Regenerate' : 'Generate'}
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <button onClick={() => setTagRow(s)} className="text-left">
@@ -316,6 +209,8 @@ export default function HotelCheckinsPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="text-[11px] uppercase text-gray-400">Booking</div>
                         <div className="font-semibold text-gray-900">{money(s.price, s.currency)}</div>
+                        <div className="mt-1 text-[11px] uppercase text-gray-400">Amount Paid</div>
+                        <div className="text-xs text-gray-600">{money(s.amountPaid, s.currency)}</div>
                       </td>
                     </tr>
                   );
@@ -335,6 +230,14 @@ export default function HotelCheckinsPage() {
           saving={updMut.isPending}
           onClose={() => setTagRow(null)}
           onSave={(patch) => updMut.mutate({ id: tagRow._id, patch })}
+        />
+      )}
+      {statusRow && (
+        <UpdateBookingStatusModal
+          row={statusRow}
+          saving={updMut.isPending}
+          onClose={() => setStatusRow(null)}
+          onSave={(patch) => updMut.mutate({ id: statusRow._id, patch })}
         />
       )}
     </div>

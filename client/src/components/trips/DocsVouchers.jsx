@@ -42,7 +42,7 @@ export default function DocsVouchers({ queryId, quotes }) {
     enabled: !!queryId,
   });
 
-  const pendingOf = (kinds) => sbs.filter((s) => kinds.includes(s.kind) && s.status === 'initialized').length;
+  const pendingOf = (kinds) => sbs.filter((s) => kinds.includes(s.kind) && s.status !== 'booked' && s.status !== 'cancelled').length;
   const warning =
     type === 'hotels' && pendingOf(['hotel'])
       ? `There are pending hotel bookings for this Trip. Please book all hotels before sharing.`

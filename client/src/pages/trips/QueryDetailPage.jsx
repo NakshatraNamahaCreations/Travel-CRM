@@ -419,15 +419,13 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                       <table className="w-full text-sm">
                         <thead className="text-left text-xs text-gray-400"><tr><th className="py-1.5 font-medium">Night</th><th className="font-medium">Hotel</th><th className="font-medium">Meal</th><th className="font-medium">Rooms</th><th className="text-right font-medium">Price</th></tr></thead>
                         <tbody className="divide-y divide-gray-100">
-                          {groupHotelOptions(p.hotels).map(({ base, opts }, j) => {
-                            const firstNight = (base.nights || [])[0];
+                          {nightlyHotelRows(p.hotels).map(({ night, opts, base, perNight }, j) => {
                             const uniq = (vals) => [...new Set(vals.filter(Boolean))];
-                            const billed = Math.max(...opts.map((o) => o.amount || 0));
                             return (
                               <tr key={j}>
                                 <td className="py-2.5 pr-2 align-top">
-                                  <p className="font-medium text-gray-800">{(base.nights || []).map(ord).join(', ') || '—'}</p>
-                                  {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
+                                  <p className="font-medium text-gray-800">{ord(night)}</p>
+                                  {startDate ? <p className="text-xs text-gray-400">{format(addDays(startDate, night - 1), 'd MMM')}</p> : null}
                                 </td>
                                 <td className="py-2.5 pr-2 align-top">
                                   {opts.map((o, k) => (
@@ -436,14 +434,14 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                                       {o.hotelName}
                                     </p>
                                   ))}
-                                  <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}</p>
+                                  <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}{opts[0]?.stars ? `, ${opts[0].stars} Star` : ''}</p>
                                 </td>
                                 <td className="py-2.5 pr-2 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                                 <td className="py-2.5 pr-2 align-top">
                                   <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
                                   <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                                 </td>
-                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{billed ? `₹${billed.toLocaleString('en-IN')}` : '—'}</td>
+                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                               </tr>
                             );
                           })}
@@ -652,6 +650,21 @@ function ArrivalDeparture({ q, onSaved }) {
 /* ------------------------------- All Quotes ------------------------------ */
 const ord = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 
+// One row per night (even non-contiguous, even repeat stays at the same
+// hotel) instead of one row per hotel option-group — matches how the
+// Accommodation summary should read night-by-night. Price is that hotel
+// group's total split evenly across its nights.
+function nightlyHotelRows(hotels) {
+  const rows = [];
+  groupHotelOptions(hotels).forEach(({ base, opts }) => {
+    const nights = (base.nights || []).slice().sort((a, b) => a - b);
+    const count = Math.max(1, nights.length);
+    const billed = Math.max(...opts.map((o) => o.amount || 0));
+    nights.forEach((night) => rows.push({ night, opts, base, perNight: billed / count }));
+  });
+  return rows.sort((a, b) => a.night - b.night);
+}
+
 export function QuotesTab({ id, quotes, onShare, canConvert }) {
   // Default selection: the converted (accepted) quote, else the latest.
   const acceptedId = quotes.find((x) => x.status === 'accepted')?._id;
@@ -811,15 +824,13 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                       <tr><th className="px-4 py-2 font-medium">Night</th><th className="px-4 py-2 font-medium">Hotel</th><th className="px-4 py-2 font-medium">Meal</th><th className="px-4 py-2 font-medium">Rooms</th><th className="px-4 py-2 text-right font-medium">Price</th></tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => {
-                        const firstNight = (base.nights || [])[0];
+                      {nightlyHotelRows(pkg.hotels).map(({ night, opts, base, perNight }, i) => {
                         const uniq = (vals) => [...new Set(vals.filter(Boolean))];
-                        const billed = Math.max(...opts.map((o) => o.amount || 0));
                         return (
                           <tr key={i}>
                             <td className="px-4 py-3 align-top">
-                              <p className="font-medium text-gray-800">{(base.nights || []).map(ord).join(', ') || '—'}</p>
-                              {startDate && firstNight ? <p className="text-xs text-gray-400">{format(addDays(startDate, firstNight - 1), 'd MMM')}</p> : null}
+                              <p className="font-medium text-gray-800">{ord(night)}</p>
+                              {startDate ? <p className="text-xs text-gray-400">{format(addDays(startDate, night - 1), 'd MMM')}</p> : null}
                             </td>
                             <td className="px-4 py-3 align-top">
                               {opts.map((o, k) => (
@@ -828,14 +839,14 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                                   {o.hotelName}
                                 </p>
                               ))}
-                              <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}</p>
+                              <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}{opts[0]?.stars ? `, ${opts[0].stars} Star` : ''}</p>
                             </td>
                             <td className="px-4 py-3 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                             <td className="px-4 py-3 align-top">
                               <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
                               <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                             </td>
-                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{billed ? `₹${billed.toLocaleString('en-IN')}` : '—'}</td>
+                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                           </tr>
                         );
                       })}
@@ -1421,15 +1432,26 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
 
 function LogPaymentModal({ inst, onClose, onSaved }) {
   const qc = useQueryClient();
+  const [taxBill, setTaxBill] = useState(false);
   const [f, setF] = useState({
     paidAmount: inst?.amount || 0,
     paidOn: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     reference: '',
+    taxableValue: inst?.amount ? Math.round((inst.amount / 1.05) * 100) / 100 : 0,
+    gstPercent: 5,
   });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
 
+  const taxAmount = taxBill ? Math.round(((Number(f.taxableValue) || 0) * (Number(f.gstPercent) || 0)) / 100 * 100) / 100 : 0;
+  const finalAmount = taxBill ? Math.round(((Number(f.taxableValue) || 0) + taxAmount) * 100) / 100 : Number(f.paidAmount) || 0;
+
   const mut = useMutation({
-    mutationFn: () => installmentsApi.logPayment(inst._id, { ...f, paidAmount: Number(f.paidAmount) }),
+    mutationFn: () => installmentsApi.logPayment(inst._id, {
+      paidOn: f.paidOn,
+      reference: f.reference,
+      paidAmount: finalAmount,
+      ...(taxBill ? { taxableValue: Number(f.taxableValue) || 0, gstPercent: Number(f.gstPercent) || 0, taxAmount } : {}),
+    }),
     onSuccess: () => {
       toast.success('Payment logged successfully');
       qc.invalidateQueries({ queryKey: ['inst'] });
@@ -1450,10 +1472,30 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
             <p className="mt-0.5 text-xs text-slate-400">Due: {format(new Date(inst.dueDate), 'd MMM, yyyy')}</p>
           )}
         </div>
-        <div>
-          <label className="label">Paid Amount (INR)</label>
-          <input type="number" className="input" value={f.paidAmount} onChange={set('paidAmount')} />
-        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+          <input type="checkbox" checked={taxBill} onChange={(e) => setTaxBill(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+          Tax Bill Amount (GST Inclusive)
+        </label>
+
+        {taxBill ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Taxable Value (INR)</label><input type="number" className="input" value={f.taxableValue} onChange={set('taxableValue')} /></div>
+              <div><label className="label">GST %</label><input type="number" className="input" value={f.gstPercent} onChange={set('gstPercent')} /></div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <div className="flex justify-between text-slate-500"><span>GST Amount</span><span>₹{taxAmount.toLocaleString('en-IN')}</span></div>
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-semibold text-slate-900"><span>Total Paid Amount</span><span>₹{finalAmount.toLocaleString('en-IN')}</span></div>
+            </div>
+          </>
+        ) : (
+          <div>
+            <label className="label">Paid Amount (INR)</label>
+            <input type="number" className="input" value={f.paidAmount} onChange={set('paidAmount')} />
+          </div>
+        )}
+
         <div>
           <label className="label">Paid On</label>
           <input type="datetime-local" className="input" value={f.paidOn} onChange={set('paidOn')} />
@@ -1464,7 +1506,7 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={() => mut.mutate()} disabled={mut.isPending || !f.paidAmount} className="btn-primary">
+          <button onClick={() => mut.mutate()} disabled={mut.isPending || !finalAmount} className="btn-primary">
             {mut.isPending ? 'Saving…' : 'Log Payment'}
           </button>
         </div>
@@ -1579,23 +1621,9 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
   const STATUS = { paid: 'text-green-700 bg-green-50', overdue: 'text-rose-700 bg-rose-50', unverified: 'text-amber-700 bg-amber-50', upcoming: 'text-slate-600 bg-slate-100' };
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [payInst, setPayInst] = useState(null); // instalment being paid
-  // GST Invoice covers the trip's full payment, not individual instalments —
-  // it only becomes available once everything due has been paid.
-  const isFullyPaid = effectiveTotal > 0 && paidTotal >= effectiveTotal;
-  const [gstOpen, setGstOpen] = useState(false);
-  // Latest instalment's paid date — used to default the GST invoice's
-  // Payment Date to when the final payment actually came in.
-  const lastPaidOn = rows.filter((r) => r.paid && r.paidOn).map((r) => r.paidOn).sort().slice(-1)[0];
-  const gstCtx = {
-    query: id,
-    booking: bookingId,
-    tripId: rows[0]?.tripId,
-    guest: rows[0]?.guest,
-    destinations: rows[0]?.destinations,
-    paidAmount: paidTotal,
-    amount: effectiveTotal,
-    paidOn: lastPaidOn,
-  };
+  // One GST invoice per payment received — raised against the individual
+  // instalment as soon as that instalment is paid, not once the whole trip is.
+  const [gstInst, setGstInst] = useState(null);
   const [waInst, setWaInst] = useState(null); // instalment being sent a WhatsApp template for
 
   const openReceipt = async (r) => {
@@ -1623,17 +1651,7 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
               {effectiveTotal.toLocaleString('en-IN')}
             </p>
           </div>
-          {isFullyPaid ? (
-            <button
-              onClick={() => setGstOpen(true)}
-              title="Create / download the GST tax invoice for the full payment received"
-              className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
-            >
-              <FileText size={13} className="mr-1 inline" /> GST Invoice
-            </button>
-          ) : (
-            <p className="text-xs text-gray-400">GST Invoice unlocks once the full amount is paid.</p>
-          )}
+          <p className="text-xs text-gray-400">Raise a GST invoice against each payment once it is logged.</p>
         </div>
         {isLoading ? <div className="py-10 text-center text-gray-400">Loading…</div> : !rows.length ? (
           <div className="card p-8 text-center text-sm text-gray-400">No instalment schedule yet. It is generated when the booking is created.</div>
@@ -1681,6 +1699,13 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
                             <FileText size={12} className="mr-1 inline" /> Receipt
                           </button>
                           <button
+                            onClick={() => setGstInst(r)}
+                            title="Create / download the GST tax invoice for this payment"
+                            className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                          >
+                            <FileText size={12} className="mr-1 inline" /> GST Invoice
+                          </button>
+                          <button
                             onClick={() => setWaInst(r)}
                             title="Send a WhatsApp template message for this payment"
                             className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
@@ -1722,7 +1747,11 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
           onSaved={() => qc.invalidateQueries({ queryKey: ['inst', id] })}
         />
       )}
-      <GstInvoiceModal installment={gstCtx} open={gstOpen} onClose={() => setGstOpen(false)} />
+      <GstInvoiceModal
+        installment={gstInst ? { ...gstInst, query: id, booking: bookingId } : null}
+        open={!!gstInst}
+        onClose={() => setGstInst(null)}
+      />
       {waInst && <WhatsAppTemplateModal inst={waInst} onClose={() => setWaInst(null)} />}
     </div>
   );

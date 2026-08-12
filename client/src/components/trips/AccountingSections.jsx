@@ -424,11 +424,11 @@ function ProformaForm({ initial, org, pending, onCancel, onSave }) {
 // can list many particulars, this documents money actually collected, with
 // the GST backed out of that (GST-inclusive) amount.
 
-// `ctx` is either a specific paid Installment doc, or — for the "whole trip
-// fully paid" flow — a lightweight { query, booking, tripId, guest,
-// destinations, paidAmount, amount } object with no _id/installmentNumber.
-// Either way the invoice raised is scoped by `query` (and `installment` when
-// there is one) so history for that trip always shows up together.
+// `ctx` is the paid Installment the invoice is raised against — one invoice
+// per payment received. It may also be a lightweight { query, booking, ...,
+// paidAmount, amount } object with no _id/installmentNumber, which raises a
+// query-scoped invoice instead. Either way the invoice carries `query` (and
+// `installment` when there is one) so a trip's history stays together.
 export function GstInvoiceModal({ installment: ctx, open, onClose }) {
   const qc = useQueryClient();
   const confirm = useConfirm();
@@ -479,7 +479,9 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
   const guestName = [ctx?.guest?.salutation, ctx?.guest?.name].filter(Boolean).join(' ') || 'Guest';
   const defaults = useMemo(() => {
     if (!ctx) return null;
-    const gstPercent = 5;
+    // If this payment was logged as a tax bill (GST-inclusive amount entered
+    // directly), reuse that exact breakdown instead of backing it out again.
+    const gstPercent = ctx.gstPercent || 5;
     const paid = ctx.paidAmount || ctx.amount || 0;
     return {
       seller: {
@@ -498,8 +500,9 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
       particulars: `Payment received towards Trip# ${ctx.tripId || ''} - ${(ctx.destinations || []).join(', ')} Package`,
       hsn: '',
       // Back into a taxable value that grosses up to what was actually paid,
-      // at the default rate — the agent can adjust either field.
-      taxableValue: Math.round((paid / (1 + gstPercent / 100)) * 100) / 100,
+      // at the default rate — the agent can adjust either field. Skipped when
+      // the payment already carries its own tax-bill breakdown.
+      taxableValue: ctx.taxableValue != null ? ctx.taxableValue : Math.round((paid / (1 + gstPercent / 100)) * 100) / 100,
       gstPercent,
       taxType: 'intra',
       amountReceived: paid,
@@ -683,8 +686,8 @@ export function ProfitSection({ queryId, onGoToPayments }) {
   const tax = accepted?.pricing?.tax || 0;
 
   const active = sbs.filter((s) => s.status !== 'cancelled');
-  const pending = active.filter((s) => s.status === 'initialized');
-  const bookedCost = active.filter((s) => ['booked', 'confirmed'].includes(s.status)).reduce((s2, x) => s2 + (x.price || 0), 0);
+  const pending = active.filter((s) => s.status !== 'booked');
+  const bookedCost = active.filter((s) => s.status === 'booked').reduce((s2, x) => s2 + (x.price || 0), 0);
   const complete = active.length > 0 && pending.length === 0;
   const showNumbers = complete || showIncomplete;
 
@@ -746,7 +749,7 @@ export function ProfitSection({ queryId, onGoToPayments }) {
                 <tr key={s._id}>
                   <td className="px-4 py-2.5 font-medium text-gray-800">{s.name || '—'}{s.detail ? <span className="block text-xs font-normal text-gray-400">{s.detail}</span> : null}</td>
                   <td className="px-4 py-2.5 capitalize text-gray-600">{s.kind}</td>
-                  <td className="px-4 py-2.5"><span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', ['booked', 'confirmed'].includes(s.status) ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700')}>{s.status}</span></td>
+                  <td className="px-4 py-2.5"><span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', s.status === 'booked' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700')}>{s.status.replace('_', ' ')}</span></td>
                   <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{(s.price || 0).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
@@ -780,6 +783,11 @@ export function ProfitSection({ queryId, onGoToPayments }) {
                       {r.direction === 'incoming' ? 'Received' : 'Paid out'}
                     </span>
                     {r.direction === 'outgoing' && r.supplierName ? <span className="ml-2 text-xs text-gray-400">{r.supplierName}</span> : null}
+                    {r.taxableValue != null && (
+                      <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700" title={`Taxable ₹${inr(r.taxableValue)} + GST ${r.gstPercent}% (₹${inr(r.taxAmount)})`}>
+                        GST
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-gray-500">{r.reference || '—'}</td>
                   <td className={cn('px-4 py-2.5 text-right font-semibold', r.direction === 'incoming' ? 'text-green-700' : 'text-rose-700')}>

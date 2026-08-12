@@ -140,6 +140,13 @@ export const logPayment = asyncHandler(async (req, res) => {
   inst.debitAccount = req.body.debitAccount || inst.debitAccount;
   inst.creditAccount = req.body.creditAccount || inst.creditAccount;
 
+  // Tax-bill (GST-inclusive) payment entry — optional.
+  if (req.body.taxableValue != null) {
+    inst.taxableValue = Number(req.body.taxableValue) || 0;
+    inst.gstPercent = Number(req.body.gstPercent) || 0;
+    inst.taxAmount = Number(req.body.taxAmount) || 0;
+  }
+
   // Mirror into the Payment ledger so accounting totals stay in sync.
   const payment = await createPaymentWithRetry({
     party: inst.direction === 'incoming' ? 'customer' : 'supplier',

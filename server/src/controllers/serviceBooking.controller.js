@@ -18,34 +18,59 @@ export const listServiceBookings = asyncHandler(async (req, res) => {
   if (!query) throw ApiError.badRequest('query id is required');
   const filter = { query };
   if (kind) filter.kind = kind;
-  const items = await ServiceBooking.find(filter).populate('bookedBy', 'name').sort({ kind: 1, order: 1, createdAt: 1 });
+  // Date-wise within each kind — a hotel booked again later in the trip must
+  // sit at its own check-in date, not next to its earlier stay.
+  const items = await ServiceBooking.find(filter).populate('bookedBy', 'name').sort({ kind: 1, checkIn: 1, order: 1, createdAt: 1 });
   return ok(res, items);
 });
+
+// A hotel row's `nights` can be non-contiguous (e.g. [1,5,6,7] — same hotel,
+// checked back into on a later night after a stay elsewhere). Each
+// contiguous run is a separate physical stay/booking, so split on gaps.
+function contiguousRuns(nights) {
+  const sorted = [...new Set(nights)].sort((a, b) => a - b);
+  const runs = [];
+  let run = [];
+  for (const n of sorted) {
+    if (run.length && n !== run[run.length - 1] + 1) { runs.push(run); run = []; }
+    run.push(n);
+  }
+  if (run.length) runs.push(run);
+  return runs.length ? runs : [[]];
+}
 
 // Build the booking rows for one kind from the quote package.
 function rowsFromQuote(pkg, startDate) {
   // Alternative hotel options are quote-time choices — never booked as-is.
-  const hotels = (pkg.hotels || []).filter((h) => !h.isAlternative).map((h, i) => {
-    const ns = (h.nights || []).slice().sort((a, b) => a - b);
-    const count = Math.max(1, ns.length);
-    const checkIn = startDate ? addDays(startDate, (ns[0] || 1) - 1) : null;
-    const checkOut = checkIn ? addDays(checkIn, count) : null;
+  // One ServiceBooking per CONTIGUOUS run of nights, so a hotel booked again
+  // later in the trip shows as its own stay instead of one row spanning the gap.
+  const hotels = [];
+  (pkg.hotels || []).filter((h) => !h.isAlternative).forEach((h) => {
+    const allNights = (h.nights || []).slice().sort((a, b) => a - b);
+    const totalCount = Math.max(1, allNights.length);
+    const perNight = Math.round((h.amount || 0) / totalCount);
     const bits = [h.mealPlan, `${h.rooms || 1} ${h.roomType || 'Room'}`];
     if (h.aweb) bits.push(`${h.aweb} AWEB`);
     if (h.cweb) bits.push(`${h.cweb} CWEB`);
-    const perNight = Math.round((h.amount || 0) / count);
-    const nightRates = Array.from({ length: count }, (_, n) => ({
-      date: checkIn ? addDays(checkIn, n) : null,
-      given: perNight,
-      booked: perNight,
-    }));
-    return {
-      kind: 'hotel', name: h.hotelName, city: h.city, stars: h.stars, hotelRef: h.hotel || null,
-      roomType: h.roomType, mealPlan: h.mealPlan, rooms: h.rooms, paxPerRoom: h.paxPerRoom,
-      aweb: h.aweb, cweb: h.cweb, cnb: h.cnb,
-      nights: ns, checkIn, checkOut, nightRates, detail: bits.filter(Boolean).join(' • '),
-      price: h.amount || 0, order: i,
-    };
+    const detail = bits.filter(Boolean).join(' • ');
+
+    contiguousRuns(allNights).forEach((run) => {
+      const count = Math.max(1, run.length);
+      const checkIn = startDate ? addDays(startDate, (run[0] || 1) - 1) : null;
+      const checkOut = checkIn ? addDays(checkIn, count) : null;
+      const nightRates = Array.from({ length: count }, (_, n) => ({
+        date: checkIn ? addDays(checkIn, n) : null,
+        given: perNight,
+        booked: perNight,
+      }));
+      hotels.push({
+        kind: 'hotel', name: h.hotelName, city: h.city, stars: h.stars, hotelRef: h.hotel || null,
+        roomType: h.roomType, mealPlan: h.mealPlan, rooms: h.rooms, paxPerRoom: h.paxPerRoom,
+        aweb: h.aweb, cweb: h.cweb, cnb: h.cnb,
+        nights: run, checkIn, checkOut, nightRates, detail,
+        price: perNight * count, order: hotels.length,
+      });
+    });
   });
 
   const operational = (pkg.transports || []).map((t, i) => {
@@ -102,7 +127,7 @@ export const generateServiceBookings = asyncHandler(async (req, res) => {
 export const updateServiceBooking = asyncHandler(async (req, res) => {
   const patch = {};
   const fields = [
-    'status', 'price', 'tag', 'comment', 'detail', 'name', 'roomType', 'mealPlan', 'rooms',
+    'status', 'price', 'amountPaid', 'tag', 'comment', 'detail', 'name', 'roomType', 'mealPlan', 'rooms',
     'paxPerRoom', 'aweb', 'cweb', 'cnb', 'nightRates', 'flagged',
   ];
   for (const f of fields) {

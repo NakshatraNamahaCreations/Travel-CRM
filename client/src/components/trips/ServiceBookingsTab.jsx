@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Hotel, Bus, Pencil, Trash2, Sparkles, User, Share2, Mail, MessageCircle, Copy, Send, Plus, Flag } from 'lucide-react';
+import { Hotel, Bus, Pencil, Trash2, Sparkles, User, Share2, Mail, MessageCircle, Copy, Send, Plus, Flag, FileText } from 'lucide-react';
 import { format, formatDistanceToNow, addDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import { orgProfileApi } from '../../api/orgProfile.js';
 import { company } from '../../config/company.js';
 import { tripNo } from '../../lib/format.js';
+import { stayHeading, stayNightDates } from '../../lib/stayFormat.js';
 import { buildHotelBookingSubject, buildHotelBookingEmailHtml, buildHotelBookingWhatsAppText, whatsappToHtml } from '../../lib/shareContent.js';
 import StarRating from '../ui/StarRating.jsx';
 import Modal from '../ui/Modal.jsx';
+import GenerateVoucherModal from './GenerateVoucherModal.jsx';
+import UpdateBookingStatusModal from './UpdateBookingStatusModal.jsx';
+import { BOOKING_TAGS } from './TagCommentModal.jsx';
 import { useConfirm } from '../ui/ConfirmProvider.jsx';
 import { cn } from '../../lib/cn.js';
 
@@ -38,18 +42,23 @@ const SUBS = [
   { k: 'operational', l: 'Operational', icon: Bus },
 ];
 const TITLES = { hotel: 'Hotel Bookings', operational: 'Operational Services' };
-const ord = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+const ord = (n) => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
 
 const STATUS = {
   initialized: { label: 'Initialized', cls: 'bg-slate-100 text-slate-600' },
-  booked: { label: 'Booked', cls: 'bg-amber-50 text-amber-700' },
-  confirmed: { label: 'Confirmed', cls: 'bg-green-50 text-green-700' },
-  cancelled: { label: 'Cancelled', cls: 'bg-red-50 text-red-600' },
+  in_progress: { label: 'In Progress', cls: 'bg-blue-50 text-blue-700' },
+  booked: { label: 'Booked', cls: 'bg-green-50 text-green-700' },
+  changed: { label: 'Changed', cls: 'bg-orange-50 text-orange-700' },
+  cancelled: { label: 'Dropped', cls: 'bg-red-50 text-red-600' },
 };
-const STATUS_KEYS = Object.keys(STATUS);
 const money = (n, c = 'INR') => `${c} ${new Intl.NumberFormat('en-IN').format(Math.round(n || 0))}`;
 const fmtD = (d) => (d ? format(new Date(d), 'd MMM') : '—');
 const ago = (d) => (d ? `${formatDistanceToNow(new Date(d))} ago` : '');
+
 
 function EditModal({ row, onClose, onSave, saving }) {
   const [f, setF] = useState({ price: row.price ?? 0, tag: row.tag || '', comment: row.comment || '', detail: row.detail || '' });
@@ -60,7 +69,14 @@ function EditModal({ row, onClose, onSave, saving }) {
         <div><label className="label">Stay / Services</label><input className="input" value={f.detail} onChange={set('detail')} placeholder="CP • 3 Deluxe Room • 1 AWEB" /></div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="label">Booking Price (₹)</label><input type="number" className="input" value={f.price} onChange={set('price')} /></div>
-          <div><label className="label">Tag</label><input className="input" value={f.tag} onChange={set('tag')} placeholder="e.g. Paid" /></div>
+          <div>
+            <label className="label">Tag</label>
+            <select className="input" value={f.tag} onChange={set('tag')}>
+              <option value="">No tag</option>
+              {BOOKING_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+              {f.tag && !BOOKING_TAGS.includes(f.tag) && <option value={f.tag}>{f.tag}</option>}
+            </select>
+          </div>
         </div>
         <div><label className="label">Comment</label><textarea rows={3} className="input" value={f.comment} onChange={set('comment')} placeholder="Notes / follow-up…" /></div>
         <div className="flex justify-end pt-1">
@@ -94,6 +110,7 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
     cnb: row.cnb ?? 0,
     tag: row.tag || '',
     comment: row.comment || '',
+    amountPaid: row.amountPaid ?? 0,
     flagged: !!row.flagged,
   });
   const [nightRates, setNightRates] = useState(() => buildDefaultNightRates(row));
@@ -124,7 +141,7 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
     onSave({
       mealPlan: f.mealPlan, roomType: f.roomType, paxPerRoom: Number(f.paxPerRoom) || 2, rooms: Number(f.rooms) || 1,
       aweb: Number(f.aweb) || 0, cweb: Number(f.cweb) || 0, cnb: Number(f.cnb) || 0,
-      tag: f.tag, comment: f.comment, flagged: f.flagged, detail,
+      tag: f.tag, comment: f.comment, amountPaid: Number(f.amountPaid) || 0, flagged: f.flagged, detail,
       nightRates: nightRates.map((n) => ({ date: n.date, given: Number(n.given) || 0, booked: Number(n.booked) || 0 })),
     });
   };
@@ -159,7 +176,17 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
             <div><label className="label">Comp Child</label><div className="input flex items-center bg-slate-50 text-xs text-gray-500">Upto 5y ({Number(f.cnb) || 0}C)</div></div>
           </div>
 
-          <div><label className="label">Tag</label><input className="input" value={f.tag} onChange={set('tag')} placeholder="e.g. Paid" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+            <label className="label">Tag</label>
+            <select className="input" value={f.tag} onChange={set('tag')}>
+              <option value="">No tag</option>
+              {BOOKING_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+              {f.tag && !BOOKING_TAGS.includes(f.tag) && <option value={f.tag}>{f.tag}</option>}
+            </select>
+          </div>
+            <div><label className="label">Amount Paid (to hotel)</label><input type="number" min="0" className="input" value={f.amountPaid} onChange={setNum('amountPaid')} /></div>
+          </div>
           <div><label className="label">Comment</label><textarea rows={2} className="input" value={f.comment} onChange={set('comment')} placeholder="Notes / follow-up…" /></div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -255,7 +282,7 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
 // Composes a ready-to-send confirmation request with rate/billing details the
 // hotel needs, since these bookings are billed to us, not paid by the guest
 // on-site.
-function ShareHotelBookingModal({ row, guest, pax, queryNumber, onClose, onEdit }) {
+export function ShareHotelBookingModal({ row, guest, pax, queryNumber, onClose, onEdit }) {
   const { data: org } = useQuery({ queryKey: ['org-profile'], queryFn: orgProfileApi.get });
   const [tab, setTab] = useState('email');
   const [opts, setOpts] = useState({ price: true, billing: true, contact: false });
@@ -349,15 +376,29 @@ function ShareHotelBookingModal({ row, guest, pax, queryNumber, onClose, onEdit 
   );
 }
 
-function StatusSelect({ row, onChange }) {
+// Status only moves forward (Initialized -> Booked -> Confirmed, Dropped from
+// anywhere) — clicking the badge opens the Update Booking Status modal
+// instead of an inline dropdown that could revert to an earlier stage.
+function StatusSelect({ row, onChange, saving }) {
+  const [open, setOpen] = useState(false);
   return (
-    <select
-      value={row.status}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn('cursor-pointer rounded-md border-0 px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-brand-300', STATUS[row.status]?.cls)}
-    >
-      {STATUS_KEYS.map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}
-    </select>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn('cursor-pointer rounded-md border-0 px-2 py-1 text-xs font-semibold', STATUS[row.status]?.cls)}
+      >
+        {STATUS[row.status]?.label || row.status}
+      </button>
+      {open && (
+        <UpdateBookingStatusModal
+          row={row}
+          saving={saving}
+          onClose={() => setOpen(false)}
+          onSave={(patch) => { onChange(patch); setOpen(false); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -403,7 +444,7 @@ function OperationalGroups({ rows, startDate, onStatus, onEdit, onDelete }) {
                     </div>
                     <div className="w-36 shrink-0 text-sm text-gray-600">{cabDetail || serviceType || '—'}</div>
                     <div className="w-32 shrink-0">
-                      <StatusSelect row={r} onChange={(status) => onStatus(r, status)} />
+                      <StatusSelect row={r} onChange={(patch) => onStatus(r, patch)} />
                       {r.tag && <span className="mt-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{r.tag}</span>}
                     </div>
                     <div className="w-32 shrink-0 text-right">
@@ -429,6 +470,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
   const [sub, setSub] = useState('hotel');
   const [editRow, setEditRow] = useState(null);
   const [shareRow, setShareRow] = useState(null);
+  const [voucherRow, setVoucherRow] = useState(null);
   const qc = useQueryClient();
   const confirm = useConfirm();
 
@@ -493,7 +535,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
           <OperationalGroups
             rows={rows}
             startDate={startDate}
-            onStatus={(r, status) => updMut.mutate({ id: r._id, patch: { status } })}
+            onStatus={(r, patch) => updMut.mutate({ id: r._id, patch })}
             onEdit={setEditRow}
             onDelete={askDelete}
           />
@@ -528,16 +570,33 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {sub === 'hotel' && (r.checkIn || r.checkOut) && (
-                        <div className="font-medium text-gray-800">{fmtD(r.checkIn)} – {fmtD(r.checkOut)}{r.nights?.length ? ` · ${r.nights.length}N` : ''}</div>
+                      {sub === 'hotel' ? (
+                        <>
+                          <div className="font-medium text-gray-800">{stayHeading(r)}</div>
+                          {r.detail && (
+                            (r.nights?.length || 1) > 1
+                              ? stayNightDates(r).map((d, i) => (
+                                  <div key={i} className="text-xs text-gray-500">
+                                    <span className="font-medium text-gray-400">{d ? `${fmtD(d)} · ` : ''}{i + 1}N - </span>{r.detail}
+                                  </div>
+                                ))
+                              : <div className="text-xs text-gray-500">{r.detail}</div>
+                          )}
+                        </>
+                      ) : (
+                        r.detail && <div className="text-xs text-gray-500">{r.detail}</div>
                       )}
-                      {r.detail && <div className="text-xs text-gray-500">{r.detail}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusSelect row={r} onChange={(status) => updMut.mutate({ id: r._id, patch: { status } })} />
+                      <StatusSelect row={r} onChange={(patch) => updMut.mutate({ id: r._id, patch })} />
                       <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
                         <User size={10} /> {r.bookedBy?.name || '—'}{r.updatedAt ? ` • ${ago(r.updatedAt)}` : ''}
                       </div>
+                      {sub === 'hotel' && r.status === 'booked' && (
+                        <button onClick={() => setVoucherRow(r)} className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700">
+                          <FileText size={11} /> {r.voucherGeneratedAt ? 'Regenerate Voucher' : 'Generate Voucher'}
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {r.tag && <span className="mb-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{r.tag}</span>}
@@ -546,6 +605,12 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                     <td className="px-4 py-3 text-right">
                       <div className="text-[11px] uppercase text-gray-400">Booking</div>
                       <div className="font-semibold text-gray-900">{money(r.price, r.currency)}</div>
+                      {sub === 'hotel' && (
+                        <>
+                          <div className="mt-1 text-[11px] uppercase text-gray-400">Amount Paid</div>
+                          <div className="text-xs text-gray-600">{money(r.amountPaid, r.currency)}</div>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -583,6 +648,8 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
           onEdit={setEditRow}
         />
       )}
+
+      {voucherRow && <GenerateVoucherModal row={voucherRow} onClose={() => { setVoucherRow(null); refresh(); }} />}
     </div>
   );
 }

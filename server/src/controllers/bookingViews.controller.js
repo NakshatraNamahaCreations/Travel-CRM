@@ -1,5 +1,7 @@
 import { Booking } from '../models/Booking.js';
 import { ServiceBooking } from '../models/ServiceBooking.js';
+import { Query } from '../models/Query.js';
+import { Hotel } from '../models/Hotel.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, paginate } from '../utils/apiResponse.js';
 
@@ -90,23 +92,73 @@ const baseRow = (b) => ({
   createdAt: b.createdAt,
 });
 
-// GET /api/bookings/views/hotels?tab=&search=
+// Comma-separated id list -> array, ignoring blanks.
+const idList = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+// GET /api/bookings/views/hotels?tab=&search=&destinations=&sources=&tags=&team=
+//   &stayFrom=&stayTo=&hotels=&hotelGroups=
 export const hotelBookings = asyncHandler(async (req, res) => {
   const filter = tabFilter(req.query.tab);
   if (req.query.search) {
     const rx = new RegExp(String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ 'guest.name': rx }, { 'guest.phones.number': rx }];
   }
+
+  // --- Advanced filters ---
+  const destinations = idList(req.query.destinations);
+  if (destinations.length) filter.destinations = { $in: destinations };
+
+  const team = idList(req.query.team);
+  if (team.length) filter.owner = { $in: team };
+
+  // Trip source lives on the Query, so narrow to matching queries first.
+  const sources = idList(req.query.sources);
+  if (sources.length) {
+    const qIds = await Query.find({ source: { $in: sources } }).distinct('_id');
+    filter.query = { $in: qIds };
+  }
+
+  // Tag / stay-window / hotel filters are properties of the hotel
+  // ServiceBooking rows — resolve to the set of queries that have a matching
+  // stay, then intersect with any query constraint already applied.
+  const tags = String(req.query.tags || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const hotelIds = idList(req.query.hotels);
+  const hotelGroups = String(req.query.hotelGroups || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const { stayFrom, stayTo } = req.query;
+
+  if (tags.length || hotelIds.length || hotelGroups.length || stayFrom || stayTo) {
+    const svcFilter = { kind: 'hotel' };
+    if (tags.length) svcFilter.tag = { $in: tags };
+    if (stayFrom || stayTo) {
+      svcFilter.checkIn = {};
+      if (stayFrom) svcFilter.checkIn.$gte = new Date(stayFrom);
+      if (stayTo) svcFilter.checkIn.$lte = new Date(new Date(stayTo).setHours(23, 59, 59, 999));
+    }
+    let refs = hotelIds;
+    if (hotelGroups.length) {
+      const grouped = await Hotel.find({ groupName: { $in: hotelGroups } }).distinct('_id');
+      refs = refs.concat(grouped.map(String));
+    }
+    if (refs.length) svcFilter.hotelRef = { $in: refs };
+
+    const matchedQueryIds = (await ServiceBooking.find(svcFilter).distinct('query')).map(String);
+    filter.query = filter.query
+      ? { $in: filter.query.$in.map(String).filter((id) => matchedQueryIds.includes(id)) }
+      : { $in: matchedQueryIds };
+  }
+
   const total = await Booking.countDocuments(filter);
   const meta = paginate(req.query, total);
-  const rows = await Booking.find(filter).populate(POPULATE).sort('-createdAt').skip(meta.skip).limit(meta.limit);
+  const SORTS = { newest: '-createdAt', oldest: 'createdAt', start_asc: 'startDate', start_desc: '-startDate' };
+  const sort = SORTS[req.query.sort] || SORTS.newest;
+  const rows = await Booking.find(filter).populate(POPULATE).sort(sort).skip(meta.skip).limit(meta.limit);
 
   // Fetch ServiceBooking hotel rows for all these queries in one query.
   const queryIds = rows.map((b) => b.query?._id || b.query).filter(Boolean);
   const svcRows = queryIds.length
     ? await ServiceBooking.find({ query: { $in: queryIds }, kind: 'hotel' })
         .populate({ path: 'bookedBy', select: 'name' })
-        .sort({ order: 1, checkIn: 1 })
+        .sort({ checkIn: 1, order: 1 })
     : [];
 
   // Group by query ID string.
@@ -124,8 +176,8 @@ export const hotelBookings = asyncHandler(async (req, res) => {
       ...baseRow(b),
       hotels: hasSvc ? svc : hotelStays(b),
       hasServiceBookings: hasSvc,
-      bookedCount: hasSvc ? svc.filter((s) => ['booked', 'confirmed'].includes(s.status)).length : 0,
-      voucherCount: hasSvc ? svc.filter((s) => s.status === 'confirmed').length : 0,
+      bookedCount: hasSvc ? svc.filter((s) => s.status === 'booked').length : 0,
+      voucherCount: hasSvc ? svc.filter((s) => !!s.voucherGeneratedAt).length : 0,
     };
   });
   return ok(res, items, meta);
@@ -184,6 +236,7 @@ export const hotelCheckins = asyncHandler(async (req, res) => {
       tag: r.tag,
       comment: r.comment,
       price: r.price,
+      amountPaid: r.amountPaid,
       currency: r.currency,
       bookedBy: r.bookedBy,
       updatedAt: r.updatedAt,
@@ -233,7 +286,7 @@ export const quoteBookingsDiff = asyncHandler(async (req, res) => {
   const rows = await Booking.find(filter).populate(POPULATE).sort('-updatedAt').skip(meta.skip).limit(meta.limit);
 
   // Operations readiness: every operational ServiceBooking line for the trip
-  // is booked/confirmed (and at least one exists).
+  // is booked (and at least one exists).
   const queryIds = rows.map((b) => b.query?._id || b.query).filter(Boolean);
   const opRows = queryIds.length
     ? await ServiceBooking.find({ query: { $in: queryIds }, kind: 'operational' }).select('query status')
@@ -253,7 +306,7 @@ export const quoteBookingsDiff = asyncHandler(async (req, res) => {
       quoteTotal,
       hasDiff,
       lastChange: b.updatedAt,
-      operationsReady: opStatuses.length > 0 && opStatuses.every((s) => ['booked', 'confirmed'].includes(s)),
+      operationsReady: opStatuses.length > 0 && opStatuses.every((s) => s === 'booked'),
       operationsCount: opStatuses.length,
     };
   });
