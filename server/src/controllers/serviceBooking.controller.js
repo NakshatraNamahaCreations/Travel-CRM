@@ -1,6 +1,10 @@
 import { ServiceBooking, SERVICE_BOOKING_STATUSES } from '../models/ServiceBooking.js';
 import { Quote } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
+import { Hotel } from '../models/Hotel.js';
+import { OrgProfile } from '../models/OrgProfile.js';
+import { voucherHtml } from '../pdf/voucherHtml.js';
+import { htmlToPdf } from '../pdf/renderPdf.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created } from '../utils/apiResponse.js';
@@ -29,10 +33,17 @@ function rowsFromQuote(pkg, startDate) {
     const bits = [h.mealPlan, `${h.rooms || 1} ${h.roomType || 'Room'}`];
     if (h.aweb) bits.push(`${h.aweb} AWEB`);
     if (h.cweb) bits.push(`${h.cweb} CWEB`);
+    const perNight = Math.round((h.amount || 0) / count);
+    const nightRates = Array.from({ length: count }, (_, n) => ({
+      date: checkIn ? addDays(checkIn, n) : null,
+      given: perNight,
+      booked: perNight,
+    }));
     return {
-      kind: 'hotel', name: h.hotelName, city: h.city, stars: h.stars,
-      roomType: h.roomType, mealPlan: h.mealPlan, rooms: h.rooms, aweb: h.aweb, cweb: h.cweb,
-      nights: ns, checkIn, checkOut, detail: bits.filter(Boolean).join(' • '),
+      kind: 'hotel', name: h.hotelName, city: h.city, stars: h.stars, hotelRef: h.hotel || null,
+      roomType: h.roomType, mealPlan: h.mealPlan, rooms: h.rooms, paxPerRoom: h.paxPerRoom,
+      aweb: h.aweb, cweb: h.cweb, cnb: h.cnb,
+      nights: ns, checkIn, checkOut, nightRates, detail: bits.filter(Boolean).join(' • '),
       price: h.amount || 0, order: i,
     };
   });
@@ -87,14 +98,28 @@ export const generateServiceBookings = asyncHandler(async (req, res) => {
   return created(res, createdRows);
 });
 
-// PATCH /api/service-bookings/:id  — status / price / tag / comment / detail
+// PATCH /api/service-bookings/:id  — status / price / tag / comment / detail / nightRates / occupancy
 export const updateServiceBooking = asyncHandler(async (req, res) => {
   const patch = {};
-  for (const f of ['status', 'price', 'tag', 'comment', 'detail', 'name', 'roomType', 'mealPlan', 'rooms']) {
+  const fields = [
+    'status', 'price', 'tag', 'comment', 'detail', 'name', 'roomType', 'mealPlan', 'rooms',
+    'paxPerRoom', 'aweb', 'cweb', 'cnb', 'nightRates', 'flagged',
+  ];
+  for (const f of fields) {
     if (req.body[f] !== undefined) patch[f] = req.body[f];
   }
   if (patch.status && !SERVICE_BOOKING_STATUSES.includes(patch.status)) {
     throw ApiError.badRequest('Invalid status');
+  }
+  // The Prices panel edits nights directly — keep price/checkIn/checkOut/nights in sync.
+  if (Array.isArray(patch.nightRates)) {
+    const dates = patch.nightRates.map((n) => n.date).filter(Boolean).sort();
+    patch.price = patch.nightRates.reduce((s, n) => s + (Number(n.booked) || 0), 0);
+    patch.nights = patch.nightRates.map((_, i) => i + 1);
+    if (dates.length) {
+      patch.checkIn = dates[0];
+      patch.checkOut = addDays(new Date(dates[dates.length - 1]), 1);
+    }
   }
   const item = await ServiceBooking.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true })
     .populate('bookedBy', 'name');
@@ -107,4 +132,65 @@ export const deleteServiceBooking = asyncHandler(async (req, res) => {
   const item = await ServiceBooking.findByIdAndDelete(req.params.id);
   if (!item) throw ApiError.notFound('Service booking not found');
   return ok(res, { id: req.params.id });
+});
+
+// POST /api/service-bookings/:id/voucher?format=html|pdf
+// Saves the confirmation number / contact / notes on the stay, then builds a
+// single-hotel confirmation voucher (Bookings > Hotel Check-Ins "Generate").
+export const generateHotelVoucher = asyncHandler(async (req, res) => {
+  const { confirmationNumber, voucherContact, voucherNotes, prices, removeBranding } = req.body || {};
+  const row = await ServiceBooking.findByIdAndUpdate(
+    req.params.id,
+    { confirmationNumber, voucherContact, voucherNotes, voucherGeneratedAt: new Date() },
+    { new: true, runValidators: true }
+  ).populate({ path: 'query', select: 'queryNumber guest pax destinations' });
+  if (!row) throw ApiError.notFound('Service booking not found');
+  if (row.kind !== 'hotel') throw ApiError.badRequest('Vouchers are only available for hotel bookings');
+
+  const [org, hotel] = await Promise.all([
+    OrgProfile.getFor(req.organizationId).catch(() => null),
+    row.hotelRef ? Hotel.findById(row.hotelRef).select('address checkIn checkOut') : null,
+  ]);
+
+  const count = Math.max(1, row.nightRates?.length || row.nights?.length || 1);
+  const syntheticQuote = {
+    query: row.query || {},
+    nights: count,
+    startDate: row.checkIn,
+    packages: [{
+      hotels: [{
+        nights: Array.from({ length: count }, (_, i) => i + 1),
+        hotelName: row.name, city: row.city, roomType: row.roomType, mealPlan: row.mealPlan,
+        rooms: row.rooms, aweb: row.aweb, cweb: row.cweb, cnb: row.cnb, amount: row.price, isAlternative: false,
+      }],
+    }],
+  };
+
+  const html = voucherHtml(syntheticQuote, {
+    org: org?.toObject?.() || org,
+    type: 'hotels',
+    options: {
+      prices: !!prices, removeBranding: !!removeBranding,
+      confirmationNumber: confirmationNumber || '', voucherContact: voucherContact || '', voucherNotes: voucherNotes || '',
+      hotelAddress: hotel?.address || '', hotelCheckInTime: hotel?.checkIn || '', hotelCheckOutTime: hotel?.checkOut || '',
+    },
+  });
+
+  if (req.query.format === 'html') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  }
+  const pdf = await htmlToPdf(html);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="HOTEL-VOUCHER-${row.query?.queryNumber || row._id}-${(row.name || 'hotel').replace(/[^a-z0-9]+/gi, '-')}.pdf"`);
+  return res.send(pdf);
+});
+
+// GET /api/service-bookings/:id/hotel-info — hotel master address/check-in
+// policy for the "verify hotel details" panel in the Generate Voucher modal.
+export const getHotelVoucherInfo = asyncHandler(async (req, res) => {
+  const row = await ServiceBooking.findById(req.params.id).select('hotelRef name city');
+  if (!row) throw ApiError.notFound('Service booking not found');
+  const hotel = row.hotelRef ? await Hotel.findById(row.hotelRef).select('address checkIn checkOut') : null;
+  return ok(res, { hotelId: row.hotelRef || null, address: hotel?.address || row.city || '', checkIn: hotel?.checkIn || '', checkOut: hotel?.checkOut || '' });
 });

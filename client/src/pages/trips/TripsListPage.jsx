@@ -10,9 +10,11 @@ import { destinationsApi, querySourcesApi, tagsApi, teamsApi, usersApi } from '.
 import { useAuth } from '../../store/AuthContext.jsx';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import AsyncSelect from '../../components/form/AsyncSelect.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { cn } from '../../lib/cn.js';
 import { tripNo } from '../../lib/format.js';
 
+const PAGE_SIZE = 15;
 const EMPTY_FILTERS = { destinations: [], sources: [], tags: [], salesTeam: null, owners: [], createdAfter: '', createdBefore: '', startAfter: '', startBefore: '' };
 
 function countActive(f) {
@@ -52,6 +54,7 @@ export default function TripsListPage() {
   const [debounced, setDebounced] = useState(urlQ);
   const [showFilters, setShowFilters] = useState(false);
   const [applied, setApplied] = useState(null);
+  const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);   // query id whose kebab menu is open
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0, up: false }); // anchor for the fixed-position menu
   const [tagsFor, setTagsFor] = useState(null);   // query object being tag-edited
@@ -90,14 +93,19 @@ export default function TripsListPage() {
     window.__tripSearch = setTimeout(() => setDebounced(v), 350);
   };
 
+  // Switching tabs/search/filters changes the result set — back to page 1
+  // so you're never stranded past the end of a smaller filtered list.
+  useEffect(() => { setPage(1); }, [status, debounced, applied]);
+
   const statsQ = useQuery({ queryKey: ['query-stats'], queryFn: queriesApi.stats });
   const listQ = useQuery({
-    queryKey: ['queries', status, debounced, applied],
-    queryFn: () => queriesApi.list({ status, search: debounced, limit: 50, ...filterParams() }),
+    queryKey: ['queries', status, debounced, applied, page],
+    queryFn: () => queriesApi.list({ status, search: debounced, page, limit: PAGE_SIZE, ...filterParams() }),
   });
 
   const counts = Object.fromEntries((statsQ.data?.counts || []).map((c) => [c.value, c.count]));
   const items = listQ.data?.data || [];
+  const meta = listQ.data?.meta;
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['queries'] });
@@ -308,6 +316,7 @@ export default function TripsListPage() {
               </table>
             </div>
           )}
+          <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
         </div>
       </section>
 

@@ -132,31 +132,55 @@ export const hotelBookings = asyncHandler(async (req, res) => {
 });
 
 // GET /api/bookings/views/hotel-checkins?tab=upcoming|completed|all&after=&before=
+// Live ServiceBooking rows (status/tag/price/bookedBy stay in sync with what's
+// edited on the trip's Bookings tab) across every trip in the org, not a
+// stale re-derivation from the quote.
 export const hotelCheckins = asyncHandler(async (req, res) => {
   const tab = req.query.tab || 'upcoming';
   const after = req.query.after ? new Date(req.query.after) : null;
   const before = req.query.before ? new Date(new Date(req.query.before).setHours(23, 59, 59, 999)) : null;
-
-  const rows = await Booking.find({ status: { $ne: 'cancelled' } }).populate(POPULATE).sort('startDate').limit(800);
   const now = new Date();
-  const stays = [];
-  for (const b of rows) {
-    for (const s of hotelStays(b)) {
-      if (after && s.checkIn < after) continue;
-      if (before && s.checkIn > before) continue;
-      if (tab === 'upcoming' && s.checkOut < now) continue;
-      if (tab === 'completed' && s.checkOut >= now) continue;
-      stays.push({
-        booking: b._id,
-        bookingNumber: b.bookingNumber,
-        guest: b.guest,
-        query: b.query,
-        ...s,
-      });
-    }
+
+  const filter = { kind: 'hotel', status: { $ne: 'cancelled' } };
+  if (after || before) {
+    filter.checkIn = {};
+    if (after) filter.checkIn.$gte = after;
+    if (before) filter.checkIn.$lte = before;
   }
-  stays.sort((a, c) => new Date(a.checkIn) - new Date(c.checkIn));
-  return ok(res, stays, { total: stays.length });
+  if (tab === 'upcoming') filter.checkOut = { $gte: now };
+  else if (tab === 'completed') filter.checkOut = { $lt: now };
+
+  const rows = await ServiceBooking.find(filter)
+    .populate({ path: 'query', select: 'queryNumber guest pax' })
+    .populate({ path: 'bookedBy', select: 'name' })
+    .sort({ checkIn: 1 })
+    .limit(800);
+
+  const items = rows
+    .filter((r) => r.query) // drop orphaned rows whose trip was deleted
+    .map((r) => ({
+      _id: r._id,
+      query: r.query,
+      hotelName: r.name,
+      city: r.city,
+      stars: r.stars,
+      roomType: r.roomType,
+      mealPlan: r.mealPlan,
+      rooms: r.rooms,
+      checkIn: r.checkIn,
+      checkOut: r.checkOut,
+      nights: r.nightRates?.length || r.nights?.length || 1,
+      status: r.status,
+      tag: r.tag,
+      comment: r.comment,
+      price: r.price,
+      currency: r.currency,
+      bookedBy: r.bookedBy,
+      updatedAt: r.updatedAt,
+      confirmationNumber: r.confirmationNumber,
+      voucherGeneratedAt: r.voucherGeneratedAt,
+    }));
+  return ok(res, items, { total: items.length });
 });
 
 // GET /api/bookings/views/operational?after=&before=

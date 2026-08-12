@@ -290,3 +290,111 @@ function nightBadge(b) {
 export function emailHtmlToWordDoc(bodyHtml) {
   return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Package</title></head><body>${bodyHtml}</body></html>`;
 }
+
+/* ------------------------- Hotel booking (to supplier) ------------------------- */
+// A booking REQUEST addressed to the hotel/supplier (not the guest) — asking
+// them to book & confirm, with the rate/billing details they need since the
+// stay is billed to us, not paid by the guest on-site.
+
+const badge = (txt) => `<span style="display:inline-block;background:#fde047;color:#713f12;font-weight:700;font-size:12px;padding:6px 12px;border-radius:5px;margin:3px 6px 3px 0">${txt}</span>`;
+
+function bookingBasics(row, { org, guest, pax } = {}) {
+  const sellerName = org?.officialName || company.name;
+  const sellerAddress = (org?.billingAddresses || []).find((b) => b.primary)?.address || (company.address || []).join(', ');
+  const guestName = [guest?.salutation, guest?.name].filter(Boolean).join(' ') || 'Guest';
+  const phone0 = guest?.phones?.[0];
+  const guestPhone = phone0 ? `+${phone0.countryCode || '91'}-${phone0.number}` : '';
+  const guestCount = pax
+    ? `${pax.adults || 0} Adult${(pax.adults || 0) === 1 ? '' : 's'}${pax.children?.length ? `, ${pax.children.length} Child${pax.children.length === 1 ? '' : 'ren'}` : ''}`
+    : '';
+  const nights = row.nights?.length || 1;
+  const cur = row.currency || 'INR';
+  return { sellerName, sellerAddress, gstin: company.gstin || '', guestName, guestPhone, guestCount, nights, cur };
+}
+
+export function buildHotelBookingSubject(row, queryNumber) {
+  return `Trip ID : ${tripNo(queryNumber)} :: Booking request from ${company.shortName} (${company.name}) to ${row.name}`;
+}
+
+export function buildHotelBookingEmailHtml(row, { org, guest, pax, queryNumber, price = true, billing = true, contact = false } = {}) {
+  const bb = bookingBasics(row, { org, guest, pax });
+  const out = [];
+
+  out.push(`<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:640px;font-size:13px;line-height:1.6">`);
+  out.push(`<p>Dear Sir/Madam,</p>`);
+  out.push(`<p>Greetings from <b>${esc(company.shortName)} (${esc(company.name)})</b> !!!</p>`);
+  out.push(`<p>We are pleased to share the below booking, Would request you to please <b>BOOK &amp; CONFIRM</b> the same.</p>`);
+  out.push(badge(`Trip ID: ${esc(tripNo(queryNumber))}`));
+
+  out.push('<table style="width:100%;border-collapse:collapse;margin:10px 0">');
+  out.push(`<tr>${th('Hotel')}${th('Guest Details')}</tr>`);
+  const hotelCell = `<b>${esc(row.name)}</b><br/><span style="color:#6b7280">${esc(row.city || '')}${row.stars ? ` (${row.stars} Star)` : ''}</span>`;
+  const guestCell = contact
+    ? `<b>${esc(bb.guestName)}</b>${bb.guestPhone ? `<br/><span style="color:#6b7280">${esc(bb.guestPhone)}</span>` : ''}${bb.guestCount ? `<br/><span style="color:#6b7280">${esc(bb.guestCount)}</span>` : ''}`
+    : '—';
+  out.push(`<tr>${td(hotelCell)}${td(guestCell)}</tr>`);
+  out.push('</table>');
+
+  out.push(badge(`Check-in: ${esc(fmtDate(row.checkIn))}`));
+  out.push(badge(`Check-out: ${esc(fmtDate(row.checkOut))} ( ${bb.nights} Night${bb.nights === 1 ? '' : 's'} )`));
+
+  out.push('<table style="width:100%;border-collapse:collapse;margin:10px 0">');
+  out.push(`<tr>${th('Night and Meals')}${th('Room Type')}${th(`Rate (${bb.cur})`)}</tr>`);
+  const nightLabel = `1st N (${row.checkIn ? format(new Date(row.checkIn), 'd MMM') : ''})${row.mealPlan ? ` - ${esc(row.mealPlan)}` : ''}`;
+  out.push(`<tr>${td(nightLabel)}${td(esc(row.detail || row.roomType || '—'))}${td(price ? `${esc(inr(row.price))} /-` : '—')}</tr>`);
+  out.push('</table>');
+
+  if (price) out.push(badge(`Total Booking Price (${bb.cur}): ${esc(inr(row.price))} /-`));
+
+  if (billing) {
+    out.push('<table style="width:100%;border-collapse:collapse;margin:10px 0">');
+    out.push(`<tr>${td('<b>Payment Mode</b>', 'width:140px;background:#f8fafc')}${td(`Bill to &quot;${esc(bb.sellerName)}&quot;. All Extras on Direct Basis.`)}</tr>`);
+    out.push(`<tr><td colspan="2" style="background:#dbeafe;color:#1e3a8a;font-weight:700;text-align:center;padding:8px 10px;font-size:13px">Billing Instructions</td></tr>`);
+    out.push(`<tr>${td('<b>Name</b>', 'width:140px;background:#f8fafc')}${td(esc(bb.sellerName))}</tr>`);
+    if (bb.sellerAddress) out.push(`<tr>${td('<b>Address</b>', 'width:140px;background:#f8fafc')}${td(esc(bb.sellerAddress))}</tr>`);
+    if (bb.gstin) out.push(`<tr>${td('<b>Details</b>', 'width:140px;background:#f8fafc')}${td(`GSTIN: ${esc(bb.gstin)}`)}</tr>`);
+    out.push('</table>');
+  }
+
+  out.push(`<p>Kindly send confirmation at your earliest.</p>`);
+  out.push('</div>');
+  return out.join('');
+}
+
+export function buildHotelBookingWhatsAppText(row, { org, guest, pax, queryNumber, price = true, billing = true, contact = false } = {}) {
+  const bb = bookingBasics(row, { org, guest, pax });
+  const L = [];
+  L.push('Dear Sir/Madam,', '');
+  L.push(`Greetings from *${company.shortName} (${company.name})* !!!`, '');
+  L.push('We are pleased to share the below booking, Would request you to please *BOOK & CONFIRM* the same.', '');
+  L.push(`🆔 *Trip ID:* ${tripNo(queryNumber)}`, '');
+  L.push(`🏨 *Hotel:* ${row.name}${row.city ? `, ${row.city}` : ''}`);
+  if (contact) {
+    L.push(`👤 *Guest:* ${bb.guestName}${bb.guestPhone ? ` (${bb.guestPhone})` : ''}`);
+    if (bb.guestCount) L.push(`👥 *No. of Guests:* ${bb.guestCount}`);
+  }
+  L.push('');
+  L.push(`📅 *Check-in:* ${fmtDate(row.checkIn)}`);
+  L.push(`📅 *Check-out:* ${fmtDate(row.checkOut)} (${bb.nights} Night${bb.nights === 1 ? '' : 's'})`, '');
+  if (row.mealPlan) L.push(`🍽️ *Meal Plan:* ${row.mealPlan}`);
+  L.push(`🏠 *Room Details:* ${row.detail || row.roomType || '—'}`);
+  if (price) {
+    L.push('');
+    L.push(`💰 *Total Booking Price:* ${bb.cur} ${inr(row.price)} /-`);
+  }
+  if (billing) {
+    L.push('');
+    L.push(`*Payment Mode:*`);
+    L.push(`Bill to ${bb.sellerName}. All Extras on Direct Basis.`, '');
+    L.push('📄 *Billing Instructions*', '');
+    L.push(`*Name:* ${bb.sellerName}`);
+    if (bb.sellerAddress) L.push(`*Address:* ${bb.sellerAddress}`);
+    if (bb.gstin) L.push(`*Details:* GSTIN: ${bb.gstin}`);
+  }
+  L.push('', 'Kindly send confirmation at your earliest.');
+  return L.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function fmtDate(d) {
+  return d ? format(new Date(d), 'd MMM, yyyy') : '—';
+}

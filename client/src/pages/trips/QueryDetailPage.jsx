@@ -312,7 +312,7 @@ const lostMut = useMutation({
         )}
         {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} canConvert={BEFORE_CONVERT.includes(q.status)} />}
         {activeTab === 'new_quote' && <NewQuoteTab id={id} nights={q.nights} />}
-        {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} />}
+        {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} guest={q.guest} queryNumber={q.queryNumber} pax={q.pax} />}
         {activeTab === 'accounting' && <AccountingTab id={id} />}
         {activeTab === 'docs' && <DocsTab quotes={quotes} queryId={id} />}
         {activeTab === 'activities' && <ActivitiesTab id={id} />}

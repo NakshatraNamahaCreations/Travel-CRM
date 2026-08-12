@@ -23,7 +23,12 @@ const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() +
 const pkgOf = (q) => q?.packages?.[q.selectedPackageIndex || 0] || q?.packages?.[0] || null;
 
 export function voucherHtml(quote, { org = null, type = 'trip', options = {} } = {}) {
-  const { prices = false, removeBranding = false, removeItinerary = false, bankAccount = false, tnc = true } = options;
+  const {
+    prices = false, removeBranding = false, removeItinerary = false, bankAccount = false, tnc = true,
+    // Per-stay hotel confirmation voucher extras (Bookings > Hotel Check-Ins "Generate").
+    confirmationNumber = '', voucherContact = '', voucherNotes = '',
+    hotelAddress = '', hotelCheckInTime = '', hotelCheckOutTime = '',
+  } = options;
   const q = quote.query || {};
   const pkg = pkgOf(quote) || {};
   const brand = org?.brandName || org?.officialName || company.name;
@@ -186,11 +191,21 @@ export function voucherHtml(quote, { org = null, type = 'trip', options = {} } =
       <tr><td>${esc(shortName)}</td><td>24x7 Operational</td><td>${phones.map(esc).join(' / ')}</td></tr>
     </table>`;
 
+  /* ---- per-stay confirmation details (single-hotel voucher only) ---- */
+  const confirmHtml = (confirmationNumber || voucherContact || voucherNotes || hotelAddress) ? `
+    ${bandRow('Booking Confirmation Details')}
+    <table class="kvt">
+      ${confirmationNumber ? kv('Confirmation No.', `<b>${esc(confirmationNumber)}</b>`) : ''}
+      ${voucherContact ? kv('Confirmed By', esc(voucherContact)) : ''}
+      ${(hotelAddress || hotelCheckInTime || hotelCheckOutTime) ? kv2('Hotel Address', esc(hotelAddress || '—'), 'Check-In / Check-Out', `${esc(hotelCheckInTime || '—')} / ${esc(hotelCheckOutTime || '—')}`) : ''}
+    </table>
+    ${voucherNotes ? `<div class="li" style="margin-top:6px">${voucherNotes}</div>` : ''}` : '';
+
   /* ---- per-type composition ---- */
   const titles = { trip: 'Booking Confirmation Voucher', hotels: 'Hotels Confirmation Voucher', activity: 'Activity Confirmation Voucher' };
   let body = '';
   if (type === 'hotels') {
-    body = `${tripTable}${hotelsTable}${bankHtml}${helpline}`;
+    body = `${tripTable}${hotelsTable}${confirmHtml}${bankHtml}${helpline}`;
   } else if (type === 'activity') {
     body = `${tripTable}${activitiesTable}${bankHtml}${helpline}`;
   } else {
