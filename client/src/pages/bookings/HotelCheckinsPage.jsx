@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, RefreshCw, Hotel, FileText, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Hotel, FileText, User, Search, ArrowLeftRight } from 'lucide-react';
 import {
   format, formatDistanceToNow,
   startOfWeek, endOfWeek, addWeeks,
@@ -12,9 +12,13 @@ import toast from 'react-hot-toast';
 import { bookingsApi } from '../../api/bookings.js';
 import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import { tripNo } from '../../lib/format.js';
+import { useDebounced } from '../../hooks/useDebounced.js';
 import Modal from '../../components/ui/Modal.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import RichTextEditor from '../../components/form/RichTextEditor.jsx';
 import { cn } from '../../lib/cn.js';
+
+const PAGE_SIZE = 15;
 
 const TABS = [
   { key: 'upcoming', label: 'Upcoming' },
@@ -171,17 +175,38 @@ export default function HotelCheckinsPage() {
   const [tab, setTab] = useState('upcoming');
   const [intervalType, setIntervalType] = useState('month');
   const [anchor, setAnchor] = useState(new Date());
+  const [dateField, setDateField] = useState('checkIn'); // 'checkIn' | 'checkOut' — the "Check-Outs" toggle
+  const [includeDropped, setIncludeDropped] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [voucherRow, setVoucherRow] = useState(null);
   const [tagRow, setTagRow] = useState(null);
   const qc = useQueryClient();
+  const debouncedSearch = useDebounced(search);
 
   const { after, before } = useMemo(() => rangeFor(intervalType, anchor), [intervalType, anchor]);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['hotel-checkins', tab, intervalType, after.toISOString()],
-    queryFn: () => bookingsApi.hotelCheckins({ tab, after: after.toISOString(), before: before.toISOString() }),
+    queryKey: ['hotel-checkins', tab, intervalType, after.toISOString(), dateField, includeDropped],
+    queryFn: () => bookingsApi.hotelCheckins({
+      tab, after: after.toISOString(), before: before.toISOString(), dateField,
+      includeDropped: includeDropped ? 1 : 0,
+    }),
   });
-  const stays = data?.data || [];
+  const allStays = data?.data || [];
+  const stays = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return allStays;
+    return allStays.filter((s) => {
+      const guest = s.query?.guest;
+      const guestName = [guest?.salutation, guest?.name].filter(Boolean).join(' ');
+      return [s.hotelName, s.city, guestName, tripNo(s.query?.queryNumber)].some((v) => (v || '').toLowerCase().includes(q));
+    });
+  }, [allStays, debouncedSearch]);
+
+  useEffect(() => setPage(1), [tab, intervalType, after, dateField, includeDropped, debouncedSearch]);
+  const totalPages = Math.max(1, Math.ceil(stays.length / PAGE_SIZE));
+  const pageStays = stays.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const updMut = useMutation({
     mutationFn: ({ id, patch }) => serviceBookingsApi.update(id, patch),
@@ -193,27 +218,45 @@ export default function HotelCheckinsPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
         <h1 className="text-lg font-bold text-slate-900">Hotel Check-Ins <span className="ml-1 text-sm font-normal text-slate-400">({rangeLabel(intervalType, after, before)})</span></h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-56 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+            <Search size={14} className="text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-full text-sm outline-none" />
+          </div>
           <button onClick={() => setAnchor(new Date())} className="btn-secondary text-sm">Today</button>
           <button onClick={() => setAnchor((d) => shiftAnchor(intervalType, d, -1))} className="btn-secondary px-2"><ChevronLeft size={16} /></button>
           <button onClick={() => setAnchor((d) => shiftAnchor(intervalType, d, 1))} className="btn-secondary px-2"><ChevronRight size={16} /></button>
           <select value={intervalType} onChange={(e) => setIntervalType(e.target.value)} className="input w-auto py-1.5 text-sm">
             {INTERVALS.map((iv) => <option key={iv.key} value={iv.key}>{iv.label}</option>)}
           </select>
+          <button
+            onClick={() => setDateField((d) => (d === 'checkIn' ? 'checkOut' : 'checkIn'))}
+            className={cn('btn-secondary text-sm', dateField === 'checkOut' && 'border-brand-300 bg-brand-50 text-brand-700')}
+            title="Filter the date range by check-in or check-out date"
+          >
+            <ArrowLeftRight size={13} /> {dateField === 'checkOut' ? 'Check-Outs' : 'Check-Ins'}
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-6 border-b border-slate-200 bg-white px-6">
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={cn('border-b-2 py-3 text-sm font-medium', tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
-            {t.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6">
+        <div className="flex items-center gap-6">
+          {TABS.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)} className={cn('border-b-2 py-3 text-sm font-medium', tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+          <span className="text-slate-400">Quick Filters:</span>
+          <input type="checkbox" checked={includeDropped} onChange={(e) => setIncludeDropped(e.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
+          Include Dropped
+        </label>
       </div>
 
       <div className="px-6 py-5">
         <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-          Showing {stays.length} Item{stays.length === 1 ? '' : 's'}
+          Showing {stays.length ? (page - 1) * PAGE_SIZE + 1 : 0}-{Math.min(page * PAGE_SIZE, stays.length)} of {stays.length} Item{stays.length === 1 ? '' : 's'}
           <button onClick={() => refetch()} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
         </div>
 
@@ -236,7 +279,7 @@ export default function HotelCheckinsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {stays.map((s) => {
+                {pageStays.map((s) => {
                   const guest = s.query?.guest;
                   const guestName = [guest?.salutation, guest?.name].filter(Boolean).join(' ') || 'Guest';
                   return (
@@ -281,6 +324,8 @@ export default function HotelCheckinsPage() {
             </table>
           </div>
         )}
+
+        {stays.length > 0 && <Pagination page={page} totalPages={totalPages} onChange={setPage} />}
       </div>
 
       {voucherRow && <GenerateVoucherModal row={voucherRow} onClose={() => setVoucherRow(null)} />}

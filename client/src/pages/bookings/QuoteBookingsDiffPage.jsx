@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw, Check, Minus } from 'lucide-react';
 import { format } from 'date-fns';
 import { bookingsApi } from '../../api/bookings.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { cn } from '../../lib/cn.js';
+
+const PAGE_SIZE = 15;
 
 const TABS = [
   { key: 'upcoming', label: 'Upcoming' },
@@ -25,13 +28,16 @@ export default function QuoteBookingsDiffPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const debounced = useDebounced(search);
+  useEffect(() => setPage(1), [tab, debounced]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['quote-diff', tab, debounced],
-    queryFn: () => bookingsApi.quoteDiff({ tab, search: debounced, limit: 50 }),
+    queryKey: ['quote-diff', tab, debounced, page],
+    queryFn: () => bookingsApi.quoteDiff({ tab, search: debounced, page, limit: PAGE_SIZE }),
   });
   const items = data?.data || [];
+  const meta = data?.meta;
   const refresh = () => qc.invalidateQueries({ queryKey: ['quote-diff'] });
   const dt = (d) => (d ? format(new Date(d), 'd MMM') : '—');
 
@@ -65,15 +71,17 @@ export default function QuoteBookingsDiffPage() {
                 <tr>
                   <th className="px-4 py-3">Trip ID</th>
                   <th className="px-4 py-3">Details</th>
+                  <th className="px-4 py-3">Team</th>
                   <th className="px-4 py-3">Reservations</th>
+                  <th className="px-4 py-3">Operations</th>
                   <th className="px-4 py-3">Last Change</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
-                  <tr><td colSpan={4} className="py-12 text-center text-slate-400">Loading…</td></tr>
+                  <tr><td colSpan={6} className="py-12 text-center text-slate-400">Loading…</td></tr>
                 ) : !items.length ? (
-                  <tr><td colSpan={4} className="py-12 text-center text-slate-400">No bookings with quotes.</td></tr>
+                  <tr><td colSpan={6} className="py-12 text-center text-slate-400">No bookings with quotes.</td></tr>
                 ) : items.map((b) => (
                   <tr key={b._id} className="hover:bg-slate-50">
                     <td className="px-4 py-3"><Link to={`/bookings/${b._id}`} className="font-medium text-brand-700 hover:underline">{b.bookingNumber}</Link></td>
@@ -81,10 +89,20 @@ export default function QuoteBookingsDiffPage() {
                       <div className="text-slate-700">{b.title || b.guest?.name || '—'}</div>
                       <div className="text-xs text-slate-400">{dt(b.startDate)} · {b.nights ? `${b.nights}N` : ''} · {paxLabel(b.pax)}</div>
                     </td>
+                    <td className="px-4 py-3 text-slate-500">{b.owner?.name || '—'}</td>
                     <td className="px-4 py-3">
                       {b.hasDiff
                         ? <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Diff</span>
                         : <span className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">In sync</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {b.operationsCount === 0 ? (
+                        <Minus size={14} className="text-slate-300" />
+                      ) : b.operationsReady ? (
+                        <Check size={16} className="text-green-600" />
+                      ) : (
+                        <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Pending</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{b.lastChange ? `on ${format(new Date(b.lastChange), 'd MMM, yyyy')}` : '—'}</td>
                   </tr>
@@ -92,6 +110,8 @@ export default function QuoteBookingsDiffPage() {
               </tbody>
             </table>
           </div>
+
+          {meta && <Pagination page={meta.page} totalPages={meta.totalPages} onChange={setPage} />}
         </div>
       </div>
     </div>

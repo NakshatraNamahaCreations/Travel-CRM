@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, RefreshCw, Pencil, Sparkles, User } from 'lucide-react';
@@ -11,6 +11,9 @@ import { useDebounced } from '../../hooks/useDebounced.js';
 import { cn } from '../../lib/cn.js';
 import Modal from '../../components/ui/Modal.jsx';
 import StarRating from '../../components/ui/StarRating.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
+
+const PAGE_SIZE = 15;
 
 const TABS = [
   { key: 'new',         label: 'New' },
@@ -249,20 +252,28 @@ export default function HotelBookingsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [editRow, setEditRow] = useState(null);
   const debounced = useDebounced(search);
 
-  const serverTab = CLIENT_SIDE_TABS.has(tab) ? 'all' : tab;
+  // "In Progress" / "Booked" aren't stored booking statuses — they're derived
+  // from ServiceBooking completion, so they're filtered client-side over a
+  // larger fetched batch instead of a real paginated server query.
+  const isClientTab = CLIENT_SIDE_TABS.has(tab);
+  const serverTab = isClientTab ? 'all' : tab;
+  useEffect(() => setPage(1), [tab, debounced]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['hotel-bookings', serverTab, debounced],
-    queryFn: () => bookingsApi.hotels({ tab: serverTab, search: debounced, limit: 200 }),
+    queryKey: ['hotel-bookings', serverTab, debounced, isClientTab ? 'batch' : page],
+    queryFn: () => bookingsApi.hotels({ tab: serverTab, search: debounced, ...(isClientTab ? { limit: 100 } : { page, limit: PAGE_SIZE }) }),
   });
   const allItems = data?.data || [];
-  const items = allItems.filter((b) => {
-    if (tab === 'in_progress') return b.hasServiceBookings && b.bookedCount < b.hotels.length;
-    if (tab === 'booked')      return b.hasServiceBookings && b.hotels.length > 0 && b.bookedCount >= b.hotels.length;
-    return true;
-  });
+  const items = isClientTab
+    ? allItems.filter((b) => (tab === 'in_progress'
+        ? b.hasServiceBookings && b.bookedCount < b.hotels.length
+        : b.hasServiceBookings && b.hotels.length > 0 && b.bookedCount >= b.hotels.length))
+    : allItems;
+  const meta = data?.meta;
   const refresh = () => qc.invalidateQueries({ queryKey: ['hotel-bookings'] });
 
   const updMut = useMutation({
@@ -313,7 +324,9 @@ export default function HotelBookingsPage() {
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-            Showing {items.length} bookings
+            {isClientTab || !meta
+              ? `Showing ${items.length} bookings`
+              : `Showing ${items.length ? (meta.page - 1) * meta.limit + 1 : 0}-${(meta.page - 1) * meta.limit + items.length} of ${meta.total} bookings`}
             <button onClick={refresh} className="text-slate-400 hover:text-slate-700">
               <RefreshCw size={14} />
             </button>
@@ -339,6 +352,8 @@ export default function HotelBookingsPage() {
               ))}
             </div>
           )}
+
+          {!isClientTab && meta && <Pagination page={meta.page} totalPages={meta.totalPages} onChange={setPage} />}
         </div>
       </div>
 

@@ -131,24 +131,34 @@ export const hotelBookings = asyncHandler(async (req, res) => {
   return ok(res, items, meta);
 });
 
-// GET /api/bookings/views/hotel-checkins?tab=upcoming|completed|all&after=&before=
+// GET /api/bookings/views/hotel-checkins?tab=upcoming|completed|all&after=&before=&dateField=checkIn|checkOut&includeDropped=1
 // Live ServiceBooking rows (status/tag/price/bookedBy stay in sync with what's
 // edited on the trip's Bookings tab) across every trip in the org, not a
 // stale re-derivation from the quote.
 export const hotelCheckins = asyncHandler(async (req, res) => {
   const tab = req.query.tab || 'upcoming';
+  const dateField = req.query.dateField === 'checkOut' ? 'checkOut' : 'checkIn';
+  const includeDropped = req.query.includeDropped === '1' || req.query.includeDropped === 'true';
   const after = req.query.after ? new Date(req.query.after) : null;
   const before = req.query.before ? new Date(new Date(req.query.before).setHours(23, 59, 59, 999)) : null;
   const now = new Date();
 
-  const filter = { kind: 'hotel', status: { $ne: 'cancelled' } };
-  if (after || before) {
-    filter.checkIn = {};
-    if (after) filter.checkIn.$gte = after;
-    if (before) filter.checkIn.$lte = before;
+  const filter = { kind: 'hotel' };
+  if (!includeDropped) filter.status = { $ne: 'cancelled' };
+
+  const rangeConstraint = {};
+  if (after) rangeConstraint.$gte = after;
+  if (before) rangeConstraint.$lte = before;
+  const checkOutTabConstraint = {};
+  if (tab === 'upcoming') checkOutTabConstraint.$gte = now;
+  else if (tab === 'completed') checkOutTabConstraint.$lt = now;
+
+  if (dateField === 'checkOut') {
+    filter.checkOut = { ...rangeConstraint, ...checkOutTabConstraint };
+  } else {
+    if (Object.keys(rangeConstraint).length) filter.checkIn = rangeConstraint;
+    if (Object.keys(checkOutTabConstraint).length) filter.checkOut = checkOutTabConstraint;
   }
-  if (tab === 'upcoming') filter.checkOut = { $gte: now };
-  else if (tab === 'completed') filter.checkOut = { $lt: now };
 
   const rows = await ServiceBooking.find(filter)
     .populate({ path: 'query', select: 'queryNumber guest pax' })
@@ -222,14 +232,29 @@ export const quoteBookingsDiff = asyncHandler(async (req, res) => {
   const meta = paginate(req.query, total);
   const rows = await Booking.find(filter).populate(POPULATE).sort('-updatedAt').skip(meta.skip).limit(meta.limit);
 
+  // Operations readiness: every operational ServiceBooking line for the trip
+  // is booked/confirmed (and at least one exists).
+  const queryIds = rows.map((b) => b.query?._id || b.query).filter(Boolean);
+  const opRows = queryIds.length
+    ? await ServiceBooking.find({ query: { $in: queryIds }, kind: 'operational' }).select('query status')
+    : [];
+  const opByQuery = {};
+  for (const s of opRows) {
+    const qid = String(s.query);
+    (opByQuery[qid] = opByQuery[qid] || []).push(s.status);
+  }
+
   const items = rows.map((b) => {
     const quoteTotal = b.quote?.pricing?.total || 0;
     const hasDiff = Math.round(quoteTotal) !== Math.round(b.totalAmount || 0);
+    const opStatuses = opByQuery[String(b.query?._id || b.query)] || [];
     return {
       ...baseRow(b),
       quoteTotal,
       hasDiff,
       lastChange: b.updatedAt,
+      operationsReady: opStatuses.length > 0 && opStatuses.every((s) => ['booked', 'confirmed'].includes(s)),
+      operationsCount: opStatuses.length,
     };
   });
   return ok(res, items, meta);
