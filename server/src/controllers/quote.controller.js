@@ -179,7 +179,9 @@ async function loadFullQuote(id) {
     .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } })
     .populate({ path: 'packages.hotels.hotel', select: 'name imageUrl detailsLink address notes stars' })
     .populate({ path: 'packages.transports.service', select: 'startCity endCity imageUrl items.name items.description items.imageUrl' })
-    .populate({ path: 'packages.activities.activity', select: 'name imageUrl details ticketTypes.name ticketTypes.details' });
+    // ticketTypes.imageUrl matters: each ferry operator/class carries its own
+    // boat photo, which the itinerary prefers over the activity-level image.
+    .populate({ path: 'packages.activities.activity', select: 'name imageUrl details ticketTypes.name ticketTypes.details ticketTypes.imageUrl ticketTypes.forService' });
   if (!quote) throw ApiError.notFound('Quote not found');
   // Fill dynamic defaults from the Inclusions/Exclusions master when the quote
   // has no lists of its own (config defaults remain the last-resort fallback).
