@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Palmtree, Mail, Lock, ArrowRight, Star } from 'lucide-react';
+import { Palmtree, Mail, Lock, ArrowRight, Star, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 
 const SLIDES = [
@@ -39,8 +39,9 @@ const LOCKOUT_MESSAGES = {
 
 export default function LoginPage() {
   const { login, isAuthenticated, loading, user } = useAuth();
-  const [email, setEmail]       = useState('admin@travelcrm.test');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [slide, setSlide]       = useState(0);
   const [prevSlide, setPrevSlide] = useState(null);
@@ -267,17 +268,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Demo badge */}
-            <div className="mb-6 flex items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
-              </span>
-              <span className="text-xs text-brand-700">
-                Demo: <span className="font-semibold">admin@travelcrm.test</span> / <span className="font-semibold">admin123</span>
-              </span>
-            </div>
-
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email */}
@@ -306,13 +296,22 @@ export default function LoginPage() {
                 <div className="relative">
                   <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-brand-500" />
                   <input
-                    type="password"
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 shadow-sm outline-none transition duration-200 focus:border-brand-400 focus:ring-3 focus:ring-brand-100 hover:border-slate-300"
+                    type={showPassword ? 'text' : 'password'}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 shadow-sm outline-none transition duration-200 focus:border-brand-400 focus:ring-3 focus:ring-brand-100 hover:border-slate-300"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 

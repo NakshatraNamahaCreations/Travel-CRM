@@ -89,14 +89,14 @@ export default function DocsVouchers({ queryId, quotes }) {
   }
 
   return (
-    <div className="flex gap-6">
-      <aside className="w-44 shrink-0 space-y-1">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {VOUCHERS.map((v) => (
           <button
             key={v.key}
             onClick={() => setType(v.key)}
             className={cn(
-              'block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold',
+              'block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full font-semibold',
               type === v.key ? 'border-l-2 border-brand-600 bg-brand-50 text-brand-700' : 'text-gray-600 hover:bg-gray-50'
             )}
           >

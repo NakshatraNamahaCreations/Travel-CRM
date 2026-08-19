@@ -46,13 +46,20 @@ export const deleteGstInvoice = asyncHandler(async (req, res) => {
   return ok(res, { id: req.params.id });
 });
 
+// Builds the GST invoice PDF. Shared by the authenticated route below and
+// the public (tokenised) share link.
+export async function buildGstInvoicePdf(id, orgId) {
+  const doc = await GstInvoice.findById(id).populate(POPULATE);
+  if (!doc) throw ApiError.notFound('GST invoice not found');
+  const org = await OrgProfile.getFor(orgId).catch(() => null);
+  const pdf = await htmlToPdf(gstInvoiceHtml(doc.toObject(), org?.toObject()));
+  return { pdf, filename: `GSTInvoice-${doc.invoiceNumber}.pdf` };
+}
+
 // GET /api/gst-invoices/:id/pdf — server-rendered PDF (inline)
 export const gstInvoicePdf = asyncHandler(async (req, res) => {
-  const doc = await GstInvoice.findById(req.params.id).populate(POPULATE);
-  if (!doc) throw ApiError.notFound('GST invoice not found');
-  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
-  const pdf = await htmlToPdf(gstInvoiceHtml(doc.toObject(), org?.toObject()));
+  const { pdf, filename } = await buildGstInvoicePdf(req.params.id, req.organizationId);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="GSTInvoice-${doc.invoiceNumber}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   return res.send(pdf);
 });

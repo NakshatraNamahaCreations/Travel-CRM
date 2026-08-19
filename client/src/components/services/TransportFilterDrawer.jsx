@@ -81,7 +81,7 @@ export default function TransportFilterDrawer({ open, onClose, initial, onApply 
             <AsyncSelect isMulti loadOptions={loadDestinations} value={draft.destinations} onChange={set('destinations')} placeholder="Type to search..." />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="From (Start City)">
               <input className="input" value={draft.from} onChange={(e) => set('from')(e.target.value)} placeholder="e.g. Port Blair" />
             </Field>

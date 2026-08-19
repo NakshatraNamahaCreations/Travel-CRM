@@ -73,12 +73,12 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)]">
-      <aside className="w-44 shrink-0 border-r border-gray-200 bg-white py-4">
-        <h2 className="px-4 pb-3 text-base font-bold text-gray-900">All Tasks</h2>
-        <nav>
+    <div className="flex flex-col lg:min-h-[calc(100vh-3.5rem)] lg:flex-row">
+      <aside className="w-full shrink-0 border-b border-gray-200 bg-white py-3 lg:w-44 lg:border-b-0 lg:border-r lg:py-4">
+        <h2 className="hidden px-4 pb-3 text-base font-bold text-gray-900 lg:block">All Tasks</h2>
+        <nav className="flex overflow-x-auto lg:block">
           {TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={cn('block w-full px-4 py-2.5 text-left text-sm', tab === t.key ? 'border-l-2 border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'text-gray-600 hover:bg-gray-50')}>
+            <button key={t.key} onClick={() => setTab(t.key)} className={cn('block shrink-0 whitespace-nowrap px-4 py-2.5 text-left text-sm lg:w-full', tab === t.key ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2' : 'text-gray-600 hover:bg-gray-50')}>
               {t.label}
             </button>
           ))}
@@ -86,7 +86,7 @@ export default function TasksPage() {
       </aside>
 
       <section className="flex-1 bg-gray-50">
-        <div className="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-6 py-3">
+        <div className="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-gray-300 px-3 py-2">
             <Search size={16} className="text-gray-400" />
             <input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search…" className="w-full text-sm outline-none" />

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { Plus, Pencil, Trash2, FileText, Info, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Info, RefreshCw, MessageSquare } from 'lucide-react';
 import { queriesApi } from '../../api/queries.js';
 import { quotesApi } from '../../api/quotes.js';
 import { proformaApi } from '../../api/proforma.js';
 import { gstInvoiceApi } from '../../api/gstInvoice.js';
 import { orgProfileApi } from '../../api/orgProfile.js';
 import Modal from '../ui/Modal.jsx';
+import SendWhatsAppModal from './SendWhatsAppModal.jsx';
 import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import { installmentsApi } from '../../api/installments.js';
 import { company } from '../../config/company.js';
@@ -439,6 +440,7 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
     enabled: open && !!(ctx?._id || ctx?.query),
   });
   const [editing, setEditing] = useState(null); // 'new' | invoice doc | null
+  const [waInvoice, setWaInvoice] = useState(null); // invoice being WhatsApped
 
   // Fresh modal open (or a different trip/instalment) — back to the list view.
   useEffect(() => { if (open) setEditing(null); }, [open, ctx?._id, ctx?.query]);
@@ -541,6 +543,7 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => openPdf(inv)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"><FileText size={14} /> PDF</button>
+                <button onClick={() => setWaInvoice(inv)} title="Send this invoice to the guest over WhatsApp" className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"><MessageSquare size={13} /> WhatsApp</button>
                 <button onClick={() => setEditing(inv)} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-100"><Pencil size={13} /> Edit</button>
                 <button onClick={() => askDelete(inv)} className="rounded-lg border border-gray-200 bg-white p-2 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
               </div>
@@ -548,6 +551,14 @@ export function GstInvoiceModal({ installment: ctx, open, onClose }) {
           ))}
           <button onClick={() => setEditing('new')} className="btn-secondary text-sm"><Plus size={13} /> New GST Invoice</button>
         </div>
+      )}
+
+      {waInvoice && (
+        <SendWhatsAppModal
+          ctx={{ query: ctx?.queryDoc || { _id: ctx.query, guest: ctx.guest }, invoice: waInvoice }}
+          defaultKey="gst_invoice"
+          onClose={() => setWaInvoice(null)}
+        />
       )}
     </Modal>
   );
@@ -598,7 +609,7 @@ function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
           <p className="text-sm font-bold text-gray-800">Seller</p>
           <input className="input" placeholder="Name" value={form.seller?.name || ''} onChange={(e) => set({ seller: { ...form.seller, name: e.target.value } })} />
           <textarea rows={2} className="input" placeholder="Address" value={form.seller?.address || ''} onChange={(e) => set({ seller: { ...form.seller, address: e.target.value } })} />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <input className="input" placeholder="GSTIN" value={form.seller?.gstin || ''} onChange={(e) => set({ seller: { ...form.seller, gstin: e.target.value } })} />
             <input className="input" placeholder="PAN (optional)" value={form.seller?.pan || ''} onChange={(e) => set({ seller: { ...form.seller, pan: e.target.value } })} />
           </div>
@@ -607,7 +618,7 @@ function GstInvoiceForm({ initial, pending, onCancel, onSave }) {
           <p className="text-sm font-bold text-gray-800">Buyer</p>
           <input className="input" placeholder="Name" value={form.buyer?.name || ''} onChange={(e) => set({ buyer: { ...form.buyer, name: e.target.value } })} />
           <textarea rows={2} className="input" placeholder="Address (optional)" value={form.buyer?.address || ''} onChange={(e) => set({ buyer: { ...form.buyer, address: e.target.value } })} />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <input className="input" placeholder="Email (optional)" value={form.buyer?.email || ''} onChange={(e) => set({ buyer: { ...form.buyer, email: e.target.value } })} />
             <input className="input" placeholder="GSTIN (optional)" value={form.buyer?.gstin || ''} onChange={(e) => set({ buyer: { ...form.buyer, gstin: e.target.value } })} />
           </div>

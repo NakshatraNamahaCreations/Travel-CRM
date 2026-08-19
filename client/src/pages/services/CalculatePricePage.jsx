@@ -82,7 +82,7 @@ function CalcRow({ row, setRow, onDuplicate, onRemove, onTotal, showBooking, can
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <NumField label="Pax/room" hint="WoEB" value={row.pax} onChange={(v) => setRow({ pax: v })} />
             <NumField label="No. of rooms" value={row.rooms} onChange={(v) => setRow({ rooms: v })} />
             <NumField label="AWEB" value={row.aweb} onChange={(v) => setRow({ aweb: v })} />
@@ -147,7 +147,7 @@ export default function CalculatePricePage() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-6 text-sm">
         <button onClick={() => navigate('/services/hotel-prices')} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>
         <span className="font-semibold text-slate-900">Calculate Price</span>
         <span className="text-slate-400">/</span>

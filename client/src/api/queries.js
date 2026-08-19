@@ -9,6 +9,8 @@ export const queriesApi = {
   setStatus: (id, status, lostReason, reminderOn) =>
     api.patch(`/queries/${id}/status`, { status, lostReason, reminderOn }).then((r) => r.data.data),
   remove: (id) => api.delete(`/queries/${id}`).then((r) => r.data.data),
+  sendWhatsAppTemplate: (id, payload) =>
+    api.post(`/queries/${id}/whatsapp-template`, payload).then((r) => r.data.data),
   uploadCsv: (file, { source, owner } = {}) => {
     const fd = new FormData();
     fd.append('file', file);

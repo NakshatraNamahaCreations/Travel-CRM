@@ -40,7 +40,7 @@ export default function InvoiceViewPage() {
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-6 border-y border-gray-200 py-5">
+        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 border-y border-gray-200 py-5">
           <div>
             <p className="text-xs uppercase text-gray-400">Billed To</p>
             <p className="font-semibold text-gray-900">{[guest?.salutation, guest?.name].filter(Boolean).join(' ')}</p>

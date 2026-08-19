@@ -88,7 +88,7 @@ export default function OperationsReportPage() {
   const showMoney = cfg.kind === 'trips' && (view === 'due-incoming' || view === 'live-due');
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-1 flex items-center gap-2 text-sm text-slate-400">
         <button onClick={() => navigate('/')} className="hover:text-slate-700"><ArrowLeft size={16} /></button>
         <Link to="/" className="hover:text-slate-700">Dashboard</Link>

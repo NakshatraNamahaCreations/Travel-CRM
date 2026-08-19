@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
 import { tenantPlugin } from '../tenant/tenantPlugin.js';
+import { shareTokenField } from '../utils/shareToken.js';
 
 const round = (n, to = 1) => {
   const r = Math.round(n / to) * to;
@@ -192,6 +193,7 @@ const quoteSchema = new mongoose.Schema(
     // stops the pre-validate hook from rebuilding days from the packages.
     daysCustomized: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    ...shareTokenField,
   },
   { timestamps: true }
 );

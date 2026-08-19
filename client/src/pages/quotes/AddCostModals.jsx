@@ -52,7 +52,7 @@ export function AddHotelModal({ open, onClose, onAdd, date }) {
           <AsyncSelect loadOptions={(s) => hotelsApi.list({ search: s }).then((r) => r.data)} value={hotel} onChange={(h) => { setHotel(h); setRoomType(''); setMealPlan(''); }} />
         </div>
         {hotel && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Room Type</label>
               <select className="input" value={roomType} onChange={(e) => setRoomType(e.target.value)}>
@@ -69,7 +69,7 @@ export function AddHotelModal({ open, onClose, onAdd, date }) {
             </div>
           </div>
         )}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div><label className="label">Nights (qty)</label><input type="number" className="input" value={nights} onChange={(e) => setNights(e.target.value)} /></div>
           <div><label className="label">Rate / night</label><input type="number" className="input" value={rate} onChange={(e) => setRate(e.target.value)} /></div>
           <div className="flex items-end"><button type="button" onClick={fetchRate} className="btn-secondary w-full" disabled={loading}>{loading ? '…' : 'Auto rate'}</button></div>
@@ -131,7 +131,7 @@ export function AddActivityModal({ open, onClose, onAdd, date }) {
             </select>
           </div>
         )}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div><label className="label">Config</label><input className="input" value={config} onChange={(e) => setConfig(e.target.value)} /></div>
           <div><label className="label">Qty</label><input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
           <div><label className="label">Rate</label><input type="number" className="input" value={rate} onChange={(e) => setRate(e.target.value)} /></div>

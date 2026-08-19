@@ -44,7 +44,7 @@ function DestinationForm({ existing, onSaved }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <div><label className="label">Name</label><input className="input" value={f.name} onChange={set('name')} placeholder="e.g. Havelock" autoFocus /></div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label className="label">Region</label><input className="input" value={f.region} onChange={set('region')} placeholder="e.g. Andaman" /></div>
         <div><label className="label">Country</label><input className="input" value={f.country} onChange={set('country')} /></div>
       </div>

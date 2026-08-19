@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
 import { tenantPlugin } from '../tenant/tenantPlugin.js';
+import { shareTokenField } from '../utils/shareToken.js';
 
 // A scheduled payment due (instalment) — incoming (from customer) or outgoing (to supplier).
 // Status is derived: paid+verified = paid, paid+!verified = unverified, else overdue/upcoming by due date.
@@ -55,6 +56,7 @@ const installmentSchema = new mongoose.Schema(
 
     comments: [commentSchema],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    ...shareTokenField,
   },
   { timestamps: true }
 );

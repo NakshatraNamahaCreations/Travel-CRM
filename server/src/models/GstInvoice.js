@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Counter } from './Counter.js';
 import { tenantPlugin } from '../tenant/tenantPlugin.js';
+import { shareTokenField } from '../utils/shareToken.js';
 
 // A GST tax invoice raised against a specific customer payment (instalment) —
 // one invoice per payment received, matching how GST is normally documented
@@ -55,6 +56,7 @@ const gstInvoiceSchema = new mongoose.Schema(
     specialNotes: { type: String, trim: true },
     currency: { type: String, default: 'INR' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    ...shareTokenField,
   },
   { timestamps: true }
 );

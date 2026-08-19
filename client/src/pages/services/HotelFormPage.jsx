@@ -137,7 +137,7 @@ export default function HotelFormPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6 text-sm">
         <button onClick={() => navigate(-1)} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>
         <span className="font-semibold text-slate-900">{isEdit ? 'Edit Hotel' : 'New Hotel'}</span>
         <span className="text-slate-400">/</span>
@@ -253,7 +253,7 @@ export default function HotelFormPage() {
                       <div><label className="label">Allowed extra bed(s)</label><input type="number" className="input" value={g.allowedExtraBeds} onChange={(e) => setGroup(i, { allowedExtraBeds: e.target.value })} /></div>
                       <div><label className="label">No. of Rooms</label><input type="number" className="input" placeholder="e.g. 25" value={g.rooms} onChange={(e) => setGroup(i, { rooms: e.target.value })} /></div>
                     </div>
-                    <div className="mt-2 grid grid-cols-3 gap-3">
+                    <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div><label className="label">AWEB(s)</label><input type="number" className="input" value={g.aweb} onChange={(e) => setGroup(i, { aweb: e.target.value })} /></div>
                       <div><label className="label">CWEB(s)</label><input type="number" className="input" value={g.cweb} onChange={(e) => setGroup(i, { cweb: e.target.value })} /></div>
                       <div><label className="label">CNB(s)</label><input type="number" className="input" placeholder="e.g. 0" value={g.cnb} onChange={(e) => setGroup(i, { cnb: e.target.value })} /></div>

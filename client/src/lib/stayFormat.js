@@ -16,6 +16,29 @@ export function stayHeading(r) {
   return [date, nights ? `${nights} N` : ''].filter(Boolean).join(' - ') || '—';
 }
 
+// "Check in - 1 Oct, Check out - 2 Oct (1N)" — the explicit wording used on
+// the booking tables. `isRepeat` marks a second stay at the same hotel later
+// in the same trip, which reads as a re-check-in rather than a new booking.
+export function stayCheckInOut(r, isRepeat = false) {
+  const nights = r.nightRates?.length || r.nights?.length || 1;
+  const inLabel = isRepeat ? 'Re Check in' : 'Check in';
+  const ci = r.checkIn ? format(new Date(r.checkIn), 'd MMM') : '—';
+  const co = r.checkOut ? format(new Date(r.checkOut), 'd MMM') : '—';
+  return `${inLabel} - ${ci}, Check out - ${co} (${nights}N)`;
+}
+
+// Flags each row that repeats a hotel already stayed at earlier in the list,
+// so the table can label it "Re Check in".
+export function markRepeatStays(rows) {
+  const seen = new Set();
+  return (rows || []).map((r) => {
+    const key = String(r.hotelRef || r.name || r.hotelName || '').toLowerCase();
+    const isRepeat = key ? seen.has(key) : false;
+    if (key) seen.add(key);
+    return { row: r, isRepeat };
+  });
+}
+
 // The actual calendar date of each night in the stay, so a multi-night row
 // spells out every date it covers rather than only its check-in date.
 export function stayNightDates(r) {

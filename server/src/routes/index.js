@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';
 import ownerRoutes from './owner.routes.js';
+import { publicDocRoutes, shareLinkRoutes } from './publicShare.routes.js';
 import { protect } from '../middleware/auth.js';
 import { tenantContext } from '../tenant/middleware.js';
 import userRoutes from './user.routes.js';
@@ -52,6 +53,11 @@ router.get('/', (req, res) =>
 // deliberately unscoped (its handlers filter by organization explicitly).
 router.use('/auth', authRoutes);
 router.use('/owner', ownerRoutes);
+// Customer-facing document links (quotation / receipt / GST invoice). No auth
+// by design — the random token in the URL is the credential, and the handler
+// resolves the document's own organization before rendering.
+router.use('/public', publicDocRoutes);
+router.use('/share-links', shareLinkRoutes);
 
 // Everything below runs inside the caller's tenant context — tenantPlugin
 // scopes every DB query to req.user's organization (owners are rejected).

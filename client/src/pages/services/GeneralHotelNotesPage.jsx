@@ -22,7 +22,7 @@ export default function GeneralHotelNotesPage() {
   const askDelete = async (id) => { if (await confirm({ title: 'Delete this note?', message: 'This hotel note will be permanently removed.' })) delMut.mutate(id); };
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/services/hotels')} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>

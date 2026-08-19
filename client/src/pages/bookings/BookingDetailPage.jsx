@@ -238,7 +238,7 @@ export default function BookingDetailPage() {
 
       {/* ── Basic Details (two-column) ──────────────────────── */}
       {activeTab === 'basic' && (
-        <div className="flex gap-5 px-6 py-5">
+        <div className="flex gap-5 px-4 py-4 sm:px-6 sm:py-5">
           {/* Main column */}
           <div className="min-w-0 flex-1">
             {/* Latest Quote card */}
@@ -417,7 +417,7 @@ export default function BookingDetailPage() {
 
       {/* ── Other tabs ─────────────────────────────────────── */}
       {activeTab !== 'basic' && (
-        <div className="px-6 py-5">
+        <div className="px-4 py-4 sm:px-6 sm:py-5">
           {activeTab === 'quotes'     && <QuotesTab id={queryId} quotes={quotes} onShare={setShareQuoteId} />}
           {activeTab === 'services'   && <ServiceBookingsTab queryId={queryId} quote={fullQuote} startDate={b.startDate} />}
           {activeTab === 'accounting' && <AccountingTab id={queryId} bookingId={id} totalAmount={b.totalAmount} />}

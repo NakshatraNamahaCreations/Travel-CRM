@@ -70,7 +70,7 @@ export default function SalesReportPage() {
   };
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-gray-900">Sales Report</h1>
         <div className="flex items-center gap-2">

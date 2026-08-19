@@ -34,7 +34,7 @@ export default function TripCheckInOutReportPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <h1 className="text-lg font-bold text-slate-900">Trip Check In/Out Report</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => setMonthDate((d) => addMonths(d, -1))} className="btn-secondary px-2"><ChevronLeft size={16} /></button>
@@ -43,16 +43,16 @@ export default function TripCheckInOutReportPage() {
         </div>
       </div>
 
-      <div className="flex">
-        <aside className="w-44 shrink-0 border-r border-slate-200 bg-white py-4">
+      <div className="flex flex-col lg:flex-row">
+        <aside className="flex w-full shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2 py-2 lg:block lg:w-44 lg:gap-0 lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-4">
           {[{ k: 'checkout', l: 'Check Outs' }, { k: 'checkin', l: 'Check Ins' }].map((t) => (
-            <button key={t.k} onClick={() => setDirection(t.k)} className={cn('block w-full px-5 py-2.5 text-left text-sm', direction === t.k ? 'border-l-2 border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+            <button key={t.k} onClick={() => setDirection(t.k)} className={cn('block shrink-0 whitespace-nowrap px-4 py-2 text-left text-sm lg:w-full lg:px-5 lg:py-2.5', direction === t.k ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2' : 'text-slate-600 hover:bg-slate-50')}>
               {t.l}
             </button>
           ))}
         </aside>
 
-        <div className="min-w-0 flex-1 px-6 py-5">
+        <div className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-5">
           <p className="mb-3 text-base font-semibold text-slate-800">{format(after, 'EEE d MMM')} – {format(before, 'EEE d MMM')}</p>
 
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border-l-4 border-brand-400 bg-white px-5 py-4 shadow-sm">

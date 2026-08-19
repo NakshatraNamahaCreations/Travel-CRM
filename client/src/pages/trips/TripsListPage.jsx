@@ -123,11 +123,11 @@ export default function TripsListPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col lg:min-h-[calc(100vh-3.5rem)] lg:flex-row">
       {/* Sidebar tabs */}
-      <aside className="w-48 shrink-0 border-r border-gray-200 bg-white py-4">
-        <h2 className="px-4 pb-3 text-lg font-bold text-gray-900">Trips</h2>
-        <nav>
+      <aside className="w-full shrink-0 border-b border-gray-200 bg-white py-3 lg:w-48 lg:border-b-0 lg:border-r lg:py-4">
+        <h2 className="hidden px-4 pb-3 text-lg font-bold text-gray-900 lg:block">Trips</h2>
+        <nav className="flex overflow-x-auto lg:block">
           {TABS.map((tab) => {
             const active = status === tab.value;
             const count = tab.value === 'all' ? statsQ.data?.all : counts[tab.value];
@@ -136,9 +136,9 @@ export default function TripsListPage() {
                 key={tab.value}
                 onClick={() => setParams({ status: tab.value })}
                 className={cn(
-                  'flex w-full items-center justify-between px-4 py-2.5 text-sm',
+                  'flex shrink-0 items-center justify-between gap-2 whitespace-nowrap px-4 py-2.5 text-sm lg:w-full',
                   active
-                    ? 'border-l-2 border-brand-600 bg-brand-50 font-semibold text-brand-700'
+                    ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2'
                     : 'text-gray-600 hover:bg-gray-50'
                 )}
               >
@@ -156,7 +156,7 @@ export default function TripsListPage() {
 
       {/* Main */}
       <section className="flex-1 bg-gray-50">
-        <div className="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-6 py-3">
+        <div className="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-gray-300 px-3 py-2">
             <Search size={16} className="text-gray-400" />
             <input
@@ -192,8 +192,8 @@ export default function TripsListPage() {
               </button>
             </div>
           ) : (
-            <div className="card card-flush overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="card card-flush overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-100 text-left text-xs font-semibold tracking-normal text-slate-600">
                   <tr>
                     <th className="px-4 py-3">Id</th>

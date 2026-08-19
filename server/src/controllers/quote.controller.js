@@ -173,7 +173,7 @@ export const updateQuoteStatus = asyncHandler(async (req, res) => {
 });
 
 // Load a quote fully populated for the PDF / email.
-async function loadFullQuote(id) {
+export async function loadFullQuote(id) {
   const quote = await Quote.findById(id)
     .populate(POPULATE)
     .populate({ path: 'query', select: 'queryNumber guest destinations nights startDate pax', populate: { path: 'destinations', select: 'name' } })

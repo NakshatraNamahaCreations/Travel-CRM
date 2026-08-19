@@ -134,7 +134,8 @@ export default function QuoteViewPage() {
         {/* Costing */}
         <div className="py-6">
           <h2 className="mb-3 font-semibold text-gray-900">Cost Breakup</h2>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="border-b border-gray-200 text-left text-xs uppercase text-gray-400">
               <tr><th className="py-2">Item</th><th className="text-center">Qty</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr>
             </thead>
@@ -149,6 +150,7 @@ export default function QuoteViewPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="ml-auto mt-4 w-full max-w-xs space-y-1 text-sm">
             <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{money(q.pricing.subtotal, cur)}</span></div>

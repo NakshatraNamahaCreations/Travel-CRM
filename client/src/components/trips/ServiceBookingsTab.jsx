@@ -7,7 +7,7 @@ import { serviceBookingsApi } from '../../api/serviceBookings.js';
 import { orgProfileApi } from '../../api/orgProfile.js';
 import { company } from '../../config/company.js';
 import { tripNo } from '../../lib/format.js';
-import { stayHeading, stayNightDates } from '../../lib/stayFormat.js';
+import { stayCheckInOut, stayNightDates, markRepeatStays } from '../../lib/stayFormat.js';
 import { buildHotelBookingSubject, buildHotelBookingEmailHtml, buildHotelBookingWhatsAppText, whatsappToHtml } from '../../lib/shareContent.js';
 import StarRating from '../ui/StarRating.jsx';
 import Modal from '../ui/Modal.jsx';
@@ -67,7 +67,7 @@ function EditModal({ row, onClose, onSave, saving }) {
     <Modal open onClose={onClose} title={`Edit — ${row.name || 'Booking'}`}>
       <div className="space-y-3">
         <div><label className="label">Stay / Services</label><input className="input" value={f.detail} onChange={set('detail')} placeholder="CP • 3 Deluxe Room • 1 AWEB" /></div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label className="label">Booking Price (₹)</label><input type="number" className="input" value={f.price} onChange={set('price')} /></div>
           <div>
             <label className="label">Tag</label>
@@ -162,12 +162,12 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div><label className="label">Meal Plan</label><input className="input" value={f.mealPlan} onChange={set('mealPlan')} placeholder="CP" /></div>
             <div><label className="label">Room Type</label><input className="input" value={f.roomType} onChange={set('roomType')} placeholder="Deluxe Room" /></div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:grid-cols-6">
             <div><label className="label">Pax/room (WoEB)</label><input type="number" min="1" className="input" value={f.paxPerRoom} onChange={setNum('paxPerRoom')} /></div>
             <div><label className="label">No. of rooms</label><input type="number" min="1" className="input" value={f.rooms} onChange={setNum('rooms')} /></div>
             <div><label className="label">AWEB</label><input type="number" min="0" className="input" value={f.aweb} onChange={setNum('aweb')} /></div>
@@ -176,7 +176,7 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
             <div><label className="label">Comp Child</label><div className="input flex items-center bg-slate-50 text-xs text-gray-500">Upto 5y ({Number(f.cnb) || 0}C)</div></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
             <label className="label">Tag</label>
             <select className="input" value={f.tag} onChange={set('tag')}>
@@ -506,10 +506,10 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
   const canGenerate = !!quote?._id;
 
   return (
-    <div className="flex gap-6">
-      <aside className="w-36 shrink-0 space-y-1">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {SUBS.map((s) => (
-          <button key={s.k} onClick={() => setSub(s.k)} className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm', sub === s.k ? 'bg-brand-50 font-semibold text-brand-700' : 'text-gray-600 hover:bg-gray-50')}>
+          <button key={s.k} onClick={() => setSub(s.k)} className={cn('flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full', sub === s.k ? 'bg-brand-50 font-semibold text-brand-700' : 'text-gray-600 hover:bg-gray-50')}>
             <s.icon size={14} /> {s.l}
           </button>
         ))}
@@ -552,7 +552,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => (
+                {markRepeatStays(rows).map(({ row: r, isRepeat }) => (
                   <tr key={r._id} className="align-top">
                     <td className="px-4 py-3">
                       <div className="flex items-start justify-between gap-2">
@@ -572,7 +572,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                     <td className="px-4 py-3 text-gray-600">
                       {sub === 'hotel' ? (
                         <>
-                          <div className="font-medium text-gray-800">{stayHeading(r)}</div>
+                          <div className={cn('font-medium', isRepeat ? 'text-amber-700' : 'text-gray-800')}>{stayCheckInOut(r, isRepeat)}</div>
                           {r.detail && (
                             (r.nights?.length || 1) > 1
                               ? stayNightDates(r).map((d, i) => (

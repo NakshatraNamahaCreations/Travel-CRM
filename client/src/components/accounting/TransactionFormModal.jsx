@@ -42,11 +42,11 @@ export default function TransactionFormModal({ open, onClose, onSaved, presetDeb
   return (
     <Modal open={open} onClose={onClose} title="New Transaction" width="max-w-lg">
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label className="label">Debit Account</label><AsyncSelect loadOptions={loadAccounts} value={f.debitAccount} onChange={set('debitAccount')} placeholder="From…" /></div>
           <div><label className="label">Credit Account</label><AsyncSelect loadOptions={loadAccounts} value={f.creditAccount} onChange={set('creditAccount')} placeholder="To…" /></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label className="label">Amount</label><input type="number" min="0" className="input" value={f.amount} onChange={(e) => set('amount')(e.target.value)} placeholder="0" /></div>
           <div><label className="label">Date <span className="label-optional">(optional)</span></label><input type="date" className="input" value={f.date} onChange={(e) => set('date')(e.target.value)} /></div>
         </div>

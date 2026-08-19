@@ -102,7 +102,7 @@ export default function CompanyDetailPage() {
       </div>
 
       {/* Stats */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:grid-cols-4">
         {[
           ['Users', org.users ?? users.length],
           ['Trip Queries', org.queries ?? 0],
@@ -215,7 +215,7 @@ export default function CompanyDetailPage() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Months</label>
               <input

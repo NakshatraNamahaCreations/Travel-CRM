@@ -56,7 +56,7 @@ export default function HotelOptionsPage({ config }) {
   const askDelete = async (o) => { if (await confirm({ title: 'Delete this item?', message: `“${o.value}” will be permanently removed.` })) delMut.mutate(o._id); };
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-1 flex items-center gap-2 text-sm text-slate-400">
         <button onClick={() => navigate(backTo)} className="hover:text-slate-700"><ArrowLeft size={16} /></button>
       </div>

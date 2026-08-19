@@ -378,21 +378,21 @@ export default function PaymentsLedgerPage({ direction }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
         <h1 className="text-xl font-bold text-slate-900">{title}</h1>
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-56 bg-transparent text-sm outline-none" />
         </div>
       </div>
 
-      <div className="flex">
+      <div className="flex flex-col lg:flex-row">
         {/* Left filter tabs */}
-        <aside className="w-44 shrink-0 border-r border-slate-200 py-3">
+        <aside className="flex w-full shrink-0 gap-1 overflow-x-auto border-b border-slate-200 px-2 py-2 lg:block lg:w-44 lg:gap-0 lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-3">
           {TABS.map(([k, label]) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
-              className={cn('flex w-full items-center justify-between border-l-2 px-5 py-2.5 text-left text-sm',
+              className={cn('flex shrink-0 items-center justify-between gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-left text-sm lg:w-full lg:border-b-0 lg:border-l-2 lg:px-5 lg:py-2.5',
                 filter === k ? 'border-brand-600 bg-brand-50/50 font-semibold text-brand-700' : 'border-transparent text-slate-600 hover:bg-slate-50')}
             >
               {label}

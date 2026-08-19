@@ -30,10 +30,10 @@ export default function OperationalBookingsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <h1 className="text-lg font-bold text-slate-900">Operational Bookings</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex w-56 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+          <div className="flex w-full items-center sm:w-56 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
             <Search size={14} className="text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-full text-sm outline-none" />
           </div>
@@ -52,7 +52,7 @@ export default function OperationalBookingsPage() {
         </div>
       </div>
 
-      <div className="px-6 py-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
         {isLoading ? (
           <div className="py-16 text-center text-slate-400">Loading…</div>
         ) : view === 'list' ? (
@@ -84,11 +84,11 @@ export default function OperationalBookingsPage() {
             </table>
           </div>
         ) : (
-          <div className="grid grid-cols-7 gap-2 overflow-x-auto">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-7 lg:overflow-visible lg:px-0">
             {days.map((day) => {
               const items = schedules.filter((s) => isSameDay(new Date(s.date), day));
               return (
-                <div key={day.toISOString()} className="min-w-[150px]">
+                <div key={day.toISOString()} className="w-[150px] shrink-0 lg:w-auto lg:min-w-0">
                   <div className={cn('mb-2 rounded-lg px-2 py-1 text-center', isSameDay(day, today) ? 'bg-brand-600 text-white' : 'text-slate-500')}>
                     <div className="text-xs font-medium">{format(day, 'EEE')}</div>
                     <div className="text-lg font-bold">{format(day, 'd')}</div>

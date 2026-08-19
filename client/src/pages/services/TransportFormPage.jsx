@@ -100,7 +100,7 @@ export default function TransportFormPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6 text-sm">
         <button onClick={() => navigate(-1)} className="text-slate-600 hover:text-slate-900"><ArrowLeft size={18} /></button>
         <span className="font-semibold text-slate-900">{isEdit ? 'Edit Transport Service' : 'New Transport Service'}</span>
         <span className="text-slate-400">/</span>

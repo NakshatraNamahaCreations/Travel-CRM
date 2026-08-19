@@ -13,6 +13,7 @@ import { destinationsApi, querySourcesApi, usersApi } from '../../api/masterData
 import { hotelsApi } from '../../api/services.js';
 import { optionsApi } from '../../api/options.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
+import { stayCheckInOut, markRepeatStays } from '../../lib/stayFormat.js';
 import { cn } from '../../lib/cn.js';
 import Modal from '../../components/ui/Modal.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
@@ -125,7 +126,7 @@ function EditModal({ row, onClose, onSave, saving }) {
           <label className="label">Stay / Services</label>
           <input className="input" value={f.detail} onChange={set('detail')} placeholder="CP • 3 Deluxe Room • 1 AWEB" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="label">Booking Price (₹)</label>
             <input type="number" className="input" value={f.price} onChange={set('price')} />
@@ -189,7 +190,7 @@ function BasicDetailsCell({ b, rowSpan }) {
   );
 }
 
-function HotelCells({ h, onEdit, onShare, onVoucher, onTag, onStatusChange }) {
+function HotelCells({ h, isRepeat, onEdit, onShare, onVoucher, onTag, onStatusChange }) {
   return (
     <>
       <td className="border-r border-slate-100 px-4 py-2.5 align-middle">
@@ -211,8 +212,8 @@ function HotelCells({ h, onEdit, onShare, onVoucher, onTag, onStatusChange }) {
           </div>
         </div>
       </td>
-      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-2.5 align-middle text-slate-600">
-        {fmtD(h.checkIn)} • {h.nights?.length || 1}N
+      <td className={cn('whitespace-nowrap border-r border-slate-100 px-4 py-2.5 align-middle text-xs', isRepeat ? 'text-amber-700' : 'text-slate-600')}>
+        {stayCheckInOut(h, isRepeat)}
       </td>
       <td className="border-r border-slate-100 px-4 py-2.5 align-middle">
         <StatusSelect row={h} onChange={onStatusChange} />
@@ -240,8 +241,8 @@ function CalendarView({ items, month, onMonthChange, onEditRow }) {
   const today = new Date();
 
   return (
-    <div className="card card-flush overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+    <div className="card card-flush overflow-x-auto">
+      <div className="flex min-w-[640px] items-center justify-between border-b border-slate-200 px-4 py-3">
         <h3 className="font-semibold text-slate-800">{format(month, 'MMMM yyyy')}</h3>
         <div className="flex items-center gap-2">
           <button onClick={() => onMonthChange(new Date())} className="btn-secondary text-xs">Today</button>
@@ -249,10 +250,10 @@ function CalendarView({ items, month, onMonthChange, onEditRow }) {
           <button onClick={() => onMonthChange(addMonths(month, 1))} className="btn-secondary px-2"><ChevronRight size={15} /></button>
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 text-center text-[11px] font-semibold uppercase text-slate-500">
+      <div className="grid min-w-[640px] grid-cols-7 border-b border-slate-100 bg-slate-50 text-center text-[11px] font-semibold uppercase text-slate-500">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} className="py-2">{d}</div>)}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid min-w-[640px] grid-cols-7">
         {days.map((day) => {
           const dayStays = stays.filter((s) => s.checkIn && isSameDay(new Date(s.checkIn), day));
           const inMonth = isSameMonth(day, month);
@@ -320,10 +321,11 @@ function BookingRows({ b, onEditRow, onShareRow, onVoucherRow, onTagRow, onStatu
         </td>
       </tr>
 
-      {generated && hotels.map((h) => (
+      {generated && markRepeatStays(hotels).map(({ row: h, isRepeat }) => (
         <tr key={h._id} className="hover:bg-slate-50">
           <HotelCells
             h={h}
+            isRepeat={isRepeat}
             onEdit={() => onEditRow(h)}
             onShare={() => onShareRow({ row: h, booking: b })}
             onVoucher={() => onVoucherRow(h)}
@@ -393,11 +395,11 @@ export default function HotelBookingsPage() {
   });
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-900">Hotel Bookings</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex w-72 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <div className="flex w-full items-center sm:w-72 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
             <Search size={15} className="text-slate-400" />
             <input
               value={search}
@@ -423,14 +425,14 @@ export default function HotelBookingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-6">
-        <aside className="w-36 shrink-0 space-y-1">
+      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+        <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                'block w-full rounded-lg px-3 py-2 text-left text-sm',
+                'block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full',
                 tab === t.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50',
               )}
             >

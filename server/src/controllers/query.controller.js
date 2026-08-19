@@ -8,6 +8,7 @@ import { ok, created, paginate } from '../utils/apiResponse.js';
 import { QUERY_STATUSES, QUERY_STATUS_VALUES } from '../constants/queryStatus.js';
 import { Quote } from '../models/Quote.js';
 import { logActivity } from './activity.controller.js';
+import { sendWhatsAppTemplate } from '../utils/whatsapp.js';
 
 const LABEL = Object.fromEntries(QUERY_STATUSES.map((s) => [s.value, s.label]));
 
@@ -328,4 +329,25 @@ export const deleteQuery = asyncHandler(async (req, res) => {
   const item = await Query.findByIdAndDelete(req.params.id);
   if (!item) throw ApiError.notFound('Query not found');
   return ok(res, { id: req.params.id });
+});
+
+// POST /api/queries/:id/whatsapp-template  { templateName, bodyValues }
+// Sends any approved Gallabox template to the trip's guest. Trip-scoped
+// (rather than per-instalment) so every stage template — quotation,
+// follow-up, confirmation, travel documents, review — sends the same way.
+export const sendQueryWhatsAppTemplate = asyncHandler(async (req, res) => {
+  const query = await Query.findById(req.params.id).select('guest queryNumber');
+  if (!query) throw ApiError.notFound('Query not found');
+
+  const { templateName, bodyValues } = req.body;
+  if (!String(templateName || '').trim()) throw ApiError.badRequest('Template name is required');
+
+  const phone0 = (query.guest?.phones || []).find((p) => p.isPrimary) || query.guest?.phones?.[0];
+  const phone = phone0 ? `${phone0.countryCode || '91'}${phone0.number || ''}` : '';
+  if (!phone) throw ApiError.badRequest('This trip has no guest phone number to message');
+  const guestName = [query.guest?.salutation, query.guest?.name].filter(Boolean).join(' ') || 'Guest';
+
+  const result = await sendWhatsAppTemplate({ phone, name: guestName, templateName, bodyValues });
+  await logActivity(query._id, req.user._id, `sent WhatsApp template "${templateName}"`, 'note');
+  return ok(res, { sent: true, ...result });
 });

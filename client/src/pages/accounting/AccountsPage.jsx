@@ -34,11 +34,11 @@ export default function AccountsPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['accounts'] });
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-900">Accounts</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex w-64 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full items-center gap-2 rounded-xl sm:w-64 border border-slate-200 bg-white px-3 py-2">
             <Search size={15} className="text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-full text-sm outline-none" />
           </div>
@@ -47,10 +47,10 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      <div className="flex gap-6">
-        <aside className="w-44 shrink-0 space-y-1">
+      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+        <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
           {TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={cn('block w-full rounded-lg px-3 py-2 text-left text-sm', tab === t.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+            <button key={t.key} onClick={() => setTab(t.key)} className={cn('block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full', tab === t.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
               {t.label}
             </button>
           ))}

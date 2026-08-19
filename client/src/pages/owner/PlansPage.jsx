@@ -110,7 +110,7 @@ export default function PlansPage() {
             <label className="label">Name</label>
             <input className="input" value={form.name} onChange={set('name')} placeholder="e.g. Pro" required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Price (₹)</label>
               <input className="input" type="number" min="0" value={form.price} onChange={set('price')} required />

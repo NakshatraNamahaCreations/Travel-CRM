@@ -26,6 +26,11 @@ export const env = {
   jwtExpires: process.env.JWT_EXPIRES || '7d',
   clientUrls,
   clientUrl: clientUrls[0],
+  // Absolute origin of THIS API, used to build customer-facing document
+  // links (quotation / receipt / GST invoice) that get sent over WhatsApp.
+  // Must be publicly reachable in production — localhost links won't open on
+  // a guest's phone.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || `http://localhost:${Number(process.env.PORT) || 5000}`).replace(/\/+$/, ''),
   isProd: (process.env.NODE_ENV || 'development') === 'production',
   chromePath: process.env.CHROME_PATH || '',
   cloudinary: {

@@ -184,15 +184,16 @@ export const logPayment = asyncHandler(async (req, res) => {
   return ok(res, inst);
 });
 
-// GET /api/installments/:id/receipt — payment receipt PDF for a paid instalment
-export const receiptPdf = asyncHandler(async (req, res) => {
-  const inst = await Installment.findById(req.params.id)
+// Builds the payment receipt PDF for a paid instalment. Shared by the
+// authenticated route below and the public (tokenised) share link.
+export async function buildReceiptPdf(id, orgId) {
+  const inst = await Installment.findById(id)
     .populate('payment', 'mode')
     .populate('query', 'queryNumber pax');
   if (!inst) throw ApiError.notFound('Installment not found');
   if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment yet');
 
-  const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
+  const org = await OrgProfile.getFor(orgId).catch(() => null);
   // Paid-so-far / scheduled totals across the trip's incoming instalments.
   const queryId = inst.query?._id || inst.query;
   const siblings = queryId ? await Installment.find({ query: queryId, direction: 'incoming' }) : [inst];
@@ -207,8 +208,14 @@ export const receiptPdf = asyncHandler(async (req, res) => {
 
   const html = paymentReceiptHtml(inst.toObject(), { org: org?.toObject(), mode: inst.payment?.mode || '', pax, totals });
   const pdf = await htmlToPdf(html);
+  return { pdf, filename: `PaymentReceipt-${inst.installmentNumber}.pdf` };
+}
+
+// GET /api/installments/:id/receipt — payment receipt PDF for a paid instalment
+export const receiptPdf = asyncHandler(async (req, res) => {
+  const { pdf, filename } = await buildReceiptPdf(req.params.id, req.organizationId);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="PaymentReceipt-${inst.installmentNumber}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   return res.send(pdf);
 });
 

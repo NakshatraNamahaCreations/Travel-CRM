@@ -108,13 +108,13 @@ export default function TripPlanRequestsPage() {
   });
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Trip Plan Requests</h1>
           <p className="text-sm text-slate-500">Incoming requests from Website, Google Ads &amp; Instagram</p>
         </div>
-        <div className="flex w-72 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div className="flex w-full items-center sm:w-72 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
           <Search size={15} className="text-slate-400" />
           <input
             value={search}

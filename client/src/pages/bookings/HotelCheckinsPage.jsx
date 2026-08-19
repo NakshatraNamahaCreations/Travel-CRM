@@ -107,10 +107,10 @@ export default function HotelCheckinsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <h1 className="text-lg font-bold text-slate-900">Hotel Check-Ins <span className="ml-1 text-sm font-normal text-slate-400">({rangeLabel(intervalType, after, before)})</span></h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex w-56 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+          <div className="flex w-full items-center sm:w-56 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
             <Search size={14} className="text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-full text-sm outline-none" />
           </div>
@@ -130,7 +130,7 @@ export default function HotelCheckinsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:px-6">
         <div className="flex items-center gap-6">
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)} className={cn('border-b-2 py-3 text-sm font-medium', tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
@@ -145,7 +145,7 @@ export default function HotelCheckinsPage() {
         </label>
       </div>
 
-      <div className="px-6 py-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
         <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
           Showing {stays.length ? (page - 1) * PAGE_SIZE + 1 : 0}-{Math.min(page * PAGE_SIZE, stays.length)} of {stays.length} Item{stays.length === 1 ? '' : 's'}
           <button onClick={() => refetch()} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>

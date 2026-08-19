@@ -568,7 +568,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:grid-cols-5">
                     <Num label="Pax/room (WoEB)" value={h.paxPerRoom} onChange={(v) => setHotel(i, { paxPerRoom: v })} />
                     {/* Extra beds only make sense inside rooms — zero & lock them until rooms ≥ 1. */}
                     <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, v > 0 ? { rooms: v } : { rooms: v, aweb: 0, cweb: 0, cnb: 0 })} />
@@ -862,7 +862,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         </div>
                       </div>
                     ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label className="label">Start Time</label>
                         <input type="text" className="input" placeholder="e.g. 10:00 AM" value={t.startTime || ''} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
@@ -1037,7 +1037,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         placeholder={a.activity ? 'Type to search...' : 'Pick an activity first'}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label className="label">Slot</label>
                         {a.slotOptions?.length > 1 ? (

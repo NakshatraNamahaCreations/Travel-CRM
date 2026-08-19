@@ -222,7 +222,7 @@ export default function QuoteBuilderPage({ mode }) {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="grid grid-cols-3 gap-8 text-sm">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-8 text-sm">
               <Detail label="Start Date" value={form.startDate ? format(new Date(form.startDate), 'd MMM, yyyy') : '—'} />
               <Detail label="Duration" value={`${form.nights} Night${form.nights === 1 ? '' : 's'}, ${Number(form.nights) + 1} Days`} />
               <Detail label="Pax" value={`${form.pax.adults} Adult${form.pax.adults === 1 ? '' : 's'}${form.pax.children?.length ? `, ${form.pax.children.length} Child` : ''}`} />

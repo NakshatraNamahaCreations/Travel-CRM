@@ -70,7 +70,7 @@ export default function StatesPage() {
   });
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-4 sm:px-6 sm:py-5">
       <button onClick={() => navigate(-1)} className="mb-1 flex items-center gap-1 text-sm text-slate-400 hover:text-slate-700">
         <ArrowLeft size={16} /> Back
       </button>

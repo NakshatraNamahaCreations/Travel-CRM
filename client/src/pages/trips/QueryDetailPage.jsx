@@ -25,6 +25,7 @@ import SharePackageModal from '../../components/quotes/SharePackageModal.jsx';
 import ServiceBookingsTab from '../../components/trips/ServiceBookingsTab.jsx';
 import { ProformaSection, ProfitSection, GstInvoiceModal } from '../../components/trips/AccountingSections.jsx';
 import DocsVouchers from '../../components/trips/DocsVouchers.jsx';
+import SendWhatsAppModal from '../../components/trips/SendWhatsAppModal.jsx';
 import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 
 const TERMINAL_LABEL = { canceled: 'Canceled', dropped: 'Dropped' };
@@ -203,6 +204,7 @@ export default function QueryDetailPage() {
   const [tab, setTab] = useState('basic');
   const [lostMode, setLostMode] = useState(null);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [waOpen, setWaOpen] = useState(false);
   const [shareQuoteId, setShareQuoteId] = useState(null);
 
   const { data: q, isLoading } = useQuery({ queryKey: ['query', id], queryFn: () => queriesApi.get(id) });
@@ -260,7 +262,7 @@ const lostMut = useMutation({
       </div>
 
       {/* Header meta */}
-      <div className="border-b border-gray-200 bg-white px-6 py-3">
+      <div className="border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="flex flex-wrap items-center gap-2 text-lg font-bold text-gray-900">
@@ -283,6 +285,13 @@ const lostMut = useMutation({
               <p className="text-sm font-medium text-gray-700">{q.owner?.name || 'Not set'}</p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWaOpen(true)}
+                title="Send a WhatsApp template message to this guest"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              >
+                <MessageSquare size={14} /> WhatsApp
+              </button>
               <KebabMenu status={q.status} onEdit={() => navigate(`/trips/${id}/edit`)} onDrop={() => setLostMode('dropped')} onCancel={() => setLostMode('canceled')} />
             </div>
           </div>
@@ -290,7 +299,7 @@ const lostMut = useMutation({
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-6 overflow-x-auto border-b border-gray-200 bg-white px-6">
+      <div className="flex items-center gap-6 overflow-x-auto border-b border-gray-200 bg-white px-4 sm:px-6">
         {visibleTabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', activeTab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-800')}>
             {t.label}{t.key === 'quotes' && quotes.length ? <span className="rounded-full bg-gray-100 px-1.5 text-xs">{quotes.length}</span> : null}
@@ -298,7 +307,7 @@ const lostMut = useMutation({
         ))}
       </div>
 
-      <div className="px-6 py-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
         {activeTab === 'basic' && (
           <BasicDetailsTab
             q={q} quote={fullQuote} comments={comments}
@@ -313,7 +322,7 @@ const lostMut = useMutation({
         {activeTab === 'quotes' && <QuotesTab id={id} quotes={quotes} onShare={setShareQuoteId} canConvert={BEFORE_CONVERT.includes(q.status)} />}
         {activeTab === 'new_quote' && <NewQuoteTab id={id} nights={q.nights} />}
         {activeTab === 'services' && <ServiceBookingsTab queryId={id} quote={fullQuote} startDate={q.startDate} guest={q.guest} queryNumber={q.queryNumber} pax={q.pax} />}
-        {activeTab === 'accounting' && <AccountingTab id={id} />}
+        {activeTab === 'accounting' && <AccountingTab id={id} query={q} quote={fullQuote} />}
         {activeTab === 'docs' && <DocsTab quotes={quotes} queryId={id} />}
         {activeTab === 'activities' && <ActivitiesTab id={id} />}
       </div>
@@ -321,6 +330,20 @@ const lostMut = useMutation({
       <LostModal mode={lostMode} onClose={() => setLostMode(null)} onConfirm={(d) => lostMut.mutate(d)} pending={lostMut.isPending} />
       <AddCommentModal open={commentOpen} onClose={() => setCommentOpen(false)} onSave={(d) => addCommentMut.mutate(d)} pending={addCommentMut.isPending} />
       <SharePackageModal quoteId={shareQuoteId} open={!!shareQuoteId} onClose={() => setShareQuoteId(null)} />
+      {waOpen && (
+        <SendWhatsAppModal
+          ctx={{
+            query: q,
+            quote: fullQuote,
+            // Document links (quotation / voucher) are minted by the modal as
+            // public tokenised URLs; only the payment link is built here.
+            links: { payment: `${company.paymentBaseUrl}/${fullQuote?.quoteNumber || q.queryNumber || ''}` },
+          }}
+          // Preselect the template that matches where the trip is right now.
+          defaultKey={isBooked ? 'package_confirmed' : 'quotation_sent'}
+          onClose={() => setWaOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -723,9 +746,9 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
     : (defaultExclusions.length ? defaultExclusions : company.defaultExclusions);
 
   return (
-    <div className="flex items-start gap-5">
+    <div className="flex flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-5">
       {/* ---- Left: quote version list ---- */}
-      <aside className="w-44 shrink-0">
+      <aside className="w-full shrink-0 lg:w-44">
         <Link to={`/trips/${id}/quote/new`} className="btn-secondary mb-3 flex w-full items-center justify-center gap-1 text-xs"><Plus size={13} /> New Quote</Link>
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           {quotes.map((quote) => {
@@ -1515,85 +1538,23 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
   );
 }
 
-// Sends a pre-approved WhatsApp template (e.g. a payment thank-you) via
-// Gallabox for a paid instalment. templateName + variable names must match
-// exactly what was created and approved in the Gallabox dashboard — this
-// just pre-fills sensible guesses (CustomerName/PaymentReceived/etc.) that
-// the agent can rename/edit before sending.
-function WhatsAppTemplateModal({ inst, onClose }) {
-  const guestName = [inst?.guest?.salutation, inst?.guest?.name].filter(Boolean).join(' ') || 'Guest';
-  const [templateName, setTemplateName] = useState('');
-  const [vars, setVars] = useState(() => [
-    { key: 'CustomerName', value: guestName },
-    { key: 'PaymentReceived', value: `₹${(inst?.paidAmount || inst?.amount || 0).toLocaleString('en-IN')}` },
-    { key: 'InvoiceNumber', value: inst?.tripId ? `Trip# ${inst.tripId}` : '' },
-    { key: 'CompanyName', value: company.name },
-  ]);
-  const setVar = (i, patch) => setVars((v) => v.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  const addVar = () => setVars((v) => [...v, { key: '', value: '' }]);
-  const rmVar = (i) => setVars((v) => v.filter((_, idx) => idx !== i));
-
-  const mut = useMutation({
-    mutationFn: () => installmentsApi.sendWhatsAppTemplate(inst._id, {
-      templateName: templateName.trim(),
-      bodyValues: Object.fromEntries(vars.filter((v) => v.key.trim()).map((v) => [v.key.trim(), v.value])),
-    }),
-    onSuccess: () => { toast.success('WhatsApp template sent'); onClose(); },
-    onError: (e) => toast.error(e.response?.data?.message || e.message || 'Could not send'),
-  });
-
-  if (!inst) return null;
-  return (
-    <Modal open onClose={onClose} title="Send WhatsApp Template" width="max-w-md">
-      <div className="space-y-4">
-        <p className="text-xs text-gray-400">
-          Sends a template already created and approved in your Gallabox dashboard — the name and variables below must match it exactly.
-        </p>
-        <div>
-          <label className="label">Template Name</label>
-          <input className="input" placeholder="e.g. payment_thank_you" value={templateName} onChange={(e) => setTemplateName(e.target.value)} autoFocus />
-        </div>
-        <div>
-          <label className="label">Variables</label>
-          <div className="space-y-2">
-            {vars.map((v, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <input className="input w-2/5 text-sm" placeholder="Variable name" value={v.key} onChange={(e) => setVar(i, { key: e.target.value })} />
-                <input className="input flex-1 text-sm" placeholder="Value" value={v.value} onChange={(e) => setVar(i, { value: e.target.value })} />
-                <button onClick={() => rmVar(i)} className="text-gray-300 hover:text-red-500">✕</button>
-              </div>
-            ))}
-          </div>
-          <button onClick={addVar} className="btn-secondary mt-2 text-xs">+ Add Variable</button>
-        </div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={() => mut.mutate()} disabled={mut.isPending || !templateName.trim()} className="btn-primary">
-            {mut.isPending ? 'Sending…' : 'Send'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 const ACCOUNTING_SECTIONS = [
   { key: 'payments', label: 'Payments' },
   { key: 'proforma', label: 'Proforma Invoice' },
   { key: 'profit', label: 'Profit Report' },
 ];
 
-export function AccountingTab({ id, bookingId, totalAmount }) {
+export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
   const [section, setSection] = useState('payments');
   return (
-    <div className="flex gap-6">
-      <aside className="w-44 shrink-0 space-y-1">
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {ACCOUNTING_SECTIONS.map((s) => (
           <button
             key={s.key}
             onClick={() => setSection(s.key)}
             className={cn(
-              'block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold',
+              'block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full font-semibold',
               section === s.key ? 'border-l-2 border-brand-600 bg-brand-50 text-brand-700' : 'text-gray-600 hover:bg-gray-50'
             )}
           >
@@ -1602,7 +1563,7 @@ export function AccountingTab({ id, bookingId, totalAmount }) {
         ))}
       </aside>
       <div className="min-w-0 flex-1">
-        {section === 'payments' && <PaymentsSection id={id} bookingId={bookingId} totalAmount={totalAmount} />}
+        {section === 'payments' && <PaymentsSection id={id} bookingId={bookingId} totalAmount={totalAmount} query={query} quote={quote} />}
         {section === 'proforma' && <ProformaSection queryId={id} />}
         {section === 'profit' && <ProfitSection queryId={id} onGoToPayments={() => setSection('payments')} />}
       </div>
@@ -1610,7 +1571,7 @@ export function AccountingTab({ id, bookingId, totalAmount }) {
   );
 }
 
-function PaymentsSection({ id, bookingId, totalAmount }) {
+function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inst', id], queryFn: () => installmentsApi.list({ query: id, direction: 'incoming' }) });
   const rows = data?.data || [];
@@ -1624,7 +1585,8 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
   // One GST invoice per payment received — raised against the individual
   // instalment as soon as that instalment is paid, not once the whole trip is.
   const [gstInst, setGstInst] = useState(null);
-  const [waInst, setWaInst] = useState(null); // instalment being sent a WhatsApp template for
+  // { installment, templateKey } — which payment row and which stage template.
+  const [wa, setWa] = useState(null);
 
   const openReceipt = async (r) => {
     const t = toast.loading('Preparing receipt…');
@@ -1683,12 +1645,22 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {!r.paid ? (
-                        <button
-                          onClick={() => setPayInst(r)}
-                          className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
-                        >
-                          + Add Payment
-                        </button>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => setPayInst(r)}
+                            className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                          >
+                            + Add Payment
+                          </button>
+                          <button
+                            // First unpaid row = the initial payment request; later ones chase the next instalment.
+                            onClick={() => setWa({ installment: r, templateKey: rows.some((x) => x.paid) ? 'next_instalment' : 'payment_request' })}
+                            title="Send a WhatsApp payment request for this instalment"
+                            className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          >
+                            <MessageSquare size={12} className="mr-1 inline" /> Ask
+                          </button>
+                        </div>
                       ) : (
                         <div className="flex justify-end gap-1.5">
                           <button
@@ -1706,8 +1678,8 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
                             <FileText size={12} className="mr-1 inline" /> GST Invoice
                           </button>
                           <button
-                            onClick={() => setWaInst(r)}
-                            title="Send a WhatsApp template message for this payment"
+                            onClick={() => setWa({ installment: r, templateKey: 'payment_receipt' })}
+                            title="Send the payment receipt over WhatsApp"
                             className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                           >
                             <MessageSquare size={12} className="mr-1 inline" /> WhatsApp
@@ -1752,7 +1724,19 @@ function PaymentsSection({ id, bookingId, totalAmount }) {
         open={!!gstInst}
         onClose={() => setGstInst(null)}
       />
-      {waInst && <WhatsAppTemplateModal inst={waInst} onClose={() => setWaInst(null)} />}
+      {wa && (
+        <SendWhatsAppModal
+          ctx={{
+            query,
+            quote,
+            installment: wa.installment,
+            // Same PayU pattern the Share Package email/WhatsApp already uses.
+            links: { payment: `${company.paymentBaseUrl}/${quote?.quoteNumber || query?.queryNumber || ''}` },
+          }}
+          defaultKey={wa.templateKey}
+          onClose={() => setWa(null)}
+        />
+      )}
     </div>
   );
 }
