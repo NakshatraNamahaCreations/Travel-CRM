@@ -66,9 +66,9 @@ export default function QuotationDocument() {
   return (
     <div className="min-h-screen bg-slate-100 py-6">
       {/* Toolbar */}
-      <div className="mx-auto mb-4 flex max-w-4xl items-center justify-between px-4">
+      <div className="mx-auto mb-4 flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4">
         <button onClick={() => navigate(-1)} className="btn-secondary text-sm"><ArrowLeft size={15} /> Back</button>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => navigate(`/quotes/${id}/edit`)} className="btn-secondary text-sm">Edit Quote</button>
           <button onClick={printFrame} disabled={!html} className="btn-secondary text-sm"><Printer size={15} /> Print</button>
           <button onClick={() => setEmailOpen(true)} className="btn-secondary text-sm"><Send size={15} /> Email Guest</button>
@@ -101,14 +101,19 @@ export default function QuotationDocument() {
       ) : error || !html ? (
         <div className="py-24 text-center text-slate-500">Could not load the quotation document.</div>
       ) : (
-        <iframe
-          ref={iframeRef}
-          title="Quotation"
-          srcDoc={html}
-          onLoad={onFrameLoad}
-          className="mx-auto block w-[850px] max-w-full border-0 bg-white shadow-soft"
-          style={{ height: frameHeight }}
-        />
+        // The quotation is fixed-width A4 HTML. Shrinking the iframe would clip
+        // it with no way to reach the left edge, so below lg we keep the frame
+        // at its natural width and let the wrapper pan horizontally.
+        <div className="overflow-x-auto pb-2">
+          <iframe
+            ref={iframeRef}
+            title="Quotation"
+            srcDoc={html}
+            onLoad={onFrameLoad}
+            className="block w-[850px] border-0 bg-white shadow-soft lg:mx-auto lg:max-w-full"
+            style={{ height: frameHeight }}
+          />
+        </div>
       )}
     </div>
   );

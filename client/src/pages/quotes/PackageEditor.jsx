@@ -490,8 +490,12 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     <div className="space-y-6">
       {/* Hotels */}
       <Section icon={Hotel} title="Hotels" hint="Please add hotels details (if included in package) with services provided for each hotels and the selling cost price.">
-        <p className="mb-3 flex items-center gap-1 text-xs text-gray-400">
-          <Sparkles size={12} className="text-amber-500" /> Tip: Use <b className="font-semibold text-gray-600">Next Night</b> to repeat a hotel on the next free night, or <b className="font-semibold text-gray-600">Duplicate</b> to offer an alternative hotel option for the same night (Hotel A or Hotel B).
+        <p className="mb-3 flex items-start gap-1.5 text-xs text-gray-400">
+          <Sparkles size={12} className="mt-0.5 shrink-0 text-amber-500" />
+          {/* One flex item, or each text fragment wraps independently and interleaves. */}
+          <span>
+            Tip: Use <b className="font-semibold text-gray-600">Next Night</b> to repeat a hotel on the next free night, or <b className="font-semibold text-gray-600">Duplicate</b> to offer an alternative hotel option for the same night (Hotel A or Hotel B).
+          </span>
         </p>
         <div className="space-y-4">
           {(pkg.hotels || []).map((h, i) => (
@@ -636,7 +640,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
           <p className="mb-3 text-xs text-slate-400">Add any extra services for hotels e.g. special dinner, honeymoon cake etc.</p>
           <div className="space-y-3">
             {(pkg.inclusions || []).length > 0 && (
-              <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500">
+              <div className="hidden grid-cols-12 gap-2 text-xs font-semibold text-slate-500 lg:grid">
                 <span className="col-span-3">Service</span>
                 <span className="col-span-3">Hotel</span>
                 <span className="col-span-2">Night</span>
@@ -645,12 +649,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
               </div>
             )}
             {(pkg.inclusions || []).map((inc, i) => (
-              <div key={i} className="grid grid-cols-12 items-start gap-2">
-                <div className="col-span-3">
+              <div key={i} className="grid grid-cols-1 items-start gap-2 rounded-xl border border-slate-200 p-3 lg:grid-cols-12 lg:rounded-none lg:border-0 lg:p-0">
+                <div className="lg:col-span-3">
+                  <label className="label lg:hidden">Service</label>
                   <CreatableSelect category="hotelService" value={inc.service} onChange={(v) => setInc(i, { service: v })} placeholder="Select or add a service" />
                   {!inc.service && <RequiredHint>Service field is required</RequiredHint>}
                 </div>
-                <div className="col-span-3">
+                <div className="lg:col-span-3">
+                  <label className="label lg:hidden">Hotel</label>
                   <AsyncSelect
                     loadOptions={inclusionHotelOptions}
                     value={inc.hotelName ? { _id: inc.hotelName, name: inc.hotelName } : null}
@@ -659,7 +665,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     placeholder="Type to search…"
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="lg:col-span-2">
+                  <label className="label lg:hidden">Night</label>
                   <select className="input" value={inc.night || ''} onChange={(e) => setInc(i, { night: Number(e.target.value) })}>
                     <option value="">Select night…</option>
                     {Array.from({ length: Math.max(1, nights || 1) }, (_, k) => k + 1).map((n) => (
@@ -670,10 +677,16 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   </select>
                   {!inc.night && <RequiredHint>Please select a night</RequiredHint>}
                 </div>
-                <input type="number" className="input col-span-2" placeholder="e.g. 3000" value={inc.price} onChange={(e) => setInc(i, { price: Number(e.target.value) })} />
-                <div className="col-span-2 flex items-start gap-1">
+                <div className="lg:col-span-2">
+                  <label className="label lg:hidden">Total Price ({currency})</label>
+                  <input type="number" className="input" placeholder="e.g. 3000" value={inc.price} onChange={(e) => setInc(i, { price: Number(e.target.value) })} />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="label lg:hidden">Comments</label>
+                  <div className="flex items-start gap-1">
                   <input className="input flex-1" placeholder="Any comments" value={inc.comments} onChange={(e) => setInc(i, { comments: e.target.value })} />
                   <button type="button" onClick={() => rmInc(i)} className="pt-3 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -758,9 +771,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                   </span>
                 )}
               </div>
-              <div className="flex gap-0 divide-x divide-brand-100">
+              <div className="flex flex-col divide-y divide-brand-100 lg:flex-row lg:gap-0 lg:divide-x lg:divide-y-0">
                 {/* LEFT: Days — applies to every service in this group */}
-                <div className="w-44 shrink-0 bg-slate-50/70 p-4">
+                <div className="w-full bg-slate-50/70 p-4 lg:w-44 lg:shrink-0">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-400">Days</p>
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {dayOptionsAll.map(({ n, label }) => (
@@ -806,7 +819,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           )}
                           <button type="button" onClick={() => rmTrFamily(famRows)} title="Remove this service" className={cn('text-xs font-medium text-slate-400 hover:text-red-500', !(famRows.length === 1 && t.serviceType) && 'ml-auto')}>&#10005;</button>
                         </div>
-                        <div className="flex gap-0">
+                        <div className="flex flex-col lg:flex-row lg:gap-0">
                           {/* Service details */}
                           <div className="flex-1 p-4 space-y-3">
                     <div>
@@ -862,7 +875,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                         </div>
                       </div>
                     ) : (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Start Time</label>
                         <input type="text" className="input" placeholder="e.g. 10:00 AM" value={t.startTime || ''} onChange={(e) => setTr(ti, { startTime: e.target.value })} />
@@ -876,7 +889,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           </div>
 
                           {/* Transportation and Prices */}
-                          <div className="w-96 shrink-0 border-l-2 border-brand-100 bg-gradient-to-b from-brand-50/60 to-slate-50/40 p-4">
+                          <div className="w-full border-t-2 border-brand-100 bg-gradient-to-b from-brand-50/60 to-slate-50/40 p-4 lg:w-96 lg:shrink-0 lg:border-l-2 lg:border-t-0">
                     <div className="mb-2.5 flex items-center justify-between gap-2">
                       <p className="flex items-center gap-1.5 text-xs font-bold text-brand-700">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[10px] text-white">₹</span>
@@ -987,7 +1000,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           {a.forService && <span className="max-w-[280px] truncate rounded-full border border-violet-200 px-2.5 py-0.5 text-[11px] font-medium text-violet-500" title={a.forService}>for: {a.forService}</span>}
                           <button type="button" onClick={() => rmAct(ai)} title="Remove this activity" className="ml-auto text-xs font-medium text-slate-400 hover:text-red-500">&#10005;</button>
                         </div>
-                        <div className="flex gap-0">
+                        <div className="flex flex-col lg:flex-row lg:gap-0">
                           {/* Activity details */}
                           <div className="flex-1 p-4 space-y-3">
                     <div>
@@ -1057,7 +1070,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           </div>
 
                           {/* Tickets and Prices */}
-                          <div className="w-96 shrink-0 border-l-2 border-violet-100 bg-gradient-to-b from-violet-50/60 to-slate-50/40 p-4">
+                          <div className="w-full border-t-2 border-violet-100 bg-gradient-to-b from-violet-50/60 to-slate-50/40 p-4 lg:w-96 lg:shrink-0 lg:border-l-2 lg:border-t-0">
                     <div className="mb-2.5 flex items-center justify-between gap-2">
                       <p className="flex items-center gap-1.5 text-xs font-bold text-violet-700">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] text-white">₹</span>
@@ -1169,7 +1182,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
       <Section icon={Star} title="Any other special service for this trip" hint="Add any extra services like off road dinner, side treking etc that are associated with the overall trip package.">
         <div className="space-y-3">
           {(pkg.extras || []).length > 0 && (
-            <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500">
+            <div className="hidden grid-cols-12 gap-2 text-xs font-semibold text-slate-500 lg:grid">
               <span className="col-span-4">Service</span>
               <span className="col-span-2">Total Price ({currency})</span>
               <span className="col-span-2">Date</span>
@@ -1177,16 +1190,26 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
             </div>
           )}
           {(pkg.extras || []).map((e, i) => (
-            <div key={i} className="grid grid-cols-12 items-start gap-2">
-              <div className="col-span-4">
+            <div key={i} className="grid grid-cols-1 items-start gap-2 rounded-xl border border-slate-200 p-3 lg:grid-cols-12 lg:rounded-none lg:border-0 lg:p-0">
+              <div className="lg:col-span-4">
+                <label className="label lg:hidden">Service</label>
                 <CreatableSelect category="tripService" value={e.label} onChange={(v) => setExtra(i, { label: v })} placeholder="Select or add a service" />
                 {!e.label && <RequiredHint>Service field is required</RequiredHint>}
               </div>
-              <input type="number" className="input col-span-2" placeholder="e.g. 3000" value={e.price} onChange={(ev) => setExtra(i, { price: Number(ev.target.value) })} />
-              <input type="date" className="input col-span-2" value={e.date ? String(e.date).slice(0, 10) : ''} onChange={(ev) => setExtra(i, { date: ev.target.value })} />
-              <div className="col-span-4 flex items-start gap-1">
-                <input className="input flex-1" placeholder="Any comments regarding service" value={e.comments || ''} onChange={(ev) => setExtra(i, { comments: ev.target.value })} />
-                <button type="button" onClick={() => rmExtra(i)} className="pt-3 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+              <div className="lg:col-span-2">
+                <label className="label lg:hidden">Total Price ({currency})</label>
+                <input type="number" className="input" placeholder="e.g. 3000" value={e.price} onChange={(ev) => setExtra(i, { price: Number(ev.target.value) })} />
+              </div>
+              <div className="lg:col-span-2">
+                <label className="label lg:hidden">Date</label>
+                <input type="date" className="input" value={e.date ? String(e.date).slice(0, 10) : ''} onChange={(ev) => setExtra(i, { date: ev.target.value })} />
+              </div>
+              <div className="lg:col-span-4">
+                <label className="label lg:hidden">Comments</label>
+                <div className="flex items-start gap-1">
+                  <input className="input flex-1" placeholder="Any comments regarding service" value={e.comments || ''} onChange={(ev) => setExtra(i, { comments: ev.target.value })} />
+                  <button type="button" onClick={() => rmExtra(i)} className="pt-3 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                </div>
               </div>
             </div>
           ))}

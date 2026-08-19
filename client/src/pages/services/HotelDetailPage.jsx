@@ -81,9 +81,9 @@ function PaymentsTab({ id, direction }) {
   const total = data?.meta?.total ?? rows.length;
 
   return (
-    <div className="mt-6 flex gap-0">
+    <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:gap-0">
       {/* Left sidebar */}
-      <div className="w-40 shrink-0 border-r border-gray-200 pr-4">
+      <div className="flex w-full gap-1 overflow-x-auto border-b border-gray-200 pb-2 lg:w-40 lg:shrink-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
         {PAY_TABS.map(([key, label]) => (
           <button
             key={key}
@@ -281,7 +281,7 @@ export default function HotelDetailPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3 text-sm">
           <button onClick={() => navigate(-1)} className="text-gray-600 hover:text-gray-900">
             <ArrowLeft size={18} />
@@ -292,7 +292,7 @@ export default function HotelDetailPage() {
           <span className="text-gray-400">/</span>
           <span className="text-gray-500">{h.name}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link to={`/services/hotels/${id}/edit`} className="btn-secondary text-sm">
             <Pencil size={14} /> Edit
           </Link>

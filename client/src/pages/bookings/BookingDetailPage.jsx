@@ -238,7 +238,7 @@ export default function BookingDetailPage() {
 
       {/* ── Basic Details (two-column) ──────────────────────── */}
       {activeTab === 'basic' && (
-        <div className="flex gap-5 px-4 py-4 sm:px-6 sm:py-5">
+        <div className="flex flex-col gap-5 px-4 py-4 sm:px-6 sm:py-5 lg:flex-row">
           {/* Main column */}
           <div className="min-w-0 flex-1">
             {/* Latest Quote card */}
@@ -371,7 +371,7 @@ export default function BookingDetailPage() {
           </div>
 
           {/* Right sidebar */}
-          <div className="w-56 shrink-0 space-y-3">
+          <div className="w-full space-y-3 lg:w-56 lg:shrink-0">
             {/* Arrival Details */}
             <div className="card p-3">
               <div className="flex items-center justify-between">

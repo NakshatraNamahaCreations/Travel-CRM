@@ -39,13 +39,13 @@ export default function QuoteViewPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-3 text-sm print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 text-sm sm:px-6 print:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-600 hover:text-gray-900"><ArrowLeft size={18} /></button>
           <span className="font-semibold text-gray-900">Quote #{q.quoteNumber}</span>
           {q.query && <><span className="text-gray-400">/</span><Link to={`/trips/${q.query._id}`} className="text-gray-500 hover:text-gray-800">Query #{tripNo(q.query.queryNumber)}</Link></>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <span className={cn('rounded px-2 py-1 text-xs font-medium', STATUS_BADGE[q.status])}>{q.status}</span>
           <Link to={`/quotes/${id}/edit`} className="btn-secondary text-sm"><Pencil size={14} /> Edit</Link>
           <Link to={`/quotes/${id}/itinerary`} className="btn-secondary text-sm"><CalendarDays size={14} /> Itinerary</Link>

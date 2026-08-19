@@ -230,7 +230,7 @@ export default function ActivityDetailPage() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3 text-sm">
           <button onClick={() => navigate(-1)} className="text-gray-600 hover:text-gray-900"><ArrowLeft size={18} /></button>
           <span className="font-semibold text-gray-900">Travel Activity Details</span>
@@ -239,7 +239,7 @@ export default function ActivityDetailPage() {
           <span className="text-gray-300">›</span>
           <span className="text-gray-500">{a.name}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link to={`/services/activities/${id}/edit`} className="btn-secondary text-sm"><Pencil size={13} /> Edit</Link>
           <Link to={`/services/activity-prices?activity=${a._id}`} className="btn-secondary text-sm">View Prices</Link>
         </div>
