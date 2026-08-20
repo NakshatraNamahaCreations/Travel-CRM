@@ -7,6 +7,7 @@ import { env } from '../config/env.js';
 
 const CANDIDATES = [
   env.chromePath,
+  process.env.PUPPETEER_EXECUTABLE_PATH,
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe` : '',
@@ -39,6 +40,30 @@ function cacheFile(url) {
   return path.join(IMG_CACHE_DIR, crypto.createHash('sha1').update(url).digest('hex'));
 }
 
+/* Ask image CDNs for a print-sized rendition instead of the original. An A4
+   page at 12mm margins is ~186mm wide, so ~1000px covers full-bleed art and
+   ~600px covers inline thumbnails — originals are far larger and inflate the
+   PDF (and the fetch time) for no visible gain. */
+function shrinkUrl(url, maxW = 1000) {
+  try {
+    const u = new URL(url);
+    if (/(^|\.)unsplash\.com$/i.test(u.hostname)) {
+      const w = Number(u.searchParams.get('w')) || maxW;
+      u.searchParams.set('w', String(Math.min(w, maxW)));
+      u.searchParams.set('q', '70');
+      u.searchParams.set('auto', 'format');
+      return u.toString();
+    }
+    if (/(^|\.)res\.cloudinary\.com$/i.test(u.hostname) && u.pathname.includes('/upload/')) {
+      // Skip if a transformation is already present.
+      if (/\/upload\/[^/]*[wqf]_/.test(u.pathname)) return url;
+      u.pathname = u.pathname.replace('/upload/', `/upload/w_${maxW},q_auto,f_auto/`);
+      return u.toString();
+    }
+  } catch { /* not a URL we can rewrite */ }
+  return url;
+}
+
 async function fetchAsDataUri(url) {
   if (memCache.has(url)) return memCache.get(url);
   const file = cacheFile(url);
@@ -52,13 +77,13 @@ async function fetchAsDataUri(url) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(shrinkUrl(url), { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     const type = res.headers.get('content-type') || 'image/jpeg';
     if (!/^image\//i.test(type)) return null;
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > 4 * 1024 * 1024) return null; // skip absurdly large files
+    if (buf.length > 1.5 * 1024 * 1024) return null; // skip absurdly large files
     const uri = `data:${type};base64,${buf.toString('base64')}`;
     memCache.set(url, uri);
     try {
@@ -73,11 +98,15 @@ async function fetchAsDataUri(url) {
 
 async function inlineImages(html) {
   const urls = [...new Set([...html.matchAll(/src="(https?:\/\/[^"]+)"/g)].map((m) => m[1]))];
+  const started = Date.now();
   const pairs = await Promise.all(urls.map(async (u) => [u, await fetchAsDataUri(u)]));
   let out = html;
+  let bytes = 0;
   for (const [u, uri] of pairs) {
-    if (uri) out = out.split(`src="${u}"`).join(`src="${uri}"`);
+    if (uri) { out = out.split(`src="${u}"`).join(`src="${uri}"`); bytes += uri.length; }
   }
+  // eslint-disable-next-line no-console
+  console.log(`[pdf] inlined ${pairs.filter((x) => x[1]).length}/${urls.length} images, ${(bytes / 1048576).toFixed(1)}MB, ${Date.now() - started}ms`);
   return out;
 }
 
@@ -145,23 +174,49 @@ async function getBrowser() {
   }
   const executablePath = findChrome();
   if (!executablePath) {
-    throw new Error('No Chrome/Edge found for PDF rendering. Set CHROME_PATH in server/.env');
+    throw new Error(
+      'No Chrome/Chromium found for PDF rendering. Install it on the server '
+      + '(e.g. `apt-get install -y chromium` or `chromium-browser`) and set '
+      + 'CHROME_PATH in server/.env to its full path. Looked in: '
+      + CANDIDATES.join(', ')
+    );
   }
   browserPromise = puppeteer.launch({
     executablePath,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      // /dev/shm is commonly 64MB on a VPS/container — Chrome crashes without this.
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--font-render-hinting=none',
+    ],
     userDataDir: path.join(os.tmpdir(), 'tcrm-pdf-profile'),
   });
+  // Surface launch failures (missing shared libs, permissions) instead of
+  // leaving a rejected promise cached for every later request.
+  browserPromise.catch(() => { browserPromise = null; });
   return browserPromise;
 }
 
 // Render an HTML string to an A4 PDF buffer using the system Chrome/Edge.
 export async function htmlToPdf(html) {
+  const t0 = Date.now();
   const inlined = await inlineFonts(await inlineImages(html));
+  const tAssets = Date.now();
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    // Everything the document needs is already inlined as data: URIs. Anything
+    // still pointing at the network failed to fetch, and letting Chrome retry
+    // it stalls `load` until the timeout — which is what makes a render take a
+    // minute on a server with slower egress. Abort those instead of waiting.
+    await page.setRequestInterception(true);
+    page.on('request', (r) => {
+      if (/^https?:/i.test(r.url())) r.abort().catch(() => {});
+      else r.continue().catch(() => {});
+    });
     await page.setContent(inlined, { waitUntil: 'load', timeout: 30000 });
     await page.evaluate(() => document.fonts.ready);
     const pdf = await page.pdf({
@@ -169,6 +224,8 @@ export async function htmlToPdf(html) {
       printBackground: true,
       margin: { top: '12mm', bottom: '12mm', left: '12mm', right: '12mm' },
     });
+    // eslint-disable-next-line no-console
+    console.log(`[pdf] assets ${tAssets - t0}ms, render ${Date.now() - tAssets}ms, out ${(pdf.length / 1048576).toFixed(1)}MB`);
     return Buffer.from(pdf);
   } finally {
     await page.close().catch(() => {});

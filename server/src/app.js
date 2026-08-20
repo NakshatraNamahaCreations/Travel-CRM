@@ -43,6 +43,23 @@ app.use(
 
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
+// PDF rendering depends on a system Chrome/Chromium binary (puppeteer-core
+// bundles none). This reports whether one was found and whether it actually
+// launches — so a failing deploy says why instead of "Could not generate the PDF".
+app.get('/health/pdf', async (req, res) => {
+  const { findChrome, htmlToPdf } = await import('./pdf/renderPdf.js');
+  const executablePath = findChrome();
+  if (!executablePath) {
+    return res.status(503).json({ ok: false, stage: 'find', message: 'No Chrome/Chromium found on this server.' });
+  }
+  try {
+    const pdf = await htmlToPdf('<!doctype html><html><body><h1>ok</h1></body></html>');
+    return res.json({ ok: true, executablePath, bytes: pdf.length });
+  } catch (err) {
+    return res.status(500).json({ ok: false, stage: 'launch', executablePath, message: err.message });
+  }
+});
+
 app.use('/api', apiRouter);
 
 // In production, serve the built client (client/dist) with an SPA fallback.
