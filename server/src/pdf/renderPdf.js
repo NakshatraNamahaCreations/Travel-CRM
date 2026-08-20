@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import puppeteer from 'puppeteer-core';
+import sharp from 'sharp';
 import { env } from '../config/env.js';
 
 const CANDIDATES = [
@@ -33,7 +34,10 @@ export function findChrome() {
    throwaway browser re-downloaded them on every request. We fetch them once
    in Node, cache to disk, and inline as data: URIs so Chrome hits no network. */
 
-const IMG_CACHE_DIR = path.join(os.tmpdir(), 'tcrm-img-cache');
+// /tmp is wiped on many hosts (and on every container restart), which makes
+// the first PDF after each deploy re-download every image. PDF_CACHE_DIR lets
+// a deployment point this at persistent storage.
+const IMG_CACHE_DIR = process.env.PDF_CACHE_DIR || path.join(os.tmpdir(), 'tcrm-img-cache');
 const memCache = new Map(); // url -> data URI
 
 function cacheFile(url) {
@@ -64,6 +68,26 @@ function shrinkUrl(url, maxW = 1000) {
   return url;
 }
 
+// Resize + recompress an image for print. Falls back to the original bytes if
+// the format is one sharp can't read (e.g. SVG served as image/svg+xml).
+async function downscale(raw, type) {
+  if (/svg/i.test(type)) return { buf: raw, mime: type };
+  try {
+    const img = sharp(raw, { failOn: 'none' }).rotate();
+    const meta = await img.metadata();
+    const hasAlpha = !!meta.hasAlpha;
+    const pipeline = img.resize({ width: 900, withoutEnlargement: true });
+    // Keep transparency (logos, badges) as PNG; photographs go to JPEG.
+    const buf = hasAlpha
+      ? await pipeline.png({ compressionLevel: 9, palette: true }).toBuffer()
+      : await pipeline.jpeg({ quality: 72, mozjpeg: true }).toBuffer();
+    if (buf.length >= raw.length) return { buf: raw, mime: type }; // already optimal
+    return { buf, mime: hasAlpha ? 'image/png' : 'image/jpeg' };
+  } catch {
+    return { buf: raw, mime: type };
+  }
+}
+
 async function fetchAsDataUri(url) {
   if (memCache.has(url)) return memCache.get(url);
   const file = cacheFile(url);
@@ -82,9 +106,14 @@ async function fetchAsDataUri(url) {
     if (!res.ok) return null;
     const type = res.headers.get('content-type') || 'image/jpeg';
     if (!/^image\//i.test(type)) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > 1.5 * 1024 * 1024) return null; // skip absurdly large files
-    const uri = `data:${type};base64,${buf.toString('base64')}`;
+    const raw = Buffer.from(await res.arrayBuffer());
+    if (raw.length > 12 * 1024 * 1024) return null; // pathological original
+    // Re-encode to print size. Most source images are screen/full-res and are
+    // the single biggest contributor to PDF size — an A4 page at 12mm margins
+    // is ~186mm wide, so 900px is already beyond what 150dpi print needs.
+    // Typically ~75% smaller with no visible difference.
+    const { buf, mime } = await downscale(raw, type);
+    const uri = `data:${mime};base64,${buf.toString('base64')}`;
     memCache.set(url, uri);
     try {
       fs.mkdirSync(IMG_CACHE_DIR, { recursive: true });

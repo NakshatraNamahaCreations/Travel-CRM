@@ -46,7 +46,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime
 // PDF rendering depends on a system Chrome/Chromium binary (puppeteer-core
 // bundles none). This reports whether one was found and whether it actually
 // launches — so a failing deploy says why instead of "Could not generate the PDF".
-app.get('/health/pdf', async (req, res) => {
+const pdfHealth = async (req, res) => {
   const { findChrome, htmlToPdf } = await import('./pdf/renderPdf.js');
   const executablePath = findChrome();
   if (!executablePath) {
@@ -58,7 +58,10 @@ app.get('/health/pdf', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ ok: false, stage: 'launch', executablePath, message: err.message });
   }
-});
+};
+// Registered on both paths: a reverse proxy commonly forwards only /api.
+app.get('/health/pdf', pdfHealth);
+app.get('/api/health/pdf', pdfHealth);
 
 app.use('/api', apiRouter);
 
