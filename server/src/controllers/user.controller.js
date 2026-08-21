@@ -4,14 +4,15 @@ import { Booking } from '../models/Booking.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
-import { ALL_PERMISSIONS } from '../config/permissions.js';
+import { ALL_PERMISSIONS, encodePermissionKey } from '../config/permissions.js';
 
 // Keep only known permission keys with explicit boolean values.
 function sanitizeOverrides(input) {
   if (!input || typeof input !== 'object') return undefined;
   const out = {};
   for (const key of ALL_PERMISSIONS) {
-    if (typeof input[key] === 'boolean') out[key] = input[key];
+    // Stored under the encoded key — Mongoose Maps reject dots in key names.
+    if (typeof input[key] === 'boolean') out[encodePermissionKey(key)] = input[key];
   }
   return Object.keys(out).length ? out : undefined;
 }

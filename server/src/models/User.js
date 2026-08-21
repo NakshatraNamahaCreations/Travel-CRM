@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { tenantPlugin } from '../tenant/tenantPlugin.js';
+import { decodePermissionKey } from '../config/permissions.js';
 
 // Tenant staff roles. The platform 'owner' role is deliberately NOT in this
 // list so tenant-facing role dropdowns/validators never offer it.
@@ -55,6 +56,15 @@ userSchema.set('toJSON', {
   transform(doc, ret) {
     delete ret.password;
     delete ret.__v;
+    // Hand back the dotted keys the API and UI speak.
+    if (ret.permissionOverrides) {
+      const src = ret.permissionOverrides instanceof Map
+        ? Object.fromEntries(ret.permissionOverrides)
+        : ret.permissionOverrides;
+      ret.permissionOverrides = Object.fromEntries(
+        Object.entries(src).map(([k, v]) => [decodePermissionKey(k), v])
+      );
+    }
     return ret;
   },
 });

@@ -69,11 +69,22 @@ export function roleDefaults(role) {
   return ROLE_DEFAULTS[role] || [];
 }
 
-// Reads an override from either a Mongoose Map or a plain object.
+// Permission keys are dotted ("bookings.cancel") but Mongoose Map keys cannot
+// contain dots, so they are stored with ':' and translated at the persistence
+// boundary. The API contract stays dotted in both directions.
+export const encodePermissionKey = (k) => String(k).replace(/\./g, ':');
+export const decodePermissionKey = (k) => String(k).replace(/:/g, '.');
+
+// Reads an override from either a Mongoose Map or a plain object, accepting
+// the stored (encoded) key and the dotted form for any pre-existing data.
 function readOverride(overrides, key) {
   if (!overrides) return undefined;
-  if (typeof overrides.get === 'function') return overrides.get(key);
-  return overrides[key];
+  const enc = encodePermissionKey(key);
+  if (typeof overrides.get === 'function') {
+    const v = overrides.get(enc);
+    return v === undefined ? overrides.get(key) : v;
+  }
+  return overrides[enc] === undefined ? overrides[key] : overrides[enc];
 }
 
 export function userCan(user, key) {
