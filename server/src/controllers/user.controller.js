@@ -1,4 +1,6 @@
 import { User } from '../models/User.js';
+import { Query } from '../models/Query.js';
+import { Booking } from '../models/Booking.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
@@ -92,4 +94,38 @@ export const setUserStatus = asyncHandler(async (req, res) => {
   );
   if (!user) throw ApiError.notFound('User not found');
   return ok(res, user);
+});
+
+// DELETE /api/users/:id  (admin)
+// Users are referenced by the trips/bookings they own, so a hard delete would
+// leave those records pointing at nothing. We only allow it for accounts that
+// own no work; anything else should be deactivated instead.
+export const deleteUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw ApiError.notFound('User not found');
+
+  if (String(user._id) === String(req.user._id)) {
+    throw ApiError.badRequest('You cannot delete your own account');
+  }
+  if (user.role === 'owner') throw ApiError.forbidden('The platform owner cannot be deleted');
+
+  // Never leave the organization without an active admin.
+  if (user.role === 'admin') {
+    const admins = await User.countDocuments({ role: 'admin', isActive: { $ne: false } });
+    if (admins <= 1) throw ApiError.badRequest('This is the only active admin — promote another admin first');
+  }
+
+  const [trips, bookings] = await Promise.all([
+    Query.countDocuments({ owner: user._id }),
+    Booking.countDocuments({ owner: user._id }),
+  ]);
+  if (trips || bookings) {
+    throw ApiError.badRequest(
+      `This user still owns ${trips} trip(s) and ${bookings} booking(s). `
+      + 'Reassign them first, or deactivate the user instead of deleting.'
+    );
+  }
+
+  await User.findByIdAndDelete(user._id);
+  return ok(res, { id: req.params.id, deleted: true });
 });

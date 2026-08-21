@@ -6,11 +6,11 @@ import { crudFactory } from '../utils/crudFactory.js';
 import { makeCrudRouter } from './_crudRouter.js';
 
 // Sales reps may create destinations/sources/tags on the fly from the query form.
-const openWrite = { writeRoles: ['admin', 'manager', 'sales'] };
+const openWrite = { perm: 'masterdata' };
 
 export const destinationRoutes = makeCrudRouter(
   crudFactory(Destination, { searchFields: ['name', 'country', 'region'], filterFields: ['region'], sort: 'name' }),
-  { writeRoles: ['admin', 'manager', 'sales', 'operations'] }
+  { perm: 'masterdata' }
 );
 
 export const querySourceRoutes = makeCrudRouter(crudFactory(QuerySource), openWrite);
@@ -22,5 +22,5 @@ export const tagRoutes = makeCrudRouter(
 
 export const inclusionExclusionRoutes = makeCrudRouter(
   crudFactory(InclusionExclusion, { searchFields: ['text'], filterFields: ['type'], sort: '-type order createdAt' }),
-  { writeRoles: ['admin', 'manager', 'sales', 'operations'] }
+  { perm: 'masterdata' }
 );

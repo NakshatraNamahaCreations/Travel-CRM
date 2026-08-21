@@ -3,7 +3,7 @@ import { State } from '../models/State.js';
 import { crudFactory } from '../utils/crudFactory.js';
 import { makeCrudRouter } from './_crudRouter.js';
 
-const W = { writeRoles: ['admin', 'manager', 'operations', 'sales'] };
+const W = { perm: 'masterdata' };
 const stampCreator = (req) => ({ createdBy: req.user._id });
 
 export const stateRoutes = makeCrudRouter(

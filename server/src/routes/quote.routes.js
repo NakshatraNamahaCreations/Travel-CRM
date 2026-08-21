@@ -16,7 +16,7 @@ import {
   quoteSuggestions,
   cloneQuote,
 } from '../controllers/quote.controller.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, authorize, can } from '../middleware/auth.js';
 
 const router = Router();
 router.use(protect);
@@ -32,9 +32,9 @@ router.get('/:id/voucher', quoteVoucher);
 router.post('/:id/email', emailQuote);
 router.post('/:id/share-email', shareEmail);
 router.post('/:id/whatsapp-share', shareWhatsApp);
-router.post('/', createQuote);
-router.put('/:id', updateQuote);
+router.post('/', can('quotes.create'), createQuote);
+router.put('/:id', can('quotes.edit'), updateQuote);
 router.patch('/:id/status', updateQuoteStatus);
-router.delete('/:id', authorize('admin', 'manager'), deleteQuote);
+router.delete('/:id', can('quotes.delete'), deleteQuote);
 
 export default router;

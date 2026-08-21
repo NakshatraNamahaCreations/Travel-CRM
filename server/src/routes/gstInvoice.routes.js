@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import {
   listGstInvoices,
   createGstInvoice,
@@ -12,9 +12,9 @@ const router = Router();
 router.use(protect);
 
 router.get('/', listGstInvoices);
-router.post('/', createGstInvoice);
+router.post('/', can('invoices.create'), createGstInvoice);
 router.get('/:id/pdf', gstInvoicePdf);
-router.patch('/:id', updateGstInvoice);
-router.delete('/:id', deleteGstInvoice);
+router.patch('/:id', can('invoices.edit'), updateGstInvoice);
+router.delete('/:id', can('invoices.delete'), deleteGstInvoice);
 
 export default router;

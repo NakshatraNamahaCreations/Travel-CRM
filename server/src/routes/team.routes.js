@@ -4,5 +4,5 @@ import { makeCrudRouter } from './_crudRouter.js';
 
 export const teamRoutes = makeCrudRouter(
   crudFactory(Team, { searchFields: ['name', 'description'] }),
-  { writeRoles: ['admin', 'manager'] }
+  { perm: 'teams' }
 );

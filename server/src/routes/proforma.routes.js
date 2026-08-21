@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import {
   listProformaInvoices,
   createProformaInvoice,
@@ -12,9 +12,9 @@ const router = Router();
 router.use(protect);
 
 router.get('/', listProformaInvoices);
-router.post('/', createProformaInvoice);
+router.post('/', can('invoices.create'), createProformaInvoice);
 router.get('/:id/pdf', proformaPdf);
-router.patch('/:id', updateProformaInvoice);
-router.delete('/:id', deleteProformaInvoice);
+router.patch('/:id', can('invoices.edit'), updateProformaInvoice);
+router.delete('/:id', can('invoices.delete'), deleteProformaInvoice);
 
 export default router;

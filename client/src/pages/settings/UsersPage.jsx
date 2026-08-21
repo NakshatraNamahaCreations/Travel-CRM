@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Pencil, UserCheck, UserX, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usersApi } from '../../api/settings.js';
 import { useDebounced } from '../../hooks/useDebounced.js';
 import { useAuth } from '../../store/AuthContext.jsx';
+import { useConfirm } from '../../components/ui/ConfirmProvider.jsx';
 import ServiceShell from '../../components/services/ServiceShell.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Modal from '../../components/ui/Modal.jsx';
@@ -114,7 +115,8 @@ export default function UsersPage() {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debounced = useDebounced(search);
   const qc = useQueryClient();
-  const { can } = useAuth();
+  const { can, user: me } = useAuth();
+  const confirm = useConfirm();
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', debounced, filters],
@@ -127,6 +129,24 @@ export default function UsersPage() {
     onError: (e) => toast.error(e.message),
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['users'] });
+
+  const delMut = useMutation({
+    mutationFn: (id) => usersApi.remove(id),
+    onSuccess: () => { toast.success('User deleted'); refresh(); },
+    // The server refuses to delete a user who still owns trips/bookings and
+    // explains why — surface that rather than a generic failure.
+    onError: (e) => toast.error(e.response?.data?.message || e.message),
+  });
+
+  const askDelete = async (u) => {
+    const okToDelete = await confirm({
+      title: `Delete ${u.name}?`,
+      message: 'This permanently removes the account. Users who own trips or bookings cannot be deleted — disable them instead.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (okToDelete) delMut.mutate(u._id);
+  };
 
   const columns = [
     { key: 'name', header: 'Name', render: (u) => (
@@ -146,6 +166,11 @@ export default function UsersPage() {
         <button onClick={() => statusMut.mutate({ id: u._id, isActive: u.isActive === false })} className="text-gray-400 hover:text-gray-700" title={u.isActive === false ? 'Enable' : 'Disable'}>
           {u.isActive === false ? <UserCheck size={15} /> : <UserX size={15} />}
         </button>
+        {can('users.delete') && u._id !== me?._id && (
+          <button onClick={() => askDelete(u)} className="text-gray-400 hover:text-red-600" title="Delete user">
+            <Trash2 size={15} />
+          </button>
+        )}
       </div>
     ) },
   ];

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import {
   listAccounts,
   getAccount,
@@ -11,12 +11,14 @@ import {
 const router = Router();
 router.use(protect);
 
-const W = authorize('admin', 'manager', 'accounts');
+// Fine-grained: admins/managers hold every key by default, so this keeps
+// the previous access while letting it be granted per user.
+const W = (k) => can(k);
 
 router.get('/', listAccounts);
 router.get('/:id', getAccount);
-router.post('/', W, createAccount);
-router.patch('/:id', W, updateAccount);
-router.delete('/:id', W, deleteAccount);
+router.post('/', W('accounting.create'), createAccount);
+router.patch('/:id', W('accounting.edit'), updateAccount);
+router.delete('/:id', W('accounting.delete'), deleteAccount);
 
 export default router;

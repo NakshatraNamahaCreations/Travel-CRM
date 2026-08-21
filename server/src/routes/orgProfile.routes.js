@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import { OrgProfile } from '../models/OrgProfile.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok } from '../utils/apiResponse.js';
@@ -12,7 +12,7 @@ router.use(protect);
 router.get('/', asyncHandler(async (req, res) => ok(res, await OrgProfile.getFor(req.organizationId))));
 
 // PUT /api/org-profile — admins/managers edit the org details
-router.put('/', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+router.put('/', can('settings.edit'), asyncHandler(async (req, res) => {
   const doc = await OrgProfile.getFor(req.organizationId);
   const { _id, organization, createdAt, updatedAt, ...patch } = req.body || {};
 

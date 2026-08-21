@@ -68,6 +68,12 @@ function shrinkUrl(url, maxW = 1000) {
   return url;
 }
 
+// Print sizing. A4 at 12mm margins is ~186mm of content, so 760px is already
+// past what 150dpi needs; images are the dominant cost in the PDF.
+const PRINT_WIDTH = Number(process.env.PDF_IMAGE_WIDTH) || 760;
+const PRINT_QUALITY = Number(process.env.PDF_IMAGE_QUALITY) || 64;
+const MAX_EMBED_BYTES = 200 * 1024; // any single image above this gets a harder pass
+
 // Resize + recompress an image for print. Falls back to the original bytes if
 // the format is one sharp can't read (e.g. SVG served as image/svg+xml).
 async function downscale(raw, type) {
@@ -75,14 +81,27 @@ async function downscale(raw, type) {
   try {
     const img = sharp(raw, { failOn: 'none' }).rotate();
     const meta = await img.metadata();
-    const hasAlpha = !!meta.hasAlpha;
-    const pipeline = img.resize({ width: 900, withoutEnlargement: true });
-    // Keep transparency (logos, badges) as PNG; photographs go to JPEG.
-    const buf = hasAlpha
-      ? await pipeline.png({ compressionLevel: 9, palette: true }).toBuffer()
-      : await pipeline.jpeg({ quality: 72, mozjpeg: true }).toBuffer();
+    // Only small transparent assets (logos, badges) stay PNG — a photo kept as
+    // PNG can be many times its JPEG size, so anything sizeable is flattened
+    // onto white and encoded as JPEG.
+    const keepPng = !!meta.hasAlpha && raw.length < 60 * 1024;
+    const sized = () => sharp(raw, { failOn: 'none' }).rotate()
+      .resize({ width: PRINT_WIDTH, withoutEnlargement: true });
+
+    if (keepPng) {
+      const buf = await sized().png({ compressionLevel: 9, palette: true }).toBuffer();
+      return buf.length < raw.length ? { buf, mime: 'image/png' } : { buf: raw, mime: type };
+    }
+
+    let buf = await sized().flatten({ background: '#ffffff' })
+      .jpeg({ quality: PRINT_QUALITY, mozjpeg: true }).toBuffer();
+    // One stubbornly large image can dominate the file; squeeze those harder.
+    if (buf.length > MAX_EMBED_BYTES) {
+      buf = await sized().flatten({ background: '#ffffff' })
+        .jpeg({ quality: 52, mozjpeg: true }).toBuffer();
+    }
     if (buf.length >= raw.length) return { buf: raw, mime: type }; // already optimal
-    return { buf, mime: hasAlpha ? 'image/png' : 'image/jpeg' };
+    return { buf, mime: 'image/jpeg' };
   } catch {
     return { buf: raw, mime: type };
   }
@@ -103,9 +122,9 @@ async function fetchAsDataUri(url) {
     const timer = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(shrinkUrl(url), { signal: controller.signal });
     clearTimeout(timer);
-    if (!res.ok) return null;
+    if (!res.ok) { memCache.set(url, null); return null; }
     const type = res.headers.get('content-type') || 'image/jpeg';
-    if (!/^image\//i.test(type)) return null;
+    if (!/^image\//i.test(type)) { memCache.set(url, null); return null; }
     const raw = Buffer.from(await res.arrayBuffer());
     if (raw.length > 12 * 1024 * 1024) return null; // pathological original
     // Re-encode to print size. Most source images are screen/full-res and are
@@ -121,7 +140,8 @@ async function fetchAsDataUri(url) {
     } catch { /* disk cache is best-effort */ }
     return uri;
   } catch {
-    return null; // leave the original URL in place; Chrome will try it
+    memCache.set(url, null); // don't retry a dead URL on every later render
+    return null;
   }
 }
 
@@ -131,8 +151,19 @@ async function inlineImages(html) {
   const pairs = await Promise.all(urls.map(async (u) => [u, await fetchAsDataUri(u)]));
   let out = html;
   let bytes = 0;
+  // The same photo often appears under several URLs (different width params);
+  // after downscaling they produce identical bytes, so share one data URI.
+  const byContent = new Map();
   for (const [u, uri] of pairs) {
-    if (uri) { out = out.split(`src="${u}"`).join(`src="${uri}"`); bytes += uri.length; }
+    if (!uri) continue;
+    const key = crypto.createHash('sha1').update(uri).digest('hex');
+    if (byContent.has(key)) {
+      out = out.split(`src="${u}"`).join(`src="${byContent.get(key)}"`);
+      continue;
+    }
+    byContent.set(key, uri);
+    out = out.split(`src="${u}"`).join(`src="${uri}"`);
+    bytes += uri.length;
   }
   // eslint-disable-next-line no-console
   console.log(`[pdf] inlined ${pairs.filter((x) => x[1]).length}/${urls.length} images, ${(bytes / 1048576).toFixed(1)}MB, ${Date.now() - started}ms`);

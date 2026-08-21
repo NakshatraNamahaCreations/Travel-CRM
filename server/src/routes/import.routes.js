@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, can } from '../middleware/auth.js';
 import { retenant } from '../tenant/middleware.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -16,7 +16,7 @@ router.use(protect);
 // POST /api/services/import  (multipart: file, optional type=auto|hotels|transport|activities)
 router.post(
   '/',
-  authorize('admin', 'manager', 'operations'),
+  can('imports.create'),
   upload.single('file'),
   retenant, // multer loses the tenant ALS context — re-enter it
   asyncHandler(async (req, res) => {

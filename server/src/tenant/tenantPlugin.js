@@ -44,7 +44,11 @@ export function tenantPlugin(schema) {
     if (orgId) this.setQuery({ ...this.getQuery(), organization: orgId });
   });
 
-  schema.pre('save', function tenantStamp(next) {
+  // Stamped on BOTH validate and save: Mongoose runs document validation
+  // before user-defined save hooks, so a schema that marks `organization`
+  // required (User does, for every non-owner) would fail validation before a
+  // save-only stamp could run.
+  schema.pre(['validate', 'save'], function tenantStamp(next) {
     if (!this.organization) {
       const orgId = getTenantId();
       if (orgId) this.organization = orgId;
