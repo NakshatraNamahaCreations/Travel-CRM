@@ -9,6 +9,7 @@ import { createNotification } from './notification.controller.js';
 import { paymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
 import { htmlToPdf } from '../pdf/renderPdf.js';
 import { sendWhatsAppTemplate } from '../utils/whatsapp.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 function todayStart() {
   const d = new Date();
@@ -66,9 +67,14 @@ export const listInstallments = asyncHandler(async (req, res) => {
     filter.$or = [{ 'guest.name': rx }, { 'guest.phones.number': rx }, { tripId: rx }, { supplierName: rx }];
   }
 
-  const total = await Installment.countDocuments(filter);
+  // Global ledger is scoped to the caller's own records for non-admin roles;
+  // per-trip views (query/booking param) inherit the trip's visibility.
+  const scoped = (req.query.query || req.query.booking)
+    ? filter
+    : applyScope(filter, ownScope(req.user, ['createdBy']));
+  const total = await Installment.countDocuments(scoped);
   const meta = paginate(req.query, total);
-  const items = await Installment.find(filter).sort('dueDate').skip(meta.skip).limit(meta.limit);
+  const items = await Installment.find(scoped).sort('dueDate').skip(meta.skip).limit(meta.limit);
   return ok(res, items, meta);
 });
 

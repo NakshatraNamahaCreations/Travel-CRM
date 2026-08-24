@@ -4,6 +4,7 @@ import { Transaction } from '../models/Transaction.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const escapeRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -30,7 +31,8 @@ async function balanceMap(ids) {
 // GET /api/accounts?kind=&search=
 export const listAccounts = asyncHandler(async (req, res) => {
   const { kind, search } = req.query;
-  const filter = {};
+  // Non-admin/manager users see only accounts they created.
+  const filter = { ...ownScope(req.user, ['createdBy']) };
   if (kind && kind !== 'all') filter.kind = kind;
   if (search) filter.name = new RegExp(escapeRx(search.trim()), 'i');
 

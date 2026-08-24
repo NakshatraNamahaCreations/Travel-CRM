@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema(
     avatarUrl: { type: String },
     isActive: { type: Boolean, default: true, select: false },
     lastLoginAt: { type: Date },
+    // Password reset: only the sha256 of the emailed token is stored, so a DB
+    // leak can't be replayed as a reset link. Single-use + 1h expiry.
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
   },
   { timestamps: true }
 );

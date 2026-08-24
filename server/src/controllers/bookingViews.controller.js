@@ -4,6 +4,7 @@ import { Query } from '../models/Query.js';
 import { Hotel } from '../models/Hotel.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, paginate } from '../utils/apiResponse.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -147,11 +148,12 @@ export const hotelBookings = asyncHandler(async (req, res) => {
       : { $in: matchedQueryIds };
   }
 
-  const total = await Booking.countDocuments(filter);
+  const scoped = applyScope(filter, ownScope(req.user));
+  const total = await Booking.countDocuments(scoped);
   const meta = paginate(req.query, total);
   const SORTS = { newest: '-createdAt', oldest: 'createdAt', start_asc: 'startDate', start_desc: '-startDate' };
   const sort = SORTS[req.query.sort] || SORTS.newest;
-  const rows = await Booking.find(filter).populate(POPULATE).sort(sort).skip(meta.skip).limit(meta.limit);
+  const rows = await Booking.find(scoped).populate(POPULATE).sort(sort).skip(meta.skip).limit(meta.limit);
 
   // Fetch ServiceBooking hotel rows for all these queries in one query.
   const queryIds = rows.map((b) => b.query?._id || b.query).filter(Boolean);
@@ -212,6 +214,13 @@ export const hotelCheckins = asyncHandler(async (req, res) => {
     if (Object.keys(checkOutTabConstraint).length) filter.checkOut = checkOutTabConstraint;
   }
 
+  const scope = ownScope(req.user);
+  if (Object.keys(scope).length) {
+    const ownQueryIds = await Query.find(scope).distinct('_id');
+    filter.query = filter.query
+      ? { $in: ownQueryIds.filter((id) => String(filter.query) === String(id)) }
+      : { $in: ownQueryIds };
+  }
   const rows = await ServiceBooking.find(filter)
     .populate({ path: 'query', select: 'queryNumber guest pax' })
     .populate({ path: 'bookedBy', select: 'name' })
@@ -251,7 +260,7 @@ export const operationalBookings = asyncHandler(async (req, res) => {
   const after = req.query.after ? new Date(req.query.after) : null;
   const before = req.query.before ? new Date(new Date(req.query.before).setHours(23, 59, 59, 999)) : null;
 
-  const rows = await Booking.find({ status: { $ne: 'cancelled' } }).populate(POPULATE).sort('startDate').limit(800);
+  const rows = await Booking.find(applyScope({ status: { $ne: 'cancelled' } }, ownScope(req.user))).populate(POPULATE).sort('startDate').limit(800);
   const schedules = [];
   for (const b of rows) {
     for (const s of cabSchedules(b)) {
@@ -281,9 +290,10 @@ export const quoteBookingsDiff = asyncHandler(async (req, res) => {
   else if (req.query.tab === 'on_trip') filter.status = 'on_trip';
   else if (req.query.tab === 'past') filter.status = 'completed';
 
-  const total = await Booking.countDocuments(filter);
+  const scopedDiff = applyScope(filter, ownScope(req.user));
+  const total = await Booking.countDocuments(scopedDiff);
   const meta = paginate(req.query, total);
-  const rows = await Booking.find(filter).populate(POPULATE).sort('-updatedAt').skip(meta.skip).limit(meta.limit);
+  const rows = await Booking.find(scopedDiff).populate(POPULATE).sort('-updatedAt').skip(meta.skip).limit(meta.limit);
 
   // Operations readiness: every operational ServiceBooking line for the trip
   // is booked (and at least one exists).

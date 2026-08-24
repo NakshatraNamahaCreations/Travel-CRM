@@ -3,6 +3,7 @@ import AppLayout from './layouts/AppLayout.jsx';
 import OwnerLayout from './layouts/OwnerLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import CompaniesListPage from './pages/owner/CompaniesListPage.jsx';
 import CompanyDetailPage from './pages/owner/CompanyDetailPage.jsx';
 import PlansPage from './pages/owner/PlansPage.jsx';
@@ -71,6 +72,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Platform owner panel (separate chrome from the tenant app) */}
       <Route

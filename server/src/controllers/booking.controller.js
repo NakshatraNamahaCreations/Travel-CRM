@@ -9,6 +9,7 @@ import { generateForBooking } from './installment.controller.js';
 import { logActivity } from './activity.controller.js';
 import { autoGenerateServiceBookings } from './serviceBooking.controller.js';
 import { createNotification } from './notification.controller.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -21,7 +22,7 @@ const QUERY_STATUS_FOR = { confirmed: 'converted', on_trip: 'on_trip', completed
 
 // GET /api/bookings
 export const listBookings = asyncHandler(async (req, res) => {
-  const filter = {};
+  let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
   if (req.query.createdAfter || req.query.createdBefore) {
     filter.createdAt = {};
@@ -40,6 +41,8 @@ export const listBookings = asyncHandler(async (req, res) => {
     const n = Number(term);
     if (!Number.isNaN(n)) filter.$or.push({ bookingNumber: n });
   }
+  // Non-admin/manager users see only bookings they own or created.
+  filter = applyScope(filter, ownScope(req.user));
   const total = await Booking.countDocuments(filter);
   const meta = paginate(req.query, total);
   const items = await Booking.find(filter).populate(POPULATE).sort('-createdAt').skip(meta.skip).limit(meta.limit);

@@ -3,6 +3,7 @@ import { Query } from '../models/Query.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const POPULATE = [
   { path: 'assignedTo', select: 'name' },
@@ -28,6 +29,7 @@ export const listTasks = asyncHandler(async (req, res) => {
   const eoy = new Date(sod.getTime() - 1);                                // end of yesterday
 
   const filter = { isActionable: true };
+  const scope = ownScope(req.user, ['createdBy', 'assignedTo']);
   const statuses = status ? idList(status) : [];
 
   if (statuses.length) {
@@ -51,9 +53,10 @@ export const listTasks = asyncHandler(async (req, res) => {
   }
   if (search) filter.body = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
-  const total = await Comment.countDocuments(filter);
+  const scopedTasks = applyScope(filter, scope);
+  const total = await Comment.countDocuments(scopedTasks);
   const meta = paginate(req.query, total);
-  const items = await Comment.find(filter)
+  const items = await Comment.find(scopedTasks)
     .populate(POPULATE)
     .populate({
       path: 'query',

@@ -9,6 +9,7 @@ import { QUERY_STATUSES, QUERY_STATUS_VALUES } from '../constants/queryStatus.js
 import { Quote } from '../models/Quote.js';
 import { logActivity } from './activity.controller.js';
 import { sendWhatsAppTemplate } from '../utils/whatsapp.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const LABEL = Object.fromEntries(QUERY_STATUSES.map((s) => [s.value, s.label]));
 
@@ -96,7 +97,8 @@ async function rollTripStatuses() {
 // GET /api/queries
 export const listQueries = asyncHandler(async (req, res) => {
   await rollTripStatuses();
-  const filter = buildFilter(req.query, req.user);
+  // Non-admin/manager users see only trips they own or created.
+  const filter = applyScope(buildFilter(req.query, req.user), ownScope(req.user));
   const total = await Query.countDocuments(filter);
   const meta = paginate(req.query, total);
   const items = await Query.find(filter)
@@ -127,7 +129,11 @@ export const listQueries = asyncHandler(async (req, res) => {
 // GET /api/queries/stats  — counts per pipeline status (for the sidebar tabs)
 export const queryStats = asyncHandler(async (req, res) => {
   await rollTripStatuses();
-  const rows = await Query.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]);
+  const scope = ownScope(req.user);
+  const rows = await Query.aggregate([
+    ...(Object.keys(scope).length ? [{ $match: scope }] : []),
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
   const byStatus = Object.fromEntries(rows.map((r) => [r._id, r.count]));
   const counts = QUERY_STATUSES.map((s) => ({
     ...s,

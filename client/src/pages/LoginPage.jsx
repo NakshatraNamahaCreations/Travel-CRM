@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Palmtree, Mail, Lock, ArrowRight, Star, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
+import { authApi } from '../api/auth.js';
 
 const SLIDES = [
   {
@@ -42,6 +43,9 @@ export default function LoginPage() {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSending, setForgotSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [slide, setSlide]       = useState(0);
   const [prevSlide, setPrevSlide] = useState(null);
@@ -81,6 +85,20 @@ export default function LoginPage() {
   };
 
   const goSlide = (i) => { setPrevSlide(slide); setSlide(i); };
+
+  const submitForgot = async (e) => {
+    e.preventDefault();
+    setForgotSending(true);
+    try {
+      const r = await authApi.forgotPassword(forgotEmail.trim());
+      toast.success(r.message || 'If an account exists for that email, a reset link has been sent.');
+      setForgotOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Could not send the reset email');
+    } finally {
+      setForgotSending(false);
+    }
+  };
 
   return (
     <>
@@ -290,9 +308,18 @@ export default function LoginPage() {
 
               {/* Password */}
               <div className="group">
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Password
-                </label>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotEmail(email); setForgotOpen(true); }}
+                    className="text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-brand-500" />
                   <input
@@ -354,6 +381,37 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      {/* Forgot password */}
+      {forgotOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setForgotOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-slate-900">Reset your password</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Enter your account email and we'll send you a link to choose a new password.
+            </p>
+            <form onSubmit={submitForgot} className="mt-4 space-y-3">
+              <input
+                type="email"
+                required
+                autoFocus
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setForgotOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button type="submit" disabled={forgotSending || !forgotEmail.trim()} className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
+                  {forgotSending ? 'Sending…' : 'Send reset link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

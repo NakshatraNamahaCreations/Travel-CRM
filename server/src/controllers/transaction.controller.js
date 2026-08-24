@@ -3,6 +3,7 @@ import { Account } from '../models/Account.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
 
 const POPULATE = [
   { path: 'debitAccount', select: 'name kind' },
@@ -23,7 +24,8 @@ function periodStart(period, now = new Date()) {
 // GET /api/transactions?period=&account=&search=&sort=
 export const listTransactions = asyncHandler(async (req, res) => {
   const { period, account, search } = req.query;
-  const filter = {};
+  // Non-admin/manager users see only entries they recorded.
+  const filter = { ...ownScope(req.user, ['createdBy']) };
 
   if (period && period !== 'all') {
     const start = periodStart(period);

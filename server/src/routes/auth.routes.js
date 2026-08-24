@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { login, logout, me, updateProfile } from '../controllers/auth.controller.js';
+import { login, logout, me, updateProfile, forgotPassword, resetPassword } from '../controllers/auth.controller.js';
 import { validate } from '../middleware/validate.js';
 import { protect } from '../middleware/auth.js';
 import { loginSchema } from '../validators/auth.validator.js';
@@ -10,6 +10,8 @@ const router = Router();
 // owner account is bootstrapped via `npm run bootstrap:owner`.
 router.post('/login', validate(loginSchema), login);
 router.post('/logout', logout);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 router.get('/me', protect, me);
 router.patch('/profile', protect, updateProfile);
 
