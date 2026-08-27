@@ -4,6 +4,7 @@ import { Booking } from '../models/Booking.js';
 import { Comment } from '../models/Comment.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok } from '../utils/apiResponse.js';
+import { ownScope } from '../utils/ownScope.js';
 
 // Statuses that represent a "won" sale.
 const WON = ['converted', 'on_trip', 'past'];
@@ -56,12 +57,13 @@ export const salesReport = asyncHandler(async (req, res) => {
   const scope = {};
   if (req.query.owner) scope.owner = req.query.owner;
   if (req.query.salesTeam) scope.salesTeam = req.query.salesTeam;
+  Object.assign(scope, ownScope(req.user));
 
   const baseQ = { ...inRange, ...scope };
 
   const [leads, quotes, conversion, dropped, wonAgg] = await Promise.all([
     Query.countDocuments(baseQ),
-    Quote.countDocuments(inRange),
+    Quote.countDocuments({ ...inRange, ...ownScope(req.user, ['createdBy']) }),
     Query.countDocuments({ ...baseQ, status: { $in: WON } }),
     Query.countDocuments({ ...baseQ, status: 'dropped' }),
     Query.aggregate([
@@ -117,12 +119,12 @@ export const salesReport = asyncHandler(async (req, res) => {
 
 /* ------------------------------ dashboard ------------------------------- */
 
-async function computeSales(range, scope) {
+async function computeSales(range, scope, quoteScope = {}) {
   const inRange = { createdAt: rangeObj(range) };
   const baseQ = { ...inRange, ...scope };
   const [leads, quotes, conversion, wonAgg] = await Promise.all([
     Query.countDocuments(baseQ),
-    Quote.countDocuments(inRange),
+    Quote.countDocuments({ ...inRange, ...quoteScope }),
     Query.countDocuments({ ...baseQ, status: { $in: WON } }),
     Query.aggregate([
       { $match: { ...baseQ, status: { $in: WON } } },
@@ -154,7 +156,14 @@ export const dashboard = asyncHandler(async (req, res) => {
   const scope = {};
   if (req.query.owner) scope.owner = req.query.owner;
 
-  const fBase = { isActionable: true, isResolved: false };
+  // Non-admin/manager users see their own numbers only — same visibility rule
+  // as the Trips/Bookings/Tasks tables the cards drill into.
+  const ownQ = ownScope(req.user);                                  // Query/Booking: owner|createdBy
+  const ownQuote = ownScope(req.user, ['createdBy']);               // Quote
+  const ownTask = ownScope(req.user, ['createdBy', 'assignedTo']);  // Comment
+  Object.assign(scope, ownQ);
+
+  const fBase = { isActionable: true, isResolved: false, ...ownTask };
   const startStatus = { status: { $in: ['confirmed', 'on_trip'] } };
   const endStatus = { status: { $in: ['confirmed', 'on_trip', 'completed'] } };
   const now = new Date();
@@ -167,23 +176,23 @@ export const dashboard = asyncHandler(async (req, res) => {
     dueToday, dueYesterday,
     liveDue, endedYestDue, starts7Due,
   ] = await Promise.all([
-    computeSales(dayRange(0), scope),
-    computeSales(weekRange(), scope),
-    computeSales(monthRange(), scope),
+    computeSales(dayRange(0), scope, ownQuote),
+    computeSales(weekRange(), scope, ownQuote),
+    computeSales(monthRange(), scope, ownQuote),
     Comment.countDocuments({ ...fBase, dueDate: rangeObj(dayRange(0)) }),
     Comment.countDocuments({ ...fBase, dueDate: rangeObj(dayRange(-1)) }),
     Comment.countDocuments({ ...fBase, dueDate: rangeObj(spanRange(0, 7)) }),
-    Booking.countDocuments({ ...startStatus, startDate: rangeObj(dayRange(0)) }),
-    Booking.countDocuments({ ...startStatus, startDate: rangeObj(dayRange(-1)) }),
-    Booking.countDocuments({ ...startStatus, startDate: rangeObj(spanRange(0, 7)) }),
-    Booking.countDocuments({ ...endStatus, endDate: rangeObj(dayRange(0)) }),
-    Booking.countDocuments({ ...endStatus, endDate: rangeObj(dayRange(1)) }),
-    Booking.countDocuments({ ...endStatus, endDate: rangeObj(spanRange(-7, -1)) }),
-    dueAgg({ startDate: rangeObj(dayRange(0)) }),
-    dueAgg({ startDate: rangeObj(dayRange(-1)) }),
-    dueAgg({ startDate: { $lte: now }, endDate: { $gte: now } }),
-    dueAgg({ endDate: rangeObj(dayRange(-1)) }),
-    dueAgg({ startDate: rangeObj(spanRange(0, 7)) }),
+    Booking.countDocuments({ ...startStatus, ...ownQ, startDate: rangeObj(dayRange(0)) }),
+    Booking.countDocuments({ ...startStatus, ...ownQ, startDate: rangeObj(dayRange(-1)) }),
+    Booking.countDocuments({ ...startStatus, ...ownQ, startDate: rangeObj(spanRange(0, 7)) }),
+    Booking.countDocuments({ ...endStatus, ...ownQ, endDate: rangeObj(dayRange(0)) }),
+    Booking.countDocuments({ ...endStatus, ...ownQ, endDate: rangeObj(dayRange(1)) }),
+    Booking.countDocuments({ ...endStatus, ...ownQ, endDate: rangeObj(spanRange(-7, -1)) }),
+    dueAgg({ ...ownQ, startDate: rangeObj(dayRange(0)) }),
+    dueAgg({ ...ownQ, startDate: rangeObj(dayRange(-1)) }),
+    dueAgg({ ...ownQ, startDate: { $lte: now }, endDate: { $gte: now } }),
+    dueAgg({ ...ownQ, endDate: rangeObj(dayRange(-1)) }),
+    dueAgg({ ...ownQ, startDate: rangeObj(spanRange(0, 7)) }),
   ]);
 
   return ok(res, {
@@ -252,7 +261,7 @@ export const tripsReport = asyncHandler(async (req, res) => {
   const bucket = req.query.bucket || 'all';
 
   if (view === 'followups') {
-    const f = { isActionable: true, isResolved: false };
+    const f = { isActionable: true, isResolved: false, ...ownScope(req.user, ['createdBy', 'assignedTo']) };
     if (bucket === 'today') f.dueDate = rangeObj(dayRange(0));
     else if (bucket === 'yesterday') f.dueDate = rangeObj(dayRange(-1));
     else if (bucket === 'next7') f.dueDate = rangeObj(spanRange(0, 7));
@@ -274,7 +283,7 @@ export const tripsReport = asyncHandler(async (req, res) => {
     return ok(res, { view, bucket, kind: 'followups', items });
   }
 
-  const filter = buildTripFilter(view, bucket);
+  const filter = { ...buildTripFilter(view, bucket), ...ownScope(req.user) };
   const sortField = view === 'ending' ? 'endDate' : 'startDate';
   const rows = await Booking.find(filter)
     .populate('destinations', 'name')
@@ -302,7 +311,7 @@ export const tripCheckInOutReport = asyncHandler(async (req, res) => {
   const { after, before } = rangeFromQuery(req.query);
   const dateField = direction === 'checkin' ? 'startDate' : 'endDate';
 
-  const rows = await Booking.find({ [dateField]: { $gte: after, $lte: before } })
+  const rows = await Booking.find({ [dateField]: { $gte: after, $lte: before }, ...ownScope(req.user) })
     .populate('destinations', 'name')
     .populate({ path: 'quote', select: 'pricing' })
     .sort(dateField)

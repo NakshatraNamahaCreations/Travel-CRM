@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { Quote } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
 import { InclusionExclusion } from '../models/InclusionExclusion.js';
@@ -223,20 +227,58 @@ export const quoteVoucher = asyncHandler(async (req, res) => {
   return res.send(pdf);
 });
 
+/* ---- rendered-PDF cache ----
+   The quotation only changes when the quote (or the org branding) changes, so
+   the finished PDF is cached on disk keyed by both timestamps. A repeat
+   download skips image fetching AND Chrome entirely and streams the file —
+   the difference between ~5s and instant. Same directory as the image cache,
+   so PDF_CACHE_DIR governs persistence for both. */
+const pdfCacheDir = process.env.PDF_CACHE_DIR || path.join(os.tmpdir(), 'tcrm-img-cache');
+
+function quotePdfCacheFile(quote, org) {
+  // Bump RENDER_VERSION when the template or bundled assets change, so cached
+  // PDFs from the older look are re-rendered.
+  const RENDER_VERSION = 'v3';
+  const stamp = crypto.createHash('sha1')
+    .update(RENDER_VERSION)
+    .update(String(quote._id))
+    .update(String(new Date(quote.updatedAt || 0).getTime()))
+    .update(String(new Date(org?.updatedAt || 0).getTime()))
+    .digest('hex').slice(0, 16);
+  return path.join(pdfCacheDir, `quote-${quote._id}-${stamp}.pdf`);
+}
+
 // GET /api/quotes/:id/pdf — server-rendered PDF (inline download).
 // `?format=html` returns the document HTML instead, so the on-screen
 // quotation preview shows EXACTLY what the PDF will look like.
 export const quotePdf = asyncHandler(async (req, res) => {
   const quote = await loadFullQuote(req.params.id);
   const org = await OrgProfile.getFor(req.organizationId).catch(() => null);
-  const html = quotationHtml(quote.toObject(), org?.toObject());
   if (req.query.format === 'html') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(html);
+    return res.send(quotationHtml(quote.toObject(), org?.toObject()));
   }
-  const pdf = await htmlToPdf(html);
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Quotation-${quote.quoteNumber}.pdf"`);
+
+  const cacheFile = quotePdfCacheFile(quote, org);
+  try {
+    if (fs.existsSync(cacheFile)) return res.send(fs.readFileSync(cacheFile));
+  } catch { /* fall through to a fresh render */ }
+
+  const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
+  try {
+    fs.mkdirSync(pdfCacheDir, { recursive: true });
+    fs.writeFileSync(cacheFile, pdf);
+    // Drop renders of older versions of this quote.
+    const prefix = `quote-${quote._id}-`;
+    for (const f of fs.readdirSync(pdfCacheDir)) {
+      if (f.startsWith(prefix) && path.join(pdfCacheDir, f) !== cacheFile) {
+        fs.unlinkSync(path.join(pdfCacheDir, f));
+      }
+    }
+  } catch { /* cache is best-effort */ }
   return res.send(pdf);
 });
 
