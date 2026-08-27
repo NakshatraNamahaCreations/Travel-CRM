@@ -135,6 +135,7 @@ export const createQuote = asyncHandler(async (req, res) => {
     await Query.findByIdAndUpdate(query._id, { status: 'in_progress' });
     await logActivity(query._id, req.user._id, 'updated stage from New Query to In Progress', 'stage');
   }
+  warmQuotePdfCache(quote._id, req.organizationId);
   return created(res, quote);
 });
 
@@ -152,6 +153,7 @@ export const updateQuote = asyncHandler(async (req, res) => {
   for (const f of fields) if (req.body[f] !== undefined) quote[f] = req.body[f];
   await quote.save();
   await syncQuery(quote.query);
+  warmQuotePdfCache(quote._id, req.organizationId);
   return ok(res, quote);
 });
 
@@ -173,6 +175,7 @@ export const updateQuoteStatus = asyncHandler(async (req, res) => {
     await Query.findByIdAndUpdate(quote.query, { status: 'converted' });
   }
   await syncQuery(quote.query);
+  warmQuotePdfCache(quote._id, req.organizationId);
   return ok(res, quote);
 });
 
@@ -248,6 +251,46 @@ function quotePdfCacheFile(quote, org) {
   return path.join(pdfCacheDir, `quote-${quote._id}-${stamp}.pdf`);
 }
 
+function writeQuotePdfCache(cacheFile, quoteId, pdf) {
+  try {
+    fs.mkdirSync(pdfCacheDir, { recursive: true });
+    fs.writeFileSync(cacheFile, pdf);
+    // Drop renders of older versions of this quote.
+    const prefix = `quote-${quoteId}-`;
+    for (const f of fs.readdirSync(pdfCacheDir)) {
+      if (f.startsWith(prefix) && path.join(pdfCacheDir, f) !== cacheFile) {
+        fs.unlinkSync(path.join(pdfCacheDir, f));
+      }
+    }
+  } catch { /* cache is best-effort */ }
+}
+
+/* Pre-warm: build the quotation PDF in the background right after a quote is
+   saved, so the first download after an edit is served from cache like a
+   static file instead of waiting ~5s for Chrome. Debounced per quote so a
+   burst of consecutive saves renders once. Failures only cost the warm-up —
+   the download endpoint still renders on demand. */
+const warmTimers = new Map();
+export function warmQuotePdfCache(quoteId, organizationId) {
+  const key = String(quoteId);
+  clearTimeout(warmTimers.get(key));
+  warmTimers.set(key, setTimeout(async () => {
+    warmTimers.delete(key);
+    try {
+      const quote = await loadFullQuote(key);
+      const org = await OrgProfile.getFor(organizationId).catch(() => null);
+      const cacheFile = quotePdfCacheFile(quote, org);
+      if (fs.existsSync(cacheFile)) return;
+      const t0 = Date.now();
+      const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
+      writeQuotePdfCache(cacheFile, quote._id, pdf);
+      console.log(`[pdf] pre-warmed quote #${quote.quoteNumber} in ${Date.now() - t0}ms`);
+    } catch (e) {
+      console.warn(`[pdf] pre-warm failed for quote ${key}:`, e.message);
+    }
+  }, 2000));
+}
+
 // GET /api/quotes/:id/pdf — server-rendered PDF (inline download).
 // `?format=html` returns the document HTML instead, so the on-screen
 // quotation preview shows EXACTLY what the PDF will look like.
@@ -268,17 +311,7 @@ export const quotePdf = asyncHandler(async (req, res) => {
   } catch { /* fall through to a fresh render */ }
 
   const pdf = await htmlToPdf(quotationHtml(quote.toObject(), org?.toObject()));
-  try {
-    fs.mkdirSync(pdfCacheDir, { recursive: true });
-    fs.writeFileSync(cacheFile, pdf);
-    // Drop renders of older versions of this quote.
-    const prefix = `quote-${quote._id}-`;
-    for (const f of fs.readdirSync(pdfCacheDir)) {
-      if (f.startsWith(prefix) && path.join(pdfCacheDir, f) !== cacheFile) {
-        fs.unlinkSync(path.join(pdfCacheDir, f));
-      }
-    }
-  } catch { /* cache is best-effort */ }
+  writeQuotePdfCache(cacheFile, quote._id, pdf);
   return res.send(pdf);
 });
 
