@@ -232,46 +232,52 @@ function HotelCells({ h, isRepeat, onEdit, onShare, onVoucher, onTag, onStatusCh
 // Mobile (<md) rendering: one card per booking so the guest/trip identity and
 // its hotel stays read together — the desktop table's rowSpan band layout
 // can't be linearized into coherent standalone row-cards.
+// "Andaman and Nicobar Islands" -> "ANI" for the compact card heading.
+const destCode = (destinations) => (destinations || [])
+  .map((d) => String(d?.name || '').split(/\s+/).filter((w) => w && !/^(and|&|of|the)$/i.test(w)).map((w) => w[0].toUpperCase()).join(''))
+  .filter(Boolean).join('/');
+
 function MobileBookingCard({ b, onEditRow, onShareRow, onVoucherRow, onTagRow, onStatusChange, onGenerate, generating }) {
   const queryId = b.query?._id || b.query;
   const hotels = b.hotels || [];
   const generated = b.hasServiceBookings;
-  const destinationLabel = (b.destinations || []).map((d) => d?.name).filter(Boolean).join(', ');
+  const code = destCode(b.destinations);
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex flex-wrap items-baseline gap-x-1.5">
-        <Link to={`/bookings/${b._id}`} className="font-semibold text-brand-700 hover:underline">
-          {b.guest?.name || b.title || 'Guest'}
-        </Link>
-        {destinationLabel && <span className="text-sm font-medium text-slate-600">• {destinationLabel}</span>}
-      </div>
-      <div className="mt-0.5 text-xs text-slate-500">
-        #{b.bookingNumber}
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <Link to={`/bookings/${b._id}`} className="block text-[16px] font-bold text-slate-900">
+        {b.guest?.name || b.title || 'Guest'}{code ? ` • ${code}` : ''}
+      </Link>
+      <div className="mt-0.5 text-[12px] text-slate-500">
+        # {b.bookingNumber}
         {b.query?.source?.name ? ` • ${b.query.source.name}` : ''}
-        {' • '}<span className="text-[10px] font-semibold uppercase text-slate-400">{b.currency || 'INR'}</span>{' '}
-        <span className="text-slate-700">{new Intl.NumberFormat('en-IN').format(Math.round(b.totalAmount || 0))}</span>
       </div>
-      <div className="mt-0.5 text-xs text-slate-600">
-        {b.startDate ? format(new Date(b.startDate), 'd MMM, yyyy') : '—'}
+      <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">
+        <span className="text-[9.5px] font-bold uppercase text-slate-400">{b.currency || 'INR'} </span>
+        {new Intl.NumberFormat('en-IN').format(Math.round(b.totalAmount || 0))}
+        {b.startDate ? ` • ${format(new Date(b.startDate), 'd MMM, yyyy')}` : ''}
         {b.nights ? ` • ${b.nights + 1}D` : ''}
         {b.pax ? ` • ${paxLabel(b.pax)}` : ''}
-        {b.owner?.name ? ` • ${b.owner.name}` : ''}
       </div>
 
       {generated ? (
         <>
-          <div className="mt-2 text-xs font-medium text-slate-500">
-            <span className="font-bold text-slate-900">{b.bookedCount}</span> / {hotels.length} Booked
-            {' • '}
-            <span className="font-bold text-slate-900">{b.voucherCount}</span> / {hotels.length} Voucher Sent
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
+            <div className="flex items-center gap-3 text-[12px] text-slate-500">
+              <span><span className="text-[17px] font-extrabold text-slate-900">{b.bookedCount}</span> / {hotels.length} Booked</span>
+              <span>•</span>
+              <span><span className="text-[17px] font-extrabold text-slate-900">{b.voucherCount}</span> / {hotels.length} Voucher Sent</span>
+            </div>
+            {b.owner?.name && (
+              <span className="flex items-center gap-1 text-[12px] font-medium text-slate-700"><Users size={13} className="text-slate-400" /> {b.owner.name}</span>
+            )}
           </div>
           <div className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
             {markRepeatStays(hotels).map(({ row: h, isRepeat }) => (
               <div key={h._id} className="py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-medium text-brand-700">{h.name}</div>
-                    <div className="text-[11px] text-slate-400">{h.city || ''}{h.stars ? `, ${h.stars} Star` : ''}</div>
+                    <span className="font-semibold text-slate-900">{h.name}</span>
+                    <span className="ml-1.5 text-[11px] text-slate-400">{h.city || ''}{h.stars ? `, ${h.stars} Star` : ''}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2.5 text-slate-300">
                     <button onClick={() => onEditRow(h)} className="hover:text-brand-600" title="Edit"><Pencil size={14} /></button>
@@ -284,10 +290,12 @@ function MobileBookingCard({ b, onEditRow, onShareRow, onVoucherRow, onTagRow, o
                   </div>
                 </div>
                 <div className={cn('mt-1 text-xs', isRepeat ? 'text-amber-700' : 'text-slate-600')}>{stayCheckInOut(h, isRepeat)}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-3">
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <StatusSelect row={h} onChange={(patch) => onStatusChange(h._id, patch)} />
                   <button onClick={() => onTagRow(h)} className="group flex items-center gap-1.5" title="Edit tag / comments">
-                    {h.tag && <span className="inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{h.tag}</span>}
+                    {h.tag
+                      ? <span className="inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{h.tag}</span>
+                      : <span className="text-[12px] text-slate-400">• No Tags</span>}
                     <Pencil size={12} className="text-slate-300 group-hover:text-brand-600" />
                   </button>
                 </div>
