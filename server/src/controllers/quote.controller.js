@@ -241,7 +241,7 @@ const pdfCacheDir = process.env.PDF_CACHE_DIR || path.join(os.tmpdir(), 'tcrm-im
 function quotePdfCacheFile(quote, org) {
   // Bump RENDER_VERSION when the template or bundled assets change, so cached
   // PDFs from the older look are re-rendered.
-  const RENDER_VERSION = 'v6';
+  const RENDER_VERSION = 'v7';
   const stamp = crypto.createHash('sha1')
     .update(RENDER_VERSION)
     .update(String(quote._id))
