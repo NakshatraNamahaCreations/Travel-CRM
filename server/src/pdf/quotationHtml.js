@@ -796,7 +796,7 @@ export function quotationHtml(q, org = null) {
      the remaining page space would otherwise get pushed whole onto the next
      page, leaving a large blank gap above it. Letting it split keeps content
      flowing continuously; individual rows inside (.tlrow) still avoid splits. */
-  .dayblk { margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .dayblk { margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; font-family: Arial, 'Helvetica Neue', sans-serif; }
   .dwhead { display: flex; align-items: center; gap: 13px; background: var(--blue); border-bottom: 1px solid #e8eef5; padding: 8px 16px 8px 8px; }
   .daytab { background: var(--deep); color: #fff; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 17px; border-radius: 8px; white-space: nowrap; }
   .daycity { color: #fff; font-weight: 800; font-size: 15.5px; text-transform: uppercase; letter-spacing: 0.05em; }
