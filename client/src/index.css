@@ -189,6 +189,9 @@
     text-align: right;
     max-width: none !important;
     width: auto !important;
+    /* Sembark-style cards: values read bold and dark, labels stay muted. */
+    font-weight: 600;
+    color: #0f172a;
   }
   table.rt td[data-th]::before {
     content: attr(data-th);
@@ -201,8 +204,8 @@
   table.rt td[data-card='title'] {
     justify-content: flex-start;
     text-align: left;
-    font-size: 13.5px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
   }
   table.rt td:not([data-th]):not([data-card='title']) { justify-content: flex-end; }
   table.rt td:empty { display: none; }
