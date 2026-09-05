@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
-import { RefreshCw, Download, Phone, FileText, MessageSquarePlus, Check, Copy } from 'lucide-react';
+import { RefreshCw, Download, Phone, FileText, MessageSquarePlus, Check, Copy, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { installmentsApi } from '../../api/installments.js';
 import { useAuth } from '../../store/AuthContext.jsx';
@@ -52,13 +52,13 @@ function Contact({ inst }) {
   );
 }
 
-function LogPaymentModal({ inst, direction, onClose, onSaved }) {
+function LogPaymentModal({ inst, direction, onClose, onSaved, edit = false }) {
   const [f, setF] = useState({
-    debitAccount: company.bankAccounts[0],
-    creditAccount: `${guestLabel(inst.guest)} - Trip ID: ${tripNo(inst.tripId)}`,
-    paidAmount: inst.amount,
-    paidOn: '',
-    reference: '',
+    debitAccount: (edit && inst.debitAccount) || company.bankAccounts[0],
+    creditAccount: (edit && inst.creditAccount) || `${guestLabel(inst.guest)} - Trip ID: ${tripNo(inst.tripId)}`,
+    paidAmount: edit ? (inst.paidAmount ?? inst.amount) : inst.amount,
+    paidOn: edit && inst.paidOn ? format(new Date(inst.paidOn), "yyyy-MM-dd'T'HH:mm") : '',
+    reference: (edit && inst.reference) || '',
   });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const setVal = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
@@ -82,13 +82,16 @@ function LogPaymentModal({ inst, direction, onClose, onSaved }) {
   const paidTotal = rows.filter((r) => r.paid).reduce((s, r) => s + (r.paidAmount || r.amount || 0), 0);
 
   const mut = useMutation({
-    mutationFn: () => installmentsApi.logPayment(inst._id, { ...f, paidAmount: Number(f.paidAmount), paidOn: f.paidOn || undefined }),
-    onSuccess: () => { toast.success('Payment logged'); onSaved(); },
+    mutationFn: () => {
+      const payload = { ...f, paidAmount: Number(f.paidAmount), paidOn: f.paidOn || undefined };
+      return edit ? installmentsApi.editPayment(inst._id, payload) : installmentsApi.logPayment(inst._id, payload);
+    },
+    onSuccess: () => { toast.success(edit ? 'Payment updated' : 'Payment logged'); onSaved(); },
     onError: (e) => toast.error(e.message),
   });
 
   return (
-    <Modal open onClose={onClose} title="Log Payment" width="max-w-2xl">
+    <Modal open onClose={onClose} title={edit ? 'Edit Payment' : 'Log Payment'} width="max-w-2xl">
       <div className="space-y-5">
         {/* Review panel */}
         <div className="rounded-xl border border-slate-200">
@@ -155,7 +158,7 @@ function LogPaymentModal({ inst, direction, onClose, onSaved }) {
 /* Sembark-style instalment drill-down: amount + Nth instalment badge, trip
    link, contact card, due/paid banner with Log Payment, and Comments /
    Transactions tabs. Opened by clicking the amount in the ledger. */
-function InstalmentDetailsModal({ inst, direction, onClose, onLogPayment, onSaved }) {
+function InstalmentDetailsModal({ inst, direction, onClose, onLogPayment, onEditPayment, onSaved }) {
   const [tab, setTab] = useState('comments');
   const [comments, setComments] = useState(inst.comments || []);
   const [body, setBody] = useState('');
@@ -235,9 +238,14 @@ function InstalmentDetailsModal({ inst, direction, onClose, onLogPayment, onSave
         {inst.paid ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
             <p className="flex items-center gap-1.5 text-sm font-medium text-green-800"><Check size={15} /> Paid {inst.paidOn ? `on ${format(new Date(inst.paidOn), 'd MMM, yyyy')}` : ''}{inst.reference ? ` · Ref: ${inst.reference}` : ''}</p>
-            {direction === 'incoming' && (
-              <button onClick={openReceipt} className="rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"><FileText size={12} className="mr-1 inline" /> Receipt</button>
-            )}
+            <span className="flex items-center gap-2">
+              {onEditPayment && (
+                <button onClick={onEditPayment} className="rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"><Pencil size={12} className="mr-1 inline" /> Edit Payment</button>
+              )}
+              {direction === 'incoming' && (
+                <button onClick={openReceipt} className="rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"><FileText size={12} className="mr-1 inline" /> Receipt</button>
+              )}
+            </span>
           </div>
         ) : (
           <div className={cn('rounded-xl border px-4 py-3', inst.status === 'overdue' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50')}>
@@ -329,6 +337,7 @@ export default function PaymentsLedgerPage({ direction }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [logFor, setLogFor] = useState(null);
+  const [editFor, setEditFor] = useState(null); // paid instalment whose payment is being corrected
   const [commentFor, setCommentFor] = useState(null);
   const [detailsFor, setDetailsFor] = useState(null);
   const debounced = useDebounced(search);
@@ -438,7 +447,14 @@ export default function PaymentsLedgerPage({ direction }) {
                     </td>
                     <td className="px-4 py-3">
                       {i.status === 'paid' ? (
-                        <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Paid</span>
+                        <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Paid</span>
+                          {can('payments.create') && (
+                            <button onClick={() => setEditFor(i)} title="Edit payment" className="flex items-center gap-1 text-xs text-slate-400 hover:text-brand-700">
+                              <Pencil size={12} /> Edit
+                            </button>
+                          )}
+                        </span>
                       ) : i.status === 'unverified' ? (
                         <button onClick={() => verifyMut.mutate(i._id)} className="btn-secondary text-xs">Verify</button>
                       ) : direction === 'outgoing' && can('payments.create') ? (
@@ -461,10 +477,12 @@ export default function PaymentsLedgerPage({ direction }) {
           direction={direction}
           onClose={() => setDetailsFor(null)}
           onLogPayment={() => { setLogFor(detailsFor); setDetailsFor(null); }}
+          onEditPayment={can('payments.create') ? () => { setEditFor(detailsFor); setDetailsFor(null); } : undefined}
           onSaved={refresh}
         />
       )}
       {logFor && <LogPaymentModal inst={logFor} direction={direction} onClose={() => setLogFor(null)} onSaved={() => { setLogFor(null); refresh(); }} />}
+      {editFor && <LogPaymentModal edit inst={editFor} direction={direction} onClose={() => setEditFor(null)} onSaved={() => { setEditFor(null); refresh(); }} />}
       {commentFor && <CommentModal inst={commentFor} onClose={() => setCommentFor(null)} onSaved={() => { setCommentFor(null); refresh(); }} />}
     </div>
   );

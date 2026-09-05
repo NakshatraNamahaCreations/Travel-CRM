@@ -6,6 +6,7 @@ export const installmentsApi = {
   accounts: (search) => api.get('/installments/accounts', { params: { search } }).then((r) => r.data.data),
   create: (payload) => api.post('/installments', payload).then((r) => r.data.data),
   logPayment: (id, payload) => api.post(`/installments/${id}/log-payment`, payload).then((r) => r.data.data),
+  editPayment: (id, payload) => api.patch(`/installments/${id}/payment`, payload).then((r) => r.data.data),
   receipt: (id) => api.get(`/installments/${id}/receipt`, { responseType: 'blob' }).then((r) => r.data),
   sendWhatsAppTemplate: (id, payload) => api.post(`/installments/${id}/whatsapp-template`, payload).then((r) => r.data.data),
   verify: (id) => api.patch(`/installments/${id}/verify`).then((r) => r.data.data),

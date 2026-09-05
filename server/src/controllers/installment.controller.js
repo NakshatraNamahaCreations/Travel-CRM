@@ -190,6 +190,38 @@ export const logPayment = asyncHandler(async (req, res) => {
   return ok(res, inst);
 });
 
+// PATCH /api/installments/:id/payment — correct an already-logged payment
+// (amount, date, accounts, reference, tax split). Keeps the mirrored Payment
+// ledger row and the booking's paid totals in sync.
+export const editPayment = asyncHandler(async (req, res) => {
+  const inst = await Installment.findById(req.params.id);
+  if (!inst) throw ApiError.notFound('Installment not found');
+  if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment yet');
+
+  if (req.body.paidAmount != null) inst.paidAmount = Number(req.body.paidAmount) || inst.paidAmount;
+  if (req.body.paidOn) inst.paidOn = new Date(req.body.paidOn);
+  if (req.body.reference !== undefined) inst.reference = req.body.reference;
+  if (req.body.debitAccount) inst.debitAccount = req.body.debitAccount;
+  if (req.body.creditAccount) inst.creditAccount = req.body.creditAccount;
+  if (req.body.taxableValue != null) {
+    inst.taxableValue = Number(req.body.taxableValue) || 0;
+    inst.gstPercent = Number(req.body.gstPercent) || 0;
+    inst.taxAmount = Number(req.body.taxAmount) || 0;
+  }
+
+  if (inst.payment) {
+    await Payment.findByIdAndUpdate(inst.payment, {
+      amount: inst.paidAmount,
+      date: inst.paidOn,
+      reference: inst.reference,
+      ...(req.body.mode ? { mode: req.body.mode } : {}),
+    });
+  }
+  await inst.save();
+  if (inst.direction === 'incoming') await syncBookingPaid(inst.booking);
+  return ok(res, inst);
+});
+
 // Builds the payment receipt PDF for a paid instalment. Shared by the
 // authenticated route below and the public (tokenised) share link.
 export async function buildReceiptPdf(id, orgId) {

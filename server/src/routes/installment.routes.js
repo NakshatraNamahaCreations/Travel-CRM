@@ -6,6 +6,7 @@ import {
   accountOptions,
   createInstallment,
   logPayment,
+  editPayment,
   receiptPdf,
   sendPaymentTemplate,
   verifyInstallment,
@@ -21,6 +22,7 @@ router.get('/summary', installmentSummary);
 router.get('/accounts', accountOptions);
 router.post('/', createInstallment);
 router.post('/:id/log-payment', logPayment);
+router.patch('/:id/payment', editPayment);
 router.get('/:id/receipt', receiptPdf);
 router.post('/:id/whatsapp-template', sendPaymentTemplate);
 router.patch('/:id/verify', verifyInstallment);
