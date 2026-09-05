@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus, UserRound, Mail, CalendarDays, ArrowUpDown } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus, MessageSquare, UserRound, Mail, CalendarDays, ArrowUpDown } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
@@ -376,6 +376,32 @@ export default function TripsListPage() {
                         <div className="mt-1 flex justify-end">{kebabMenu(q)}</div>
                       </div>
                     </div>
+                    {(q.latestQuote || q.lastComment) && (
+                      <div className="mt-2 space-y-1.5 border-t border-gray-100 pt-2">
+                        {q.latestQuote && (
+                          <p className="flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-gray-500">
+                            <span className="font-semibold text-gray-900">
+                              <span className="text-[9.5px] font-bold uppercase tracking-wide text-gray-400">INR </span>
+                              {Math.round(q.latestQuote.total).toLocaleString('en-IN')}
+                            </span>
+                            {q.latestQuote.by && <span>• {q.latestQuote.by}</span>}
+                            <span className="text-[11px] text-gray-400">• {formatDistanceToNow(new Date(q.latestQuote.createdAt), { addSuffix: true })}</span>
+                          </p>
+                        )}
+                        {q.lastComment && (
+                          <div className="flex items-start gap-1.5">
+                            <MessageSquare size={13} className="mt-0.5 shrink-0 text-gray-400" />
+                            <div className="min-w-0">
+                              <p className="truncate text-[12.5px] font-medium text-gray-800">{q.lastComment.body}</p>
+                              <p className="text-[11px] text-gray-400">
+                                {formatDistanceToNow(new Date(q.lastComment.createdAt), { addSuffix: true })}
+                                {q.lastComment.by ? ` • by ${q.lastComment.by}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -440,7 +466,7 @@ export default function TripsListPage() {
                         {q.lastComment ? (
                           <>
                             <p className="max-w-[190px] truncate text-[12.5px] text-gray-700">{q.lastComment.body}</p>
-                            <p className="text-[11px] text-gray-400">{formatDistanceToNow(new Date(q.lastComment.createdAt), { addSuffix: true })}</p>
+                            <p className="text-[11px] text-gray-400">{formatDistanceToNow(new Date(q.lastComment.createdAt), { addSuffix: true })}{q.lastComment.by ? ` • by ${q.lastComment.by}` : ''}</p>
                           </>
                         ) : null}
                       </td>

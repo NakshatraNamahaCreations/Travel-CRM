@@ -7,6 +7,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
 import { QUERY_STATUSES, QUERY_STATUS_VALUES } from '../constants/queryStatus.js';
 import { Quote } from '../models/Quote.js';
+import { User } from '../models/User.js';
 import { logActivity } from './activity.controller.js';
 import { sendWhatsAppTemplate } from '../utils/whatsapp.js';
 import { ownScope, applyScope } from '../utils/ownScope.js';
@@ -136,17 +137,32 @@ export const listQueries = asyncHandler(async (req, res) => {
   // Latest comment per query, for the list's Follow-up column.
   const ids = items.map((i) => i._id);
   let lastByQuery = {};
+  const quoteByQuery = {};
   if (ids.length) {
     const rows = await Comment.aggregate([
       { $match: { query: { $in: ids } } },
       { $sort: { createdAt: -1 } },
-      { $group: { _id: '$query', body: { $first: '$body' }, createdAt: { $first: '$createdAt' } } },
+      { $group: { _id: '$query', body: { $first: '$body' }, createdAt: { $first: '$createdAt' }, createdBy: { $first: '$createdBy' } } },
     ]);
-    lastByQuery = Object.fromEntries(rows.map((r) => [String(r._id), { body: r.body, createdAt: r.createdAt }]));
+    const userIds = [...new Set(rows.map((r) => String(r.createdBy)).filter((v) => v && v !== 'undefined'))];
+    const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select('name') : [];
+    const nameOf = Object.fromEntries(users.map((u) => [String(u._id), u.name]));
+    lastByQuery = Object.fromEntries(rows.map((r) => [String(r._id), { body: r.body, createdAt: r.createdAt, by: nameOf[String(r.createdBy)] || '' }]));
+
+    // Latest quote per query — amount, author and time for the list cards.
+    const quotes = await Quote.find({ query: { $in: ids } })
+      .select('query pricing.total createdAt createdBy')
+      .sort('-createdAt')
+      .populate('createdBy', 'name');
+    for (const qt of quotes) {
+      const k = String(qt.query);
+      if (!quoteByQuery[k]) quoteByQuery[k] = { total: qt.pricing?.total || 0, createdAt: qt.createdAt, by: qt.createdBy?.name || '' };
+    }
   }
   const out = items.map((i) => {
     const o = i.toObject({ virtuals: true });
     o.lastComment = lastByQuery[String(i._id)] || null;
+    o.latestQuote = quoteByQuery[String(i._id)] || null;
     return o;
   });
   return ok(res, out, meta);
