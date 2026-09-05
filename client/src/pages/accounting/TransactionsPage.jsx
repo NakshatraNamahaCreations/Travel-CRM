@@ -43,7 +43,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-        <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-40 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
+        <aside className="-mx-1 flex w-full gap-1 no-scrollbar overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-40 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setPeriod(t.key)} className={cn('block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full', period === t.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
               {t.label}

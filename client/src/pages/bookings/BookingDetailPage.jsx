@@ -217,7 +217,7 @@ export default function BookingDetailPage() {
       </div>
 
       {/* ── Sticky Tab Bar ─────────────────────────────────── */}
-      <div className="sticky top-0 z-10 flex items-center gap-6 overflow-x-auto border-b border-gray-200 bg-white px-6 shadow-sm print:hidden">
+      <div className="sticky top-0 z-10 flex items-center gap-6 no-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-6 shadow-sm print:hidden">
         {visibleTabs.map((t) => (
           <button
             key={t.key}

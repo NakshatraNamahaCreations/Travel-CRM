@@ -507,7 +507,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
+      <aside className="-mx-1 flex w-full gap-1 no-scrollbar overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {SUBS.map((s) => (
           <button key={s.k} onClick={() => setSub(s.k)} className={cn('flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full', sub === s.k ? 'bg-brand-50 font-semibold text-brand-700' : 'text-gray-600 hover:bg-gray-50')}>
             <s.icon size={14} /> {s.l}

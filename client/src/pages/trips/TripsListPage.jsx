@@ -220,7 +220,7 @@ export default function TripsListPage() {
           )}
         </div>
 
-        <nav className="flex overflow-x-auto lg:block">
+        <nav className="flex no-scrollbar overflow-x-auto lg:block">
           {TABS.map((tab) => {
             const active = status === tab.value;
             const count = tab.value === 'all' ? statsQ.data?.all : counts[tab.value];

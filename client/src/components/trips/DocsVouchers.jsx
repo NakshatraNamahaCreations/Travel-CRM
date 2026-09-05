@@ -90,7 +90,7 @@ export default function DocsVouchers({ queryId, quotes }) {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
+      <aside className="-mx-1 flex w-full gap-1 no-scrollbar overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {VOUCHERS.map((v) => (
           <button
             key={v.key}

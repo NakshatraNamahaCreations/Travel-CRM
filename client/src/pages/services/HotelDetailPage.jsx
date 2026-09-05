@@ -83,7 +83,7 @@ function PaymentsTab({ id, direction }) {
   return (
     <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:gap-0">
       {/* Left sidebar */}
-      <div className="flex w-full gap-1 overflow-x-auto border-b border-gray-200 pb-2 lg:w-40 lg:shrink-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+      <div className="flex w-full gap-1 no-scrollbar overflow-x-auto border-b border-gray-200 pb-2 lg:w-40 lg:shrink-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
         {PAY_TABS.map(([key, label]) => (
           <button
             key={key}
@@ -355,7 +355,7 @@ export default function HotelDetailPage() {
 
         {/* Tabs */}
         <div className="mt-8 border-b border-gray-200">
-          <div className="flex gap-6 overflow-x-auto">
+          <div className="flex gap-6 no-scrollbar overflow-x-auto">
             {TABS.map((t) => (
               <button
                 key={t}

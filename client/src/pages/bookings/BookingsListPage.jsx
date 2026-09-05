@@ -61,7 +61,7 @@ export default function BookingsListPage() {
 
   return (
     <div>
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 bg-white px-4 pt-3 sm:px-6">
+      <div className="flex gap-1 no-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-4 pt-3 sm:px-6">
         {TABS.map((t) => (
           <button key={t.value} onClick={() => setParams({ status: t.value })}
             className={cn('shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium', status === t.value ? 'border-b-2 border-brand-600 text-brand-700' : 'text-gray-500 hover:text-gray-800')}>

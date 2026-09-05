@@ -125,6 +125,14 @@
   .text-balance {
     text-wrap: balance;
   }
+  /* Swipeable strips (tabs, chip rows) — scrollable but no visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* RichTextEditor placeholder */

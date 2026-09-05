@@ -84,7 +84,7 @@ export default function OperationalBookingsPage() {
             </table>
           </div>
         ) : (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-7 lg:overflow-visible lg:px-0">
+          <div className="-mx-1 flex gap-2 no-scrollbar overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-7 lg:overflow-visible lg:px-0">
             {days.map((day) => {
               const items = schedules.filter((s) => isSameDay(new Date(s.date), day));
               return (

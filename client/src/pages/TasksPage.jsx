@@ -76,7 +76,7 @@ export default function TasksPage() {
     <div className="flex flex-col lg:min-h-[calc(100vh-3.5rem)] lg:flex-row">
       <aside className="w-full shrink-0 border-b border-gray-200 bg-white py-3 lg:w-44 lg:border-b-0 lg:border-r lg:py-4">
         <h2 className="hidden px-4 pb-3 text-base font-bold text-gray-900 lg:block">All Tasks</h2>
-        <nav className="flex overflow-x-auto lg:block">
+        <nav className="flex no-scrollbar overflow-x-auto lg:block">
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)} className={cn('block shrink-0 whitespace-nowrap px-4 py-2.5 text-left text-sm lg:w-full', tab === t.key ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2' : 'text-gray-600 hover:bg-gray-50')}>
               {t.label}

@@ -299,7 +299,7 @@ const lostMut = useMutation({
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-6 overflow-x-auto border-b border-gray-200 bg-white px-4 sm:px-6">
+      <div className="flex items-center gap-6 no-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-4 sm:px-6">
         {visibleTabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', activeTab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-800')}>
             {t.label}{t.key === 'quotes' && quotes.length ? <span className="rounded-full bg-gray-100 px-1.5 text-xs">{quotes.length}</span> : null}
@@ -1548,7 +1548,7 @@ export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
   const [section, setSection] = useState('payments');
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-      <aside className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
+      <aside className="-mx-1 flex w-full gap-1 no-scrollbar overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-44 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
         {ACCOUNTING_SECTIONS.map((s) => (
           <button
             key={s.key}

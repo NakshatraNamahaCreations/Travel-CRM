@@ -44,7 +44,7 @@ export default function TripCheckInOutReportPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row">
-        <aside className="flex w-full shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2 py-2 lg:block lg:w-44 lg:gap-0 lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-4">
+        <aside className="flex w-full shrink-0 gap-1 no-scrollbar overflow-x-auto border-b border-slate-200 bg-white px-2 py-2 lg:block lg:w-44 lg:gap-0 lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-4">
           {[{ k: 'checkout', l: 'Check Outs' }, { k: 'checkin', l: 'Check Ins' }].map((t) => (
             <button key={t.k} onClick={() => setDirection(t.k)} className={cn('block shrink-0 whitespace-nowrap px-4 py-2 text-left text-sm lg:w-full lg:px-5 lg:py-2.5', direction === t.k ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2' : 'text-slate-600 hover:bg-slate-50')}>
               {t.l}
