@@ -164,22 +164,27 @@ export function quotationHtml(q, org = null) {
   // "Makruzz Ferry : Premium"), and occasionally as ferry-named transports.
   // Cab pickups and land transfers do NOT belong in this table.
   const FERRY_RX = /ferry|cruise|makruzz|nautika|green ocean|itt|sea ?link|catamaran/i;
+  const OPERATOR_RX = /makruzz|nautika|green ocean|itt|sea ?link|catamaran/i;
+  const splitSector = (loc) => String(loc || '').split(/\s+to\s+|\s*(?:>|&gt;|→|—|–)\s*|\s+-\s+/i).map((s) => s.trim()).filter(Boolean);
+  // A row belongs here only if it names a known operator, or its generic
+  // ferry/cruise wording comes with a real sector (two places). Activities
+  // like "Cruise Dinner" at a single location stay out of the ferry table.
+  const isFerryEntry = (text, sector) => FERRY_RX.test(text) && (OPERATOR_RX.test(text) || splitSector(sector).length >= 2);
   const splitCategory = (s) => {
     const [name, ...rest] = String(s || '').split(':');
     return [name.trim(), rest.join(':').trim()];
   };
   const ferries = [];
   (pkg.activities || []).forEach((a) => {
-    if (!FERRY_RX.test(`${a.name} ${a.ticketType}`)) return;
+    if (!isFerryEntry(`${a.name} ${a.ticketType}`, a.name)) return;
     const [fname, category] = splitCategory(a.ticketType);
     ferries.push({ name: fname || a.name, sector: a.name, category, start: a.slot, dur: a.durationMins });
   });
   transports.forEach((t) => {
-    if (!FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`)) return;
+    if (!isFerryEntry(`${t.serviceType} ${t.serviceLocation}`, t.serviceLocation)) return;
     const [fname, category] = splitCategory(t.serviceType);
     ferries.push({ name: fname || t.serviceLocation, sector: t.serviceLocation, category, start: t.startTime, dur: t.durationMins });
   });
-  const splitSector = (loc) => String(loc || '').split(/\s+to\s+|\s*(?:>|&gt;|→|—|–)\s*|\s+-\s+/i).map((s) => s.trim()).filter(Boolean);
   const transferRows = ferries.map((f) => {
     const sched = staticTimes(`${f.name} ${f.category}`, f.sector);
     const dep = fmtTime(f.start) || (sched ? fmtTime(sched[0]) : '') || '&mdash;';
