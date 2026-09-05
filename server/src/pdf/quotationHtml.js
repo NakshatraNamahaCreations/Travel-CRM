@@ -806,7 +806,8 @@ export function quotationHtml(q, org = null) {
   .tlwrap .tlcirc { box-shadow: 0 0 0 3px #eef5fc; }
   .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px solid #c5d5e8; }
   .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; break-inside: avoid; page-break-inside: avoid; }
-  .tlrow + .tlrow { border-top: 1px solid #d8e5f2; }
+  /* Divider between rows starts after the icon rail so it doesn't cross it. */
+  .tlrow + .tlrow::before { content: ''; position: absolute; top: 0; left: 57px; right: 0; border-top: 1px solid #d8e5f2; }
   .tlicon { width: 44px; flex-shrink: 0; display: flex; justify-content: center; }
   .tlcirc { position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 0 3px #fff; }
   /* Emoji glyphs render in their own colors — flatten them to pure white so
