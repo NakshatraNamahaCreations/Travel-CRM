@@ -99,13 +99,39 @@ export const listQueries = asyncHandler(async (req, res) => {
   await rollTripStatuses();
   // Non-admin/manager users see only trips they own or created.
   const filter = applyScope(buildFilter(req.query, req.user), ownScope(req.user));
-  const total = await Query.countDocuments(filter);
-  const meta = paginate(req.query, total);
-  const items = await Query.find(filter)
-    .populate(POPULATE)
-    .sort(req.query.sort || '-createdAt')
-    .skip(meta.skip)
-    .limit(meta.limit);
+  const sortParam = req.query.sort || '-createdAt';
+
+  let items;
+  let meta;
+  if (sortParam === 'followupAsc' || sortParam === 'followupDesc') {
+    // Follow-up date lives on Comment, not Query, so a field sort can't do it.
+    // Rank all matching ids by their latest comment (no comment = oldest),
+    // paginate the ranked ids, then fetch just that page.
+    const allIds = (await Query.find(filter).select('_id')).map((d) => d._id);
+    const rows = allIds.length
+      ? await Comment.aggregate([
+          { $match: { query: { $in: allIds } } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$query', createdAt: { $first: '$createdAt' } } },
+        ])
+      : [];
+    const at = Object.fromEntries(rows.map((r) => [String(r._id), new Date(r.createdAt).getTime()]));
+    const dir = sortParam === 'followupAsc' ? 1 : -1;
+    allIds.sort((a, b) => ((at[String(a)] || 0) - (at[String(b)] || 0)) * dir);
+    meta = paginate(req.query, allIds.length);
+    const pageIds = allIds.slice(meta.skip, meta.skip + meta.limit);
+    const order = new Map(pageIds.map((id, i) => [String(id), i]));
+    items = await Query.find({ _id: { $in: pageIds } }).populate(POPULATE);
+    items.sort((a, b) => order.get(String(a._id)) - order.get(String(b._id)));
+  } else {
+    const total = await Query.countDocuments(filter);
+    meta = paginate(req.query, total);
+    items = await Query.find(filter)
+      .populate(POPULATE)
+      .sort(sortParam)
+      .skip(meta.skip)
+      .limit(meta.limit);
+  }
 
   // Latest comment per query, for the list's Follow-up column.
   const ids = items.map((i) => i._id);

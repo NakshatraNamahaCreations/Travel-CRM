@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus, UserRound, Mail, CalendarDays } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus, UserRound, Mail, CalendarDays, ArrowUpDown } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
@@ -35,6 +35,15 @@ const TABS = [
   { value: 'all', label: 'All' },
 ];
 
+const SORT_OPTIONS = [
+  { value: 'followupAsc', label: 'Oldest Follow-Up First' },
+  { value: 'followupDesc', label: 'Latest Follow-Up First' },
+  { value: 'startDate', label: 'Start Date : Ascending' },
+  { value: '-createdAt', label: 'Latest Created First' },
+  { value: '-pax.adults', label: 'Pax : Most Adults First' },
+  { value: '-nights', label: 'Duration : Longest Duration First' },
+];
+
 const STATUS_BADGE = {
   new_query: 'bg-blue-50 text-blue-700',
   in_progress: 'bg-amber-50 text-amber-700',
@@ -59,6 +68,8 @@ export default function TripsListPage() {
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0, up: false }); // anchor for the fixed-position menu
   const [tagsFor, setTagsFor] = useState(null);   // query object being tag-edited
   const [followFor, setFollowFor] = useState(null); // query object getting a follow-up
+  const [sort, setSort] = useState('-createdAt');
+  const [sortOpen, setSortOpen] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -95,12 +106,12 @@ export default function TripsListPage() {
 
   // Switching tabs/search/filters changes the result set — back to page 1
   // so you're never stranded past the end of a smaller filtered list.
-  useEffect(() => { setPage(1); }, [status, debounced, applied]);
+  useEffect(() => { setPage(1); }, [status, debounced, applied, sort]);
 
   const statsQ = useQuery({ queryKey: ['query-stats'], queryFn: queriesApi.stats });
   const listQ = useQuery({
-    queryKey: ['queries', status, debounced, applied, page],
-    queryFn: () => queriesApi.list({ status, search: debounced, page, limit: PAGE_SIZE, ...filterParams() }),
+    queryKey: ['queries', status, debounced, applied, page, sort],
+    queryFn: () => queriesApi.list({ status, search: debounced, page, limit: PAGE_SIZE, sort, ...filterParams() }),
   });
 
   const counts = Object.fromEntries((statsQ.data?.counts || []).map((c) => [c.value, c.count]));
@@ -275,14 +286,50 @@ export default function TripsListPage() {
             </div>
           ) : (
             <>
+            {/* Result count + Sort By (Sembark-style) */}
+            <div className="mb-3 flex items-center justify-between gap-2 px-1">
+              <span className="flex items-center gap-2 text-[12.5px] text-gray-600">
+                {meta && (
+                  <>
+                    Showing {(meta.page - 1) * PAGE_SIZE + 1} - {Math.min(meta.page * PAGE_SIZE, meta.total ?? items.length)} of {meta.total ?? items.length} Items
+                    <button onClick={refresh} title="Refresh" className="text-gray-400 hover:text-brand-600"><RefreshCw size={13} /></button>
+                  </>
+                )}
+              </span>
+              <div className="relative">
+                <button
+                  onClick={() => setSortOpen((o) => !o)}
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                >
+                  Sort By <ArrowUpDown size={13} />
+                </button>
+                {sortOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setSortOpen(false)} aria-hidden="true" />
+                    <div className="absolute right-0 top-full z-40 mt-1 w-72 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-slate-100 bg-white py-2 shadow-2xl">
+                      {SORT_OPTIONS.map((o) => (
+                        <label
+                          key={o.value}
+                          className="flex cursor-pointer items-center gap-2.5 px-4 py-2 text-[13px] text-slate-700 hover:bg-slate-50"
+                        >
+                          <input
+                            type="radio"
+                            name="trips-sort"
+                            checked={sort === o.value}
+                            onChange={() => { setSort(o.value); setSortOpen(false); }}
+                            className="accent-brand-600"
+                          />
+                          {o.label}
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* Mobile — Sembark-style trip cards */}
             <div className="md:hidden">
-              {meta && (
-                <div className="mb-3 flex items-center gap-2 px-1 text-[12.5px] text-gray-600">
-                  Showing {(meta.page - 1) * PAGE_SIZE + 1} - {Math.min(meta.page * PAGE_SIZE, meta.total ?? items.length)} of {meta.total ?? items.length} Items
-                  <button onClick={refresh} title="Refresh" className="text-gray-400 hover:text-brand-600"><RefreshCw size={13} /></button>
-                </div>
-              )}
               <div className="space-y-3">
                 {items.map((q) => (
                   <div key={q._id} className="card p-3.5">
