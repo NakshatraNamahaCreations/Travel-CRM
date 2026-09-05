@@ -649,7 +649,7 @@ export function quotationHtml(q, org = null) {
   .seccard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 9px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
   .ordivide { border-top: 2px dashed #9fbddd; margin: 18px 0; }
   .sechead { display: flex; align-items: center; gap: 10px; background: linear-gradient(90deg, #1259c9, #2f97ec 60%, #4fa9f2); padding: 7px 14px; font-weight: 800; font-size: 13.5px; color: #fff; text-transform: uppercase; letter-spacing: 0.03em; }
-  .sechead.teal { background: linear-gradient(90deg, #0b8f80, #2bbfae 55%, #6fd6c3); }
+  .sechead.teal { background: #00a26b; }
   .sechead.navy { background: var(--deep); }
   .sechead .shic { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .sechead .shnum { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; }
