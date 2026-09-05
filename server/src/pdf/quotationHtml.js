@@ -797,12 +797,13 @@ export function quotationHtml(q, org = null) {
      page, leaving a large blank gap above it. Letting it split keeps content
      flowing continuously; individual rows inside (.tlrow) still avoid splits. */
   .dayblk { margin-bottom: 14px; border: 1px solid #e2e9f0; border-radius: 12px; overflow: hidden; background: #fff; }
-  .dwhead { display: flex; align-items: center; gap: 13px; background: #f7f9fc; border-bottom: 1px solid #e8eef5; padding: 8px 16px 8px 8px; }
+  .dwhead { display: flex; align-items: center; gap: 13px; background: var(--blue); border-bottom: 1px solid #e8eef5; padding: 8px 16px 8px 8px; }
   .daytab { background: var(--deep); color: #fff; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 17px; border-radius: 8px; white-space: nowrap; }
-  .daycity { color: var(--blue); font-weight: 800; font-size: 15.5px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .dayhr { width: 1px; align-self: stretch; background: #d5dfe9; margin: 3px 2px; }
-  .daydate { font-size: 12px; font-weight: 600; color: #37475a; }
-  .tlwrap { position: relative; padding: 11px 16px 11px 8px; }
+  .daycity { color: #fff; font-weight: 800; font-size: 15.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .dayhr { width: 1px; align-self: stretch; background: rgba(255,255,255,0.45); margin: 3px 2px; }
+  .daydate { font-size: 12px; font-weight: 600; color: #fff; }
+  .tlwrap { position: relative; padding: 11px 16px 11px 8px; background: #eef5fc; }
+  .tlwrap .tlcirc { box-shadow: 0 0 0 3px #eef5fc; }
   .tlwrap::before { content: ''; position: absolute; left: 29px; top: 30px; bottom: 30px; border-left: 2px solid #c5d5e8; }
   .tlrow { position: relative; display: flex; gap: 13px; padding: 9px 0; break-inside: avoid; page-break-inside: avoid; }
   .tlicon { width: 44px; flex-shrink: 0; display: flex; justify-content: center; }
