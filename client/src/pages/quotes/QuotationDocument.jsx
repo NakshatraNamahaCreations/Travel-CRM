@@ -16,9 +16,25 @@ export default function QuotationDocument() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const iframeRef = useRef(null);
+  const wrapRef = useRef(null);
   const [frameHeight, setFrameHeight] = useState(1200);
+  const [scale, setScale] = useState(1);
   const [emailOpen, setEmailOpen] = useState(false);
   const [toEmail, setToEmail] = useState('');
+
+  // The document is fixed-width A4 HTML (850px). On narrow screens scale the
+  // whole frame down to fit — like a PDF viewer's "fit to width" — instead of
+  // clipping or panning.
+  const DOC_WIDTH = 850;
+  useEffect(() => {
+    const compute = () => {
+      const w = wrapRef.current?.clientWidth || window.innerWidth;
+      setScale(Math.min(1, w / DOC_WIDTH));
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, []);
 
   const { data: q } = useQuery({ queryKey: ['quote', id], queryFn: () => quotesApi.get(id) });
   const { data: html, isLoading, error } = useQuery({
@@ -101,18 +117,25 @@ export default function QuotationDocument() {
       ) : error || !html ? (
         <div className="py-24 text-center text-slate-500">Could not load the quotation document.</div>
       ) : (
-        // The quotation is fixed-width A4 HTML. Shrinking the iframe would clip
-        // it with no way to reach the left edge, so below lg we keep the frame
-        // at its natural width and let the wrapper pan horizontally.
-        <div className="overflow-x-auto pb-2">
-          <iframe
-            ref={iframeRef}
-            title="Quotation"
-            srcDoc={html}
-            onLoad={onFrameLoad}
-            className="block w-[850px] border-0 bg-white shadow-soft lg:mx-auto lg:max-w-full"
-            style={{ height: frameHeight }}
-          />
+        <div ref={wrapRef} className="pb-2">
+          <div
+            className="mx-auto overflow-hidden"
+            style={{ width: DOC_WIDTH * scale, height: frameHeight * scale }}
+          >
+            <iframe
+              ref={iframeRef}
+              title="Quotation"
+              srcDoc={html}
+              onLoad={onFrameLoad}
+              className="block border-0 bg-white shadow-soft"
+              style={{
+                width: DOC_WIDTH,
+                height: frameHeight,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            />
+          </div>
         </div>
       )}
     </div>
