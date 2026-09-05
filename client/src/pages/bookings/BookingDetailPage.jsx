@@ -137,8 +137,9 @@ export default function BookingDetailPage() {
           <span className="text-gray-600">Current</span>
         </div>
 
-        {/* Title + actions */}
-        <div className="flex items-start justify-between px-6 pt-2 pb-1">
+        {/* Title + actions — actions drop below the title on phones so the
+            heading keeps its full width instead of wrapping word-per-line. */}
+        <div className="flex flex-col gap-2 px-4 pt-2 pb-1 sm:flex-row sm:items-start sm:justify-between sm:px-6">
           <div>
             <h1 className="text-lg font-bold text-gray-900">
               #{b.bookingNumber}
