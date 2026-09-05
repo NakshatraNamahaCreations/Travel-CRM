@@ -431,7 +431,7 @@ function BookingRows({ b, onEditRow, onShareRow, onVoucherRow, onTagRow, onStatu
 
 export default function HotelBookingsPage() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState('all');
+  const [tab, setTab] = useState('new');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState('newest');
@@ -517,14 +517,18 @@ export default function HotelBookingsPage() {
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-        <aside className="-mx-1 flex w-full gap-1 no-scrollbar overflow-x-auto px-1 pb-1 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
+        {/* Mobile: Sembark-style underline tabs on a white bar; desktop keeps
+            the sidebar chip list. */}
+        <aside className="-mx-4 flex w-[calc(100%+2rem)] gap-1 no-scrollbar overflow-x-auto border-b border-slate-200 bg-white px-4 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6 lg:mx-0 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:border-b-0 lg:bg-transparent lg:px-0 lg:pb-0">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                'block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm lg:w-full',
-                tab === t.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50',
+                'block shrink-0 whitespace-nowrap px-3 py-2.5 text-left text-sm lg:w-full lg:rounded-lg lg:py-2',
+                tab === t.key
+                  ? 'border-b-2 border-brand-600 font-semibold text-gray-900 lg:border-b-0 lg:bg-brand-50 lg:text-brand-700'
+                  : 'border-b-2 border-transparent text-slate-600 hover:text-gray-900 lg:border-b-0 lg:hover:bg-slate-50',
               )}
             >
               {t.label}
