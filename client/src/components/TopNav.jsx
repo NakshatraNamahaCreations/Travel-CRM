@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ChevronDown, LogOut, Palmtree, Settings, Search, Bell, X, Menu, Home,
-  User as UserIcon, ClipboardList, LayoutDashboard, Plane, CalendarCheck, Wallet, Briefcase,
+  ChevronRight, LogOut, Palmtree, Settings, Search, Bell, X, Home,
+  User as UserIcon, ClipboardList, Plane, CalendarCheck, Wallet, Briefcase,
+  CalendarDays, Banknote, Flower2, Building2, Sparkles,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../store/AuthContext.jsx';
@@ -59,20 +60,35 @@ const GROUPS = [
   },
 ];
 
+// Mobile bar icons per group (Sembark-style: calendar, payments, flower, gear)
+const MOBILE_ICONS = {
+  Bookings: CalendarDays,
+  Accounting: Banknote,
+  Services: Flower2,
+  Settings: Settings,
+};
+// Where each group's mobile dropdown anchors so it stays on screen
+const MOBILE_ALIGN = {
+  Trips: 'left',
+  Bookings: 'center',
+  Accounting: 'center',
+  Services: 'center',
+  Settings: 'right',
+};
+
 export default function TopNav() {
   const { user, hasRole, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
   const [openMenu, setOpenMenu] = useState(null); // group label | 'profile' | null
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [term, setTerm] = useState('');
 
   const visible = GROUPS.filter((g) => !g.roles || hasRole(...g.roles));
   const leftGroups = visible.filter((g) => g.side === 'left');
   const rightGroups = visible.filter((g) => g.side === 'right');
   const matchGroup = (g) => g.items.some((i) => pathname.startsWith(i.to.split('?')[0]));
-  const closeAll = () => { setOpenMenu(null); setMobileOpen(false); };
+  const closeAll = () => setOpenMenu(null);
   const handleLogout = async () => { closeAll(); await logout(); navigate('/login'); };
 
   const { data: countData } = useQuery({
@@ -99,7 +115,10 @@ export default function TopNav() {
   );
 
   const dropdown = (g, align = 'left') => (
-    <div className={cn('absolute top-full z-50 mt-1 w-60 overflow-hidden rounded-lg border border-slate-100 bg-white py-1.5 text-slate-700 shadow-2xl', align === 'right' ? 'right-0' : 'left-0')}>
+    <div className={cn(
+      'absolute top-full z-50 mt-1 w-60 max-w-[calc(100vw-16px)] overflow-hidden rounded-lg border border-slate-100 bg-white py-1.5 text-slate-700 shadow-2xl',
+      align === 'right' ? 'right-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'
+    )}>
       {g.items.map((it) => (
         <NavLink
           key={it.to}
@@ -129,13 +148,42 @@ export default function TopNav() {
     );
   };
 
+  // Mobile bar item — "Trips" stays a text label, the rest collapse to icons
+  // that open the same dropdown menus (Sembark mobile design).
+  const mobileGroupBtn = (g) => {
+    const isOpen = openMenu === `m:${g.label}`;
+    const Icon = MOBILE_ICONS[g.label];
+    return (
+      <div key={g.label} className="relative lg:hidden">
+        <button
+          onClick={() => setOpenMenu(isOpen ? null : `m:${g.label}`)}
+          title={g.label}
+          aria-label={g.label}
+          className={cn(
+            'flex h-9 items-center justify-center rounded-md transition-colors',
+            Icon ? 'w-9' : 'px-2.5 text-[13.5px] font-medium',
+            matchGroup(g) || isOpen ? 'text-white' : 'text-slate-300 hover:text-white'
+          )}
+        >
+          {Icon ? <Icon size={17} strokeWidth={1.9} /> : g.label}
+        </button>
+        {isOpen && dropdown(g, MOBILE_ALIGN[g.label] || 'right')}
+      </div>
+    );
+  };
+
   return (
     <>
       <style>{`
-        .notif-dot { box-shadow: 0 0 0 2px #0a4d88; }
+        .tc-header { background: #171717; }
+        .notif-dot { box-shadow: 0 0 0 2px #171717; }
+        @media (min-width: 1024px) {
+          .tc-header { background: linear-gradient(90deg, #06345c 0%, #0a4d88 55%, #0d5fa6 100%); }
+          .notif-dot { box-shadow: 0 0 0 2px #0a4d88; }
+        }
       `}</style>
 
-      <header className="sticky top-0 z-40 text-white" style={{ background: 'linear-gradient(90deg, #06345c 0%, #0a4d88 55%, #0d5fa6 100%)' }}>
+      <header className="tc-header sticky top-0 z-40 text-white">
         <div className="flex h-[54px] items-center gap-1 px-3 sm:px-5">
           {/* Brand — logo only, like the reference */}
           <Link to="/" onClick={closeAll} title="Andaman TravelCare" className="mr-4 flex shrink-0 items-center">
@@ -171,21 +219,48 @@ export default function TopNav() {
           </form>
 
           {/* Right side */}
-          <div className="ml-auto flex items-center gap-1 md:ml-0">
+          <div className="ml-auto flex items-center gap-0.5 md:ml-0 lg:gap-1">
             <nav className="hidden items-center gap-1 lg:flex">
               {rightGroups.map((g) => groupButton(g, 'right'))}
             </nav>
 
-            {/* Notifications */}
+            {/* Mobile: every group as an icon (Trips keeps its text label) */}
+            {visible.map((g) => mobileGroupBtn(g))}
+
+            {/* Notifications — link on desktop, dropdown on mobile */}
             <Link
               to="/notifications"
               onClick={closeAll}
-              className="relative ml-1 flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="relative ml-1 hidden h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/10 hover:text-white lg:flex"
               title="Notifications"
             >
               <Bell size={16} />
               {unreadCount > 0 && <span className="notif-dot absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />}
             </Link>
+            <div className="relative lg:hidden">
+              <button
+                onClick={() => setOpenMenu(openMenu === 'm:bell' ? null : 'm:bell')}
+                title="Notifications"
+                aria-label="Notifications"
+                className={cn('relative flex h-9 w-9 items-center justify-center rounded-md transition-colors', openMenu === 'm:bell' ? 'text-white' : 'text-slate-300 hover:text-white')}
+              >
+                <Bell size={17} strokeWidth={1.9} />
+                {unreadCount > 0 && <span className="notif-dot absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />}
+              </button>
+              {openMenu === 'm:bell' && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-64 max-w-[calc(100vw-16px)] overflow-hidden rounded-lg border border-slate-100 bg-white py-1 text-slate-700 shadow-2xl">
+                  <Link to="/notifications" onClick={closeAll} className="flex items-center gap-1 px-4 py-2.5 text-[12.5px] font-semibold text-sky-700 hover:bg-slate-50">
+                    Notifications <ChevronRight size={13} />
+                  </Link>
+                  <p className="border-y border-slate-100 px-4 py-4 text-center text-[12px] text-slate-400">
+                    {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : 'All caught up!'}
+                  </p>
+                  <Link to="/notifications" onClick={closeAll} className="flex items-center gap-1 px-4 py-2.5 text-[12.5px] font-medium text-sky-700 hover:bg-slate-50">
+                    View All Notifications <ChevronRight size={13} />
+                  </Link>
+                </div>
+              )}
+            </div>
 
             {/* Home / dashboard */}
             <NavLink
@@ -194,7 +269,7 @@ export default function TopNav() {
               onClick={closeAll}
               title="Dashboard"
               className={({ isActive }) => cn(
-                'hidden h-8 w-8 items-center justify-center rounded-md transition sm:flex',
+                'hidden h-8 w-8 items-center justify-center rounded-md transition lg:flex',
                 isActive ? 'text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
               )}
             >
@@ -225,6 +300,24 @@ export default function TopNav() {
                   <Link to="/settings/profile" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50">
                     <Settings size={13} className="text-slate-400" /> My Profile
                   </Link>
+                  {hasRole('admin', 'manager') && (
+                    <Link to="/settings/organization" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50">
+                      <Building2 size={13} className="text-slate-400" /> Organization
+                    </Link>
+                  )}
+                  <div className="mx-2 my-1 border-t border-slate-100" />
+                  <Link to="/" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50">
+                    <Home size={13} className="text-slate-400" /> Dashboard
+                  </Link>
+                  <Link to="/tasks" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50">
+                    <ClipboardList size={13} className="text-slate-400" /> All Tasks
+                  </Link>
+                  <Link to="/notifications" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-slate-600 hover:bg-slate-50">
+                    <Bell size={13} className="text-slate-400" /> Notifications
+                  </Link>
+                  <Link to="/whats-new" onClick={closeAll} className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-amber-600 hover:bg-amber-50">
+                    <Sparkles size={13} /> What's New
+                  </Link>
                   <div className="mx-2 my-1 border-t border-slate-100" />
                   <button onClick={handleLogout} className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-red-600 hover:bg-red-50">
                     <LogOut size={13} /> Sign Out
@@ -233,61 +326,8 @@ export default function TopNav() {
               )}
             </div>
 
-            {/* Mobile hamburger */}
-            <button
-              type="button"
-              onClick={() => { setMobileOpen((o) => !o); setOpenMenu(null); }}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
-              aria-label="Open menu"
-            >
-              {mobileOpen ? <X size={17} /> : <Menu size={17} />}
-            </button>
           </div>
         </div>
-
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <nav className="max-h-[70vh] overflow-y-auto border-t border-white/10 px-3 pb-3 pt-2 lg:hidden">
-            <form onSubmit={submit} className="mb-2 md:hidden">
-              <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-[7px] ring-1 ring-white/10">
-                <Search size={13} className="shrink-0 text-slate-400" />
-                <input
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  placeholder="Search for trips…"
-                  className="w-full bg-transparent text-[13px] text-white outline-none placeholder:text-slate-400"
-                />
-              </div>
-            </form>
-            <NavLink to="/" end onClick={closeAll} className={({ isActive }) => cn('flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium', isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:text-white')}>
-              <LayoutDashboard size={14} /> Dashboard
-            </NavLink>
-            <NavLink to="/tasks" onClick={closeAll} className={({ isActive }) => cn('flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-medium', isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:text-white')}>
-              <ClipboardList size={14} /> Tasks
-            </NavLink>
-            {visible.map((g) => (
-              <div key={g.label} className="mt-1">
-                <p className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">
-                  <g.icon size={11} /> {g.label}
-                </p>
-                {g.items.map((it) => (
-                  <NavLink
-                    key={it.to}
-                    to={it.to}
-                    end={it.to === '/trips'}
-                    onClick={closeAll}
-                    className={({ isActive }) => cn(
-                      'block rounded-md px-4 py-[7px] text-[12.5px] transition-colors',
-                      isActive ? 'bg-white/10 font-semibold text-white' : 'text-slate-300 hover:text-white'
-                    )}
-                  >
-                    {it.label}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-          </nav>
-        )}
       </header>
 
       {/* Click-away backdrop for dropdowns */}
