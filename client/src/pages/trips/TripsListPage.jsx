@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, RefreshCw, Info, Phone, X, MoreVertical, Tag as TagIcon, Ban, MessageSquarePlus, UserRound, Mail, CalendarDays } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
@@ -122,11 +122,93 @@ export default function TripsListPage() {
     if (window.confirm(`Cancel query ${tripNo(q.queryNumber)}?`)) cancelMut.mutate(q._id);
   };
 
+  // Kebab actions menu — shared by the desktop table rows and the mobile cards.
+  const kebabMenu = (q) => can('trips.edit') && (
+    <>
+      <button
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenuPos({ x: r.right, y: r.bottom, up: r.bottom + 150 > window.innerHeight });
+          setMenuFor(menuFor === q._id ? null : q._id);
+        }}
+        className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      >
+        <MoreVertical size={16} />
+      </button>
+      {menuFor === q._id && (
+        <div
+          className="fixed z-20 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 text-left shadow-2xl"
+          style={{
+            left: Math.max(8, menuPos.x - 176),
+            ...(menuPos.up ? { bottom: window.innerHeight - menuPos.y + 32 } : { top: menuPos.y + 4 }),
+          }}
+        >
+          {q.status === 'in_progress' ? (
+            <button
+              onClick={() => { setMenuFor(null); setFollowFor(q); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+            >
+              <MessageSquarePlus size={13} className="text-slate-400" /> Add Follow-up
+            </button>
+          ) : (
+            <button
+              onClick={() => { setMenuFor(null); navigate(`/trips/${q._id}/quote/new`); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+            >
+              <Plus size={13} className="text-slate-400" /> Create Quote
+            </button>
+          )}
+          <button
+            onClick={() => { setMenuFor(null); setTagsFor(q); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+          >
+            <TagIcon size={13} className="text-slate-400" /> Update Tags
+          </button>
+          <button
+            onClick={() => cancelQuery(q)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-amber-600 hover:bg-amber-50"
+          >
+            <Ban size={13} /> Cancel Query
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col lg:min-h-[calc(100vh-3.5rem)] lg:flex-row">
       {/* Sidebar tabs */}
       <aside className="w-full shrink-0 border-b border-gray-200 bg-white py-3 lg:w-48 lg:border-b-0 lg:border-r lg:py-4">
         <h2 className="hidden px-4 pb-3 text-lg font-bold text-gray-900 lg:block">Trips</h2>
+
+        {/* Mobile header — title, search, actions above the tab strip (Sembark order) */}
+        <div className="space-y-3 px-3 pb-3 lg:hidden">
+          <h2 className="text-xl font-bold text-gray-900">Trips</h2>
+          <div className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2">
+            <Search size={16} className="text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search by id, guest, phone numbers..."
+              className="w-full text-sm outline-none"
+            />
+            <button onClick={() => setShowFilters(true)} className="relative text-gray-400 hover:text-brand-600" title="Advanced Filters">
+              <SlidersHorizontal size={16} />
+              {activeCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-600 text-[9px] font-bold text-white">{activeCount}</span>
+              )}
+            </button>
+          </div>
+          {can('trips.create') && (
+            <div className="flex items-center gap-2">
+              <Link to="/trips/new" className="btn-primary whitespace-nowrap text-sm">
+                <Plus size={15} /> Add New Query
+              </Link>
+              <Link to="/trips/upload" className="btn-secondary whitespace-nowrap text-sm">Upload CSV</Link>
+            </div>
+          )}
+        </div>
+
         <nav className="flex overflow-x-auto lg:block">
           {TABS.map((tab) => {
             const active = status === tab.value;
@@ -156,7 +238,7 @@ export default function TripsListPage() {
 
       {/* Main */}
       <section className="flex-1 bg-gray-50">
-        <div className="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
+        <div className="hidden items-center justify-end gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6 lg:flex">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-gray-300 px-3 py-2">
             <Search size={16} className="text-gray-400" />
             <input
@@ -180,7 +262,7 @@ export default function TripsListPage() {
           )}
         </div>
 
-        <div className="p-6">
+        <div className="px-3 py-4 sm:p-6">
           {listQ.isLoading ? (
             <div className="py-20 text-center text-gray-400">Loading…</div>
           ) : items.length === 0 ? (
@@ -192,7 +274,68 @@ export default function TripsListPage() {
               </button>
             </div>
           ) : (
-            <div className="card card-flush overflow-x-auto">
+            <>
+            {/* Mobile — Sembark-style trip cards */}
+            <div className="md:hidden">
+              {meta && (
+                <div className="mb-3 flex items-center gap-2 px-1 text-[12.5px] text-gray-600">
+                  Showing {(meta.page - 1) * PAGE_SIZE + 1} - {Math.min(meta.page * PAGE_SIZE, meta.total ?? items.length)} of {meta.total ?? items.length} Items
+                  <button onClick={refresh} title="Refresh" className="text-gray-400 hover:text-brand-600"><RefreshCw size={13} /></button>
+                </div>
+              )}
+              <div className="space-y-3">
+                {items.map((q) => (
+                  <div key={q._id} className="card p-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <Link to={`/trips/${q._id}`} className="block text-[15px] font-semibold leading-snug text-brand-600">
+                          {(q.destinations || []).map((d) => d.name).join(', ') || 'Trip'}
+                        </Link>
+                        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-gray-800">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <UserRound size={13} className="shrink-0 text-gray-400" />
+                            {[q.guest?.salutation, q.guest?.name].filter(Boolean).join(' ') || '—'}
+                          </span>
+                          {q.guest?.phones?.[0] && (
+                            <a href={`tel:+${q.guest.phones[0].countryCode}${q.guest.phones[0].number}`} className="text-gray-400 hover:text-brand-600" title="Call">
+                              <Phone size={12} />
+                            </a>
+                          )}
+                          {q.guest?.email && (
+                            <a href={`mailto:${q.guest.email}`} className="text-gray-400 hover:text-brand-600" title="Email">
+                              <Mail size={12} />
+                            </a>
+                          )}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-[13px] text-gray-700">
+                          <CalendarDays size={13} className="shrink-0 text-gray-400" />
+                          {q.startDate ? format(new Date(q.startDate), 'd MMM, yyyy') : 'Flexible'} • {q.nights}N, {q.nights + 1}D
+                        </p>
+                        {(q.tags || []).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {q.tags.map((t) => (
+                              <span key={t._id} className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-600">
+                                {t.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right text-[11.5px] leading-relaxed">
+                        <p className="text-gray-500">#{tripNo(q.queryNumber)}{q.source?.name ? ` • ${q.source.name}` : ''}</p>
+                        <p className="mt-0.5 font-semibold text-gray-800">{TABS.find((t) => t.value === q.status)?.label || q.status}</p>
+                        <p className="text-gray-600">{q.owner?.name || ''}</p>
+                        <p className="text-[10.5px] text-sky-600">{formatDistanceToNow(new Date(q.createdAt), { addSuffix: true })}</p>
+                        <div className="mt-1 flex justify-end">{kebabMenu(q)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Desktop table */}
+            <div className="card card-flush hidden overflow-x-auto md:block">
               <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-slate-100 text-left text-xs font-semibold tracking-normal text-slate-600">
                   <tr>
@@ -257,64 +400,13 @@ export default function TripsListPage() {
                       <td className="px-4 py-3 text-gray-500">
                         {format(new Date(q.createdAt), 'd MMM yyyy')}
                       </td>
-                      <td className="relative px-2 py-3 text-right">
-                        {can('trips.edit') && (
-                          <>
-                            <button
-                              onClick={(e) => {
-                                const r = e.currentTarget.getBoundingClientRect();
-                                setMenuPos({ x: r.right, y: r.bottom, up: r.bottom + 150 > window.innerHeight });
-                                setMenuFor(menuFor === q._id ? null : q._id);
-                              }}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <MoreVertical size={16} />
-                            </button>
-                            {menuFor === q._id && (
-                              <div
-                                className="fixed z-20 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 text-left shadow-2xl"
-                                style={{
-                                  left: Math.max(8, menuPos.x - 176),
-                                  ...(menuPos.up ? { bottom: window.innerHeight - menuPos.y + 32 } : { top: menuPos.y + 4 }),
-                                }}
-                              >
-                                {q.status === 'in_progress' ? (
-                                  <button
-                                    onClick={() => { setMenuFor(null); setFollowFor(q); }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <MessageSquarePlus size={13} className="text-slate-400" /> Add Follow-up
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => { setMenuFor(null); navigate(`/trips/${q._id}/quote/new`); }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <Plus size={13} className="text-slate-400" /> Create Quote
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => { setMenuFor(null); setTagsFor(q); }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
-                                >
-                                  <TagIcon size={13} className="text-slate-400" /> Update Tags
-                                </button>
-                                <button
-                                  onClick={() => cancelQuery(q)}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-[12.5px] text-amber-600 hover:bg-amber-50"
-                                >
-                                  <Ban size={13} /> Cancel Query
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </td>
+                      <td className="relative px-2 py-3 text-right">{kebabMenu(q)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            </>
           )}
           <Pagination page={meta?.page || 1} totalPages={meta?.totalPages || 1} onChange={setPage} />
         </div>
