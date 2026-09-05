@@ -225,7 +225,7 @@ export default function BookingDetailPage() {
             className={cn(
               'flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium',
               activeTab === t.key
-                ? 'border-brand-600 text-brand-700'
+                ? 'border-brand-600 font-semibold text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-800',
             )}
           >

@@ -301,7 +301,7 @@ const lostMut = useMutation({
       {/* Tabs */}
       <div className="flex items-center gap-6 no-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-4 sm:px-6">
         {visibleTabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', activeTab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-800')}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium', activeTab === t.key ? 'border-brand-600 font-semibold text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-800')}>
             {t.label}{t.key === 'quotes' && quotes.length ? <span className="rounded-full bg-gray-100 px-1.5 text-xs">{quotes.length}</span> : null}
           </button>
         ))}
