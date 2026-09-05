@@ -59,8 +59,8 @@ export default function PlansPage() {
         </button>
       </div>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card card-flush overflow-x-auto rt-wrap">
+        <table className="rt w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3">Plan</th>
@@ -77,13 +77,13 @@ export default function PlansPage() {
             )}
             {plans.map((p) => (
               <tr key={p._id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-3">
+                <td data-card="title" className="px-4 py-3">
                   <p className="font-semibold text-slate-900">{p.name}</p>
                   {p.description && <p className="text-xs text-slate-500">{p.description}</p>}
                 </td>
-                <td className="px-4 py-3 font-medium">{inr(p.price)}</td>
-                <td className="px-4 py-3">{p.durationMonths} month{p.durationMonths > 1 ? 's' : ''}</td>
-                <td className="px-4 py-3">
+                <td data-th="Price" className="px-4 py-3 font-medium">{inr(p.price)}</td>
+                <td data-th="Duration" className="px-4 py-3">{p.durationMonths} month{p.durationMonths > 1 ? 's' : ''}</td>
+                <td data-th="Status" className="px-4 py-3">
                   <button
                     onClick={() => toggleMut.mutate(p)}
                     className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${

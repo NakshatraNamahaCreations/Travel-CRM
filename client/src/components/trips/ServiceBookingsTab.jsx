@@ -233,8 +233,8 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
 
         <div>
           <h4 className="mb-2 text-sm font-semibold text-slate-800">Prices</h4>
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table className="w-full text-xs">
+          <div className="rt-wrap overflow-hidden rounded-xl border border-slate-200">
+            <table className="rt w-full text-xs">
               <thead className="bg-slate-50 text-left text-[11px] font-semibold text-slate-500">
                 <tr>
                   <th className="px-2.5 py-2">Date</th>
@@ -245,12 +245,12 @@ function EditHotelBookingModal({ row, guest, pax, onClose, onSave, saving }) {
               <tbody className="divide-y divide-slate-100">
                 {nightRates.map((n, i) => (
                   <tr key={i}>
-                    <td className="px-2.5 py-2 align-top">
+                    <td data-card="title" className="px-2.5 py-2 align-top">
                       <div className="font-medium text-slate-700">{n.date ? format(new Date(n.date), 'd MMM') : '—'}</div>
                       <div className="text-[10px] text-slate-400">{n.date ? format(new Date(n.date), 'EEEE') : ''}</div>
                     </td>
-                    <td className="px-2.5 py-2 align-top text-slate-600">{money(n.given, row.currency)}</td>
-                    <td className="px-2.5 py-2 align-top">
+                    <td data-th="Given" className="px-2.5 py-2 align-top text-slate-600">{money(n.given, row.currency)}</td>
+                    <td data-th="Booked" className="px-2.5 py-2 align-top">
                       <input type="number" className="input py-1 text-xs" value={n.booked} onChange={(e) => updateNight(i, { booked: e.target.value })} />
                     </td>
                   </tr>
@@ -540,8 +540,8 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
             onDelete={askDelete}
           />
         ) : (
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="rt-wrap card card-flush overflow-x-auto">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">{sub === 'hotel' ? 'Hotel' : 'Service'}</th>
@@ -554,7 +554,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
               <tbody className="divide-y divide-gray-100">
                 {markRepeatStays(rows).map(({ row: r, isRepeat }) => (
                   <tr key={r._id} className="align-top">
-                    <td className="px-4 py-3">
+                    <td data-card="title" className="px-4 py-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="font-medium text-brand-700">{r.name}</div>
@@ -569,7 +569,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td data-th={sub === 'hotel' ? 'Stay and Services' : 'Details'} className="px-4 py-3 text-gray-600">
                       {sub === 'hotel' ? (
                         <>
                           <div className={cn('font-medium', isRepeat ? 'text-amber-700' : 'text-gray-800')}>{stayCheckInOut(r, isRepeat)}</div>
@@ -587,7 +587,7 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                         r.detail && <div className="text-xs text-gray-500">{r.detail}</div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-th="Status" className="px-4 py-3">
                       <StatusSelect row={r} onChange={(patch) => updMut.mutate({ id: r._id, patch })} />
                       <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
                         <User size={10} /> {r.bookedBy?.name || '—'}{r.updatedAt ? ` • ${ago(r.updatedAt)}` : ''}
@@ -598,11 +598,11 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                         </button>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-th="Tag / Comments" className="px-4 py-3">
                       {r.tag && <span className="mb-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{r.tag}</span>}
                       {r.comment ? <div className="text-xs text-gray-500">{r.comment}</div> : (!r.tag && <span className="text-xs text-gray-300">—</span>)}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td data-th="Price" className="px-4 py-3 text-right">
                       <div className="text-[11px] uppercase text-gray-400">Booking</div>
                       <div className="font-semibold text-gray-900">{money(r.price, r.currency)}</div>
                       {sub === 'hotel' && (

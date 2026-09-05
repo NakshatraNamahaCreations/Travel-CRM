@@ -56,8 +56,8 @@ export default function CompaniesListPage() {
         </button>
       </div>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card card-flush overflow-x-auto rt-wrap">
+        <table className="rt w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3">Company</th>
@@ -77,16 +77,16 @@ export default function CompaniesListPage() {
             )}
             {orgs.map((o) => (
               <tr key={o._id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
-                <td className="px-4 py-3">
+                <td data-card="title" className="px-4 py-3">
                   <Link to={`/owner/companies/${o._id}`} className="flex items-center gap-2 font-semibold text-brand-700 hover:underline">
                     <Building2 size={15} className="text-slate-400" /> {o.name}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{o.users ?? 0}</td>
-                <td className="px-4 py-3">{o.subscription?.planName || '—'}</td>
-                <td className="px-4 py-3">{o.subscription?.expiresAt ? fmtDate(o.subscription.expiresAt) : 'Never'}</td>
-                <td className="px-4 py-3"><SubscriptionBadge org={o} /></td>
-                <td className="px-4 py-3 text-slate-500">{fmtDate(o.createdAt)}</td>
+                <td data-th="Users" className="px-4 py-3">{o.users ?? 0}</td>
+                <td data-th="Plan" className="px-4 py-3">{o.subscription?.planName || '—'}</td>
+                <td data-th="Expires" className="px-4 py-3">{o.subscription?.expiresAt ? fmtDate(o.subscription.expiresAt) : 'Never'}</td>
+                <td data-th="Status" className="px-4 py-3"><SubscriptionBadge org={o} /></td>
+                <td data-th="Created" className="px-4 py-3 text-slate-500">{fmtDate(o.createdAt)}</td>
               </tr>
             ))}
           </tbody>

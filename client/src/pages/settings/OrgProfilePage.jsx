@@ -117,8 +117,8 @@ function ListCard({ icon: Icon, title, hint, columns, rows, renderRow, onAdd, on
         <button onClick={onAdd} className="btn-ghost text-sm font-medium text-brand-600"><Plus size={14} /> {addLabel}</button>
       </div>
       <p className="mb-3 text-xs text-gray-400">{hint}</p>
-      <div className="overflow-x-auto rounded-lg border border-gray-100">
-        <table className="w-full text-sm">
+      <div className="rt-wrap overflow-x-auto rounded-lg border border-gray-100">
+        <table className="rt w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
             <tr>{columns.map((c) => <th key={c} className="px-4 py-2.5">{c}</th>)}<th className="w-20" /></tr>
           </thead>
@@ -243,9 +243,9 @@ export default function OrgProfilePage() {
         rows={org.contactAddresses || []}
         renderRow={(r) => (
           <>
-            <td className="px-4 py-3 font-medium text-gray-800">{r.label || '—'}{r.primary && <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">Primary</span>}</td>
-            <td className="whitespace-pre-line px-4 py-3 italic text-gray-600">{r.address}</td>
-            <td className="px-4 py-3 text-gray-500">{[r.phone, r.email].filter(Boolean).join(' · ') || '—'}</td>
+            <td data-card="title" className="px-4 py-3 font-medium text-gray-800">{r.label || '—'}{r.primary && <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">Primary</span>}</td>
+            <td data-th="Address" className="whitespace-pre-line px-4 py-3 italic text-gray-600">{r.address}</td>
+            <td data-th="Contact" className="px-4 py-3 text-gray-500">{[r.phone, r.email].filter(Boolean).join(' · ') || '—'}</td>
           </>
         )}
         onAdd={() => setModal({ kind: 'contact' })}
@@ -260,10 +260,10 @@ export default function OrgProfilePage() {
         rows={org.billingAddresses || []}
         renderRow={(r) => (
           <>
-            <td className="px-4 py-3 font-medium text-gray-800">{r.label || '—'}{r.primary && <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">Primary</span>}</td>
-            <td className="whitespace-pre-line px-4 py-3 italic text-gray-600">{r.address}</td>
-            <td className="px-4 py-3 text-gray-500">{[r.phone, r.email].filter(Boolean).join(' · ') || '—'}</td>
-            <td className="px-4 py-3 text-gray-600">{r.gstin ? `GSTIN: ${r.gstin}` : '—'}</td>
+            <td data-card="title" className="px-4 py-3 font-medium text-gray-800">{r.label || '—'}{r.primary && <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">Primary</span>}</td>
+            <td data-th="Address" className="whitespace-pre-line px-4 py-3 italic text-gray-600">{r.address}</td>
+            <td data-th="Contact" className="px-4 py-3 text-gray-500">{[r.phone, r.email].filter(Boolean).join(' · ') || '—'}</td>
+            <td data-th="Billing Details" className="px-4 py-3 text-gray-600">{r.gstin ? `GSTIN: ${r.gstin}` : '—'}</td>
           </>
         )}
         onAdd={() => setModal({ kind: 'billing' })}
@@ -278,10 +278,10 @@ export default function OrgProfilePage() {
         rows={org.bankAccounts || []}
         renderRow={(r) => (
           <>
-            <td className="px-4 py-3 font-medium text-gray-800">{r.holder || '—'}<span className="ml-1.5 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{r.currency || 'INR'}</span></td>
-            <td className="px-4 py-3 text-gray-600"><b>{r.bank}</b>{r.branch ? <span className="block text-xs text-gray-400">{r.branch}</span> : null}</td>
-            <td className="px-4 py-3 text-gray-600">{r.accNo}</td>
-            <td className="px-4 py-3 text-gray-600">{r.ifsc || '—'}</td>
+            <td data-card="title" className="px-4 py-3 font-medium text-gray-800">{r.holder || '—'}<span className="ml-1.5 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{r.currency || 'INR'}</span></td>
+            <td data-th="Bank / Branch" className="px-4 py-3 text-gray-600"><b>{r.bank}</b>{r.branch ? <span className="block text-xs text-gray-400">{r.branch}</span> : null}</td>
+            <td data-th="Account Number" className="px-4 py-3 text-gray-600">{r.accNo}</td>
+            <td data-th="IFSC" className="px-4 py-3 text-gray-600">{r.ifsc || '—'}</td>
           </>
         )}
         onAdd={() => setModal({ kind: 'bank' })}

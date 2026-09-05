@@ -121,12 +121,12 @@ export default function UploadHotelsPage() {
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             One row per hotel. Leave <b>Group Name</b> / <b>Location</b> blank (or use <b>…</b>) to repeat the previous row's value. <b>Location</b> is "City, State, Country".
           </p>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-xs">
+          <div className="rt-wrap overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="rt w-full text-xs">
               <tbody>
                 {TEMPLATE.map((row, ri) => (
                   <tr key={ri} className={ri === 0 ? 'bg-slate-100 font-semibold text-slate-600' : 'border-t border-slate-100'}>
-                    {row.map((c, ci) => <td key={ci} className="whitespace-nowrap px-3 py-1.5">{c}</td>)}
+                    {row.map((c, ci) => <td key={ci} {...(ri === 0 ? {} : ci === 2 ? { 'data-card': 'title' } : { 'data-th': TEMPLATE[0][ci] })} className="whitespace-nowrap px-3 py-1.5">{c}</td>)}
                   </tr>
                 ))}
               </tbody>

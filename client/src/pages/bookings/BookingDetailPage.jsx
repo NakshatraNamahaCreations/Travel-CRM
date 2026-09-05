@@ -284,8 +284,8 @@ export default function BookingDetailPage() {
                   <Bed size={16} className="text-brand-400" />
                   Accommodation
                 </div>
-                <div className="card card-flush overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="card card-flush overflow-x-auto rt-wrap">
+                  <table className="rt w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
                       <tr>
                         <th className="px-4 py-2">Night</th>
@@ -298,20 +298,20 @@ export default function BookingDetailPage() {
                     <tbody className="divide-y divide-gray-100">
                       {hotelStays.map((h, i) => (
                         <tr key={i} className="align-top">
-                          <td className="px-4 py-2.5">
+                          <td data-th="Night" className="px-4 py-2.5">
                             <div className="font-medium text-gray-800">{ordinal(h.firstNight)}</div>
                             {h.checkIn && (
                               <div className="text-xs text-gray-400">{format(h.checkIn, 'd MMM')}</div>
                             )}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td data-card="title" className="px-4 py-2.5">
                             <div className="font-medium text-brand-700">{h.hotelName}</div>
                             <div className="text-xs text-gray-400">
                               {h.city}{h.stars ? `, ${h.stars} Star` : ''}
                             </div>
                           </td>
-                          <td className="px-4 py-2.5 text-gray-600">{h.mealPlan || '—'}</td>
-                          <td className="px-4 py-2.5">
+                          <td data-th="Meal" className="px-4 py-2.5 text-gray-600">{h.mealPlan || '—'}</td>
+                          <td data-th="Rooms" className="px-4 py-2.5">
                             <div className="text-gray-800">
                               {h.rooms ? `${h.rooms} ` : ''}{h.roomType || '—'}
                             </div>
@@ -322,7 +322,7 @@ export default function BookingDetailPage() {
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-right">
+                          <td data-th="Price" className="px-4 py-2.5 text-right">
                             <div className="font-medium text-gray-900">{money(h.amount, cur)}</div>
                             <div className="text-xs text-gray-400">/ N/A</div>
                           </td>

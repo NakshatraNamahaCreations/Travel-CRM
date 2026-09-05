@@ -112,8 +112,8 @@ export default function TasksPage() {
               <button onClick={refresh} className="btn-secondary mt-4"><RefreshCw size={15} /> Refresh Results</button>
             </div>
           ) : (
-            <div className="card card-flush overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="card card-flush overflow-x-auto rt-wrap">
+              <table className="rt w-full text-sm">
                 <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                   <tr>
                     <th className="px-4 py-3">Due At</th>
@@ -129,20 +129,20 @@ export default function TasksPage() {
                 <tbody className="divide-y divide-gray-100">
                   {items.map((t) => (
                     <tr key={t._id} className={cn('hover:bg-gray-50', t.isResolved && 'opacity-60')}>
-                      <td className="px-4 py-3 text-gray-600">{dt(t.dueDate)}</td>
-                      <td className="px-4 py-3 text-gray-800">{t.body}</td>
-                      <td className="px-4 py-3 text-gray-600">{t.query?.source?.name || '—'}</td>
-                      <td className="px-4 py-3">
+                      <td data-th="Due At" className="px-4 py-3 text-gray-600">{dt(t.dueDate)}</td>
+                      <td data-card="title" className="px-4 py-3 text-gray-800">{t.body}</td>
+                      <td data-th="Trip Source" className="px-4 py-3 text-gray-600">{t.query?.source?.name || '—'}</td>
+                      <td data-th="Guest" className="px-4 py-3">
                         <div className="font-medium text-gray-900">{t.query?.guest?.name || '—'}</div>
                         {t.query?.guest?.phones?.[0] && (
                           <div className="flex items-center gap-1 text-xs text-gray-400"><Phone size={11} /> {paxLabel(t.query?.pax)}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-th="For" className="px-4 py-3">
                         {t.query ? <Link to={`/trips/${t.query._id}`} className="font-medium text-brand-600 hover:underline">Trip#{tripNo(t.query.queryNumber)}</Link> : '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{t.createdBy?.name || '—'}{t.createdAt ? <span className="text-xs text-gray-400"> on {format(new Date(t.createdAt), 'd MMM')}</span> : ''}</td>
-                      <td className="px-4 py-3 text-gray-600">{t.assignedTo?.name || '—'}</td>
+                      <td data-th="Created by" className="px-4 py-3 text-gray-600">{t.createdBy?.name || '—'}{t.createdAt ? <span className="text-xs text-gray-400"> on {format(new Date(t.createdAt), 'd MMM')}</span> : ''}</td>
+                      <td data-th="Assigned To" className="px-4 py-3 text-gray-600">{t.assignedTo?.name || '—'}</td>
                       <td className="px-4 py-3 text-right">
                         {!t.isResolved
                           ? <RowMenu onResolve={() => resolveMut.mutate(t._id)} />

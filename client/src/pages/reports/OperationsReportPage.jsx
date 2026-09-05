@@ -117,9 +117,9 @@ export default function OperationsReportPage() {
         <button onClick={exportCsv} disabled={!items.length} className="btn-primary text-sm"><Download size={15} /> Export CSV</button>
       </div>
 
-      <div className="card card-flush overflow-x-auto">
+      <div className="card card-flush overflow-x-auto rt-wrap">
         {cfg.kind === 'followups' ? (
-          <table className="w-full text-sm">
+          <table className="rt w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
               <tr><th className="px-4 py-3">Due</th><th className="px-4 py-3">Task</th><th className="px-4 py-3">Trip</th><th className="px-4 py-3">Assigned To</th><th className="px-4 py-3">Created By</th></tr>
             </thead>
@@ -130,19 +130,19 @@ export default function OperationsReportPage() {
                 <tr><td colSpan={5} className="py-12 text-center text-slate-400">No follow-ups for this period.</td></tr>
               ) : items.map((i) => (
                 <tr key={i._id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-slate-600">{i.dueDate ? format(new Date(i.dueDate), 'd MMM, h:mm a') : '—'}</td>
-                  <td className="px-4 py-3 font-medium text-slate-800">{i.body}</td>
-                  <td className="px-4 py-3">
+                  <td data-th="Due" className="px-4 py-3 text-slate-600">{i.dueDate ? format(new Date(i.dueDate), 'd MMM, h:mm a') : '—'}</td>
+                  <td data-card="title" className="px-4 py-3 font-medium text-slate-800">{i.body}</td>
+                  <td data-th="Trip" className="px-4 py-3">
                     {i.query ? <Link to={`/trips/${i.query._id}`} className="text-brand-600 hover:underline">#{tripNo(i.query.queryNumber)} · {guestName(i.query.guest)}</Link> : '—'}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{i.assignedTo?.name || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">{i.createdBy?.name || '—'}</td>
+                  <td data-th="Assigned To" className="px-4 py-3 text-slate-600">{i.assignedTo?.name || '—'}</td>
+                  <td data-th="Created By" className="px-4 py-3 text-slate-500">{i.createdBy?.name || '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <table className="w-full text-sm">
+          <table className="rt w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-4 py-3">Id</th><th className="px-4 py-3">Guest</th><th className="px-4 py-3">Basic Details</th>
@@ -159,22 +159,22 @@ export default function OperationsReportPage() {
                 <tr><td colSpan={9} className="py-12 text-center text-slate-400">No trips for this period.</td></tr>
               ) : items.map((i) => (
                 <tr key={i._id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3"><Link to={`/bookings/${i._id}`} className="font-semibold text-brand-600 hover:underline">{i.bookingNumber}</Link></td>
-                  <td className="px-4 py-3">
+                  <td data-th="Id" className="px-4 py-3"><Link to={`/bookings/${i._id}`} className="font-semibold text-brand-600 hover:underline">{i.bookingNumber}</Link></td>
+                  <td data-card="title" className="px-4 py-3">
                     <div className="font-medium text-slate-900">{guestName(i.guest)}</div>
                     {i.guest?.phones?.[0] && <div className="flex items-center gap-1 text-xs text-slate-400"><Phone size={10} /> +{i.guest.phones[0].countryCode} {i.guest.phones[0].number}</div>}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td data-th="Basic Details" className="px-4 py-3 text-slate-600">
                     {(i.destinations || []).map((d) => d.name).join(', ') || '—'}
                     <span className="text-slate-400"> • {i.nights}N</span>
                     <span className={cn('ml-2 rounded px-1.5 py-0.5 text-[11px] font-medium', i.status === 'on_trip' ? 'bg-purple-50 text-purple-700' : i.status === 'completed' ? 'bg-gray-100 text-gray-600' : 'bg-green-50 text-green-700')}>{i.status?.replace('_', ' ')}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{i.owner?.name || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">{fdate(i.startDate)}</td>
-                  <td className="px-4 py-3 text-slate-500">{fdate(i.endDate)}</td>
-                  {showMoney && <td className="px-4 py-3 text-right text-slate-700">{money(i.totalAmount, i.currency)}</td>}
-                  {showMoney && <td className="px-4 py-3 text-right text-slate-700">{money(i.paidAmount, i.currency)}</td>}
-                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{money(showMoney ? i.balanceDue : i.totalAmount, i.currency)}</td>
+                  <td data-th="Sales Person" className="px-4 py-3 text-slate-600">{i.owner?.name || '—'}</td>
+                  <td data-th="Start" className="px-4 py-3 text-slate-500">{fdate(i.startDate)}</td>
+                  <td data-th="End" className="px-4 py-3 text-slate-500">{fdate(i.endDate)}</td>
+                  {showMoney && <td data-th="Total" className="px-4 py-3 text-right text-slate-700">{money(i.totalAmount, i.currency)}</td>}
+                  {showMoney && <td data-th="Paid" className="px-4 py-3 text-right text-slate-700">{money(i.paidAmount, i.currency)}</td>}
+                  <td data-th={showMoney ? 'Balance Due' : 'Amount'} className="px-4 py-3 text-right font-semibold text-slate-900">{money(showMoney ? i.balanceDue : i.totalAmount, i.currency)}</td>
                 </tr>
               ))}
             </tbody>

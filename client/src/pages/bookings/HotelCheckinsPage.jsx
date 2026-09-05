@@ -156,8 +156,8 @@ export default function HotelCheckinsPage() {
         ) : !stays.length ? (
           <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-slate-400">No check-ins in this {intervalType}.</div>
         ) : (
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Check In - Out</th>
@@ -175,17 +175,17 @@ export default function HotelCheckinsPage() {
                   const guestName = [guest?.salutation, guest?.name].filter(Boolean).join(' ') || 'Guest';
                   return (
                     <tr key={s._id} className="align-top hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-800">{dt(s.checkIn)} – {dt(s.checkOut)} <span className="text-xs font-normal text-slate-400">({s.nights}N)</span></td>
-                      <td className="px-4 py-3">
+                      <td data-th="Check In - Out" className="px-4 py-3 font-medium text-slate-800">{dt(s.checkIn)} – {dt(s.checkOut)} <span className="text-xs font-normal text-slate-400">({s.nights}N)</span></td>
+                      <td data-card="title" className="px-4 py-3">
                         <div className="flex items-center gap-2"><Hotel size={14} className="shrink-0 text-brand-400" /><span className="font-medium text-brand-700">{s.hotelName}</span></div>
                         {s.city && <div className="text-xs text-slate-400">{s.city}{s.stars ? ` • ${s.stars}★` : ''}</div>}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-th="Trip Info" className="px-4 py-3">
                         <Link to={`/trips/${s.query?._id}`} className="flex items-center gap-1 text-brand-600 hover:underline"><User size={11} />{guestName}</Link>
                         <div className="text-xs text-slate-400">#{tripNo(s.query?.queryNumber)}</div>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{s.rooms || 1} {s.roomType || 'Room'}{s.mealPlan ? <div className="text-xs text-slate-400">{s.mealPlan}</div> : null}</td>
-                      <td className="px-4 py-3">
+                      <td data-th="Room/Services" className="px-4 py-3 text-slate-700">{s.rooms || 1} {s.roomType || 'Room'}{s.mealPlan ? <div className="text-xs text-slate-400">{s.mealPlan}</div> : null}</td>
+                      <td data-th="Status" className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => setStatusRow(s)}
@@ -200,13 +200,13 @@ export default function HotelCheckinsPage() {
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-th="Tag/Comments" className="px-4 py-3">
                         <button onClick={() => setTagRow(s)} className="text-left">
                           {s.tag && <span className="mb-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{s.tag}</span>}
                           {s.comment ? <div className="text-xs text-slate-500">{s.comment}</div> : (!s.tag && <span className="text-xs text-brand-500 hover:underline">+ Tag</span>)}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td data-th="Price" className="px-4 py-3 text-right">
                         <div className="text-[11px] uppercase text-gray-400">Booking</div>
                         <div className="font-semibold text-gray-900">{money(s.price, s.currency)}</div>
                         <div className="mt-1 text-[11px] uppercase text-gray-400">Amount Paid</div>

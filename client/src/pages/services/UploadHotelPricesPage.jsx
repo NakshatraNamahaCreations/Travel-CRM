@@ -19,6 +19,9 @@ const TEMPLATE = [
   ['Golden Hotels', 'Gangtok, Sikkim, India', 'Golden Star Continental', '3', 'Child without Bed (CNB)', '2000', '2400', '2500', '2800'],
 ];
 
+// Short per-column labels for the mobile card view of the preview table.
+const COL_LABELS = ['Group Name', 'Location', 'Name', 'Star', 'Room', 'Season 1 CP', 'Season 1 MAP', 'Season 2 CP', 'Season 2 MAP'];
+
 export default function UploadHotelPricesPage() {
   const navigate = useNavigate();
   const [destinations, setDestinations] = useState([]);
@@ -128,12 +131,12 @@ export default function UploadHotelPricesPage() {
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for hotel prices, please follow this format. Each hotel group has a <b>Group Name, Location, Name, Star</b>, then a <b>Room</b> column, followed by one block of meal-plan columns (CP / MAP / AP …) per season date-range. Use <b>Extras</b> rows for Extra Bed (Adult/Child) and Child without Bed (CNB). Re-uploading a file refreshes that hotel's prices.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-xs">
+          <div className="rt-wrap overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="rt w-full text-xs">
               <tbody>
                 {TEMPLATE.map((row, ri) => (
                   <tr key={ri} className={ri < 2 ? 'bg-slate-100 font-semibold text-slate-600' : 'border-t border-slate-100'}>
-                    {row.map((cell, ci) => <td key={ci} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
+                    {row.map((cell, ci) => <td key={ci} {...(ri < 2 ? {} : ci === 2 ? { 'data-card': 'title' } : { 'data-th': COL_LABELS[ci] })} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
                   </tr>
                 ))}
               </tbody>

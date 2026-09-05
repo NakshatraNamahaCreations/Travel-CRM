@@ -16,6 +16,9 @@ const TEMPLATE = [
   ['103', 'Gangtok (GTK)', 'Pelling (PLG)', 'Transfer', '', '06:00', '', 'You can also visit Zero Point…', '2500', '2800', '3000', '4000'],
 ];
 
+// Short per-column labels for the mobile card view of the preview table.
+const COL_LABELS = ['Duty Code', 'A', 'B', 'Service', 'Distance', 'Start Time', 'Duration(mins)', 'Day Schedule', 'Season 1 Wagon R (3 Pax)', 'Season 1 Innova/Xylo', 'Season 2 Wagon R', 'Season 2 Toyota'];
+
 export default function UploadTransportPricesPage() {
   const navigate = useNavigate();
   const [destinations, setDestinations] = useState([]);
@@ -123,12 +126,12 @@ export default function UploadTransportPricesPage() {
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for transport service prices, follow this format. Each row has a <b>Duty Code</b>, locations (<b>A → B</b>), <b>Service</b>, <b>Distance, Start Time, Duration, Day Schedule</b>, then one block of <b>vehicle-type</b> columns per season date-range. Re-uploading a file refreshes that supplier's prices.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-xs">
+          <div className="rt-wrap overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="rt w-full text-xs">
               <tbody>
                 {TEMPLATE.map((row, ri) => (
                   <tr key={ri} className={ri < 2 ? 'bg-slate-100 font-semibold text-slate-600' : 'border-t border-slate-100'}>
-                    {row.map((cell, ci) => <td key={ci} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
+                    {row.map((cell, ci) => <td key={ci} {...(ri < 2 ? {} : ci === 0 ? { 'data-card': 'title' } : { 'data-th': COL_LABELS[ci] })} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
                   </tr>
                 ))}
               </tbody>

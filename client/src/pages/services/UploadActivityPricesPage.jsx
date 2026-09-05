@@ -16,6 +16,9 @@ const TEMPLATE = [
   ['Havelock To Neil Island', 'Private Catamaran Ferry', '', '', '-', '120', '-', '2100', '3200', '2500', '3500'],
 ];
 
+// Short per-column labels for the mobile card view of the preview table.
+const COL_LABELS = ['Name', 'Service', 'Description', 'Open Time', 'Close Time', 'Duration(Mins)', 'Slots', 'Season 1 Adult', 'Season 1 Child (6-12)', 'Season 2 Adult', 'Season 2 Child (6-12)'];
+
 export default function UploadActivityPricesPage() {
   const navigate = useNavigate();
   const [destinations, setDestinations] = useState([]);
@@ -123,12 +126,12 @@ export default function UploadActivityPricesPage() {
           <p className="mb-3 max-w-3xl text-sm text-slate-500">
             When creating your CSV file for travel activity prices, follow this format. Each row has a <b>Name</b>, <b>Service</b> (ticket/package), optional <b>Description, Open Time, Close Time, Duration, Slots</b>, then one block of <b>Adult / Child</b> columns per season date-range. Leave the Name blank to add another service under the previous activity.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-xs">
+          <div className="rt-wrap overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="rt w-full text-xs">
               <tbody>
                 {TEMPLATE.map((row, ri) => (
                   <tr key={ri} className={ri < 2 ? 'bg-slate-100 font-semibold text-slate-600' : 'border-t border-slate-100'}>
-                    {row.map((cell, ci) => <td key={ci} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
+                    {row.map((cell, ci) => <td key={ci} {...(ri < 2 ? {} : ci === 0 ? { 'data-card': 'title' } : { 'data-th': COL_LABELS[ci] })} className="whitespace-nowrap px-3 py-1.5">{cell}</td>)}
                   </tr>
                 ))}
               </tbody>

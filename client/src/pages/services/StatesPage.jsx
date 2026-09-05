@@ -86,8 +86,8 @@ export default function StatesPage() {
 
       <p className="mb-2 text-sm text-slate-500">Showing {items.length} item{items.length !== 1 ? 's' : ''}</p>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="rt-wrap card card-flush overflow-x-auto">
+        <table className="rt w-full text-sm">
           <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
             <tr>
               <th className="px-4 py-3">Name</th>
@@ -105,9 +105,9 @@ export default function StatesPage() {
               <tr><td colSpan={4} className="py-12 text-center text-slate-400">No states added yet.</td></tr>
             ) : items.map((s) => (
               <tr key={s._id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
-                <td className="px-4 py-3 text-slate-600">{s.country || '—'}</td>
-                <td className="px-4 py-3 text-slate-500">{s.description || '—'}</td>
+                <td data-card="title" className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
+                <td data-th="Country" className="px-4 py-3 text-slate-600">{s.country || '—'}</td>
+                <td data-th="Description" className="px-4 py-3 text-slate-500">{s.description || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-3">
                     <button onClick={() => setEditItem(s)} className="text-slate-400 hover:text-slate-700"><Pencil size={14} /></button>

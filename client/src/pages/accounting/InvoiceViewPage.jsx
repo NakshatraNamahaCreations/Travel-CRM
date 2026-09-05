@@ -54,17 +54,17 @@ export default function InvoiceViewPage() {
           </div>
         </div>
 
-        <table className="mt-6 w-full text-sm">
+        <table className="rt mt-6 w-full text-sm">
           <thead className="border-b border-gray-300 text-left text-xs uppercase text-gray-400">
             <tr><th className="py-2">Description</th><th className="text-center">Qty</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr>
           </thead>
           <tbody>
             {(b.costItems || []).map((it) => (
               <tr key={it._id} className="border-b border-gray-100">
-                <td className="py-2"><span className="font-medium text-gray-900">{it.label}</span>{it.meta && <span className="ml-1 text-xs text-gray-400">({it.meta})</span>}</td>
-                <td className="text-center text-gray-600">{it.qty}</td>
-                <td className="text-right text-gray-600">{money(it.rate, cur)}</td>
-                <td className="text-right font-medium">{money(it.amount, cur)}</td>
+                <td data-card="title" className="py-2"><span className="font-medium text-gray-900">{it.label}</span>{it.meta && <span className="ml-1 text-xs text-gray-400">({it.meta})</span>}</td>
+                <td data-th="Qty" className="text-center text-gray-600">{it.qty}</td>
+                <td data-th="Rate" className="text-right text-gray-600">{money(it.rate, cur)}</td>
+                <td data-th="Amount" className="text-right font-medium">{money(it.amount, cur)}</td>
               </tr>
             ))}
           </tbody>

@@ -215,7 +215,7 @@ function InvoicePreview({ inv, queryNumber, org }) {
       </div>
       <hr className="my-4 border-brand-900/30" />
       {inv.overview && <p className="mb-2">{inv.overview}</p>}
-      <table className="w-full border-collapse">
+      <table className="rt w-full border-collapse">
         <thead>
           <tr>
             <th className="border border-blue-200 bg-blue-100 px-2.5 py-1.5 text-left text-[11.5px] tracking-wider">S.NO.</th>
@@ -226,16 +226,16 @@ function InvoicePreview({ inv, queryNumber, org }) {
         <tbody>
           {(inv.items || []).map((it, i) => (
             <tr key={i}>
-              <td className="w-12 border border-slate-200 px-2.5 py-2 align-top">{i + 1}.</td>
-              <td className="border border-slate-200 px-2.5 py-2 align-top">
+              <td data-th="S.No." className="w-12 border border-slate-200 px-2.5 py-2 align-top">{i + 1}.</td>
+              <td data-card="title" className="border border-slate-200 px-2.5 py-2 align-top">
                 <span className="whitespace-pre-line">{it.particular}</span>
                 {it.hsn && <p className="mt-0.5 text-[11px] text-gray-400">HSN/SAC: {it.hsn}</p>}
               </td>
-              <td className="border border-slate-200 px-2.5 py-2 text-right align-top">{inr2(it.total ?? (it.qty || 1) * (it.amount || 0))}</td>
+              <td data-th={`Amount (${inv.currency || 'INR'})`} className="border border-slate-200 px-2.5 py-2 text-right align-top">{inr2(it.total ?? (it.qty || 1) * (it.amount || 0))}</td>
             </tr>
           ))}
           <tr>
-            <td colSpan={2} className="border border-slate-200 px-2.5 py-1.5 text-right font-extrabold">Total ({inv.currency || 'INR'})</td>
+            <td data-card="title" colSpan={2} className="border border-slate-200 px-2.5 py-1.5 text-right font-extrabold">Total ({inv.currency || 'INR'})</td>
             <td className="border border-slate-200 px-2.5 py-1.5 text-right font-extrabold">{inr2(inv.total)}</td>
           </tr>
         </tbody>
@@ -367,25 +367,25 @@ function ProformaForm({ initial, org, pending, onCancel, onSave }) {
 
       <div>
         <p className="mb-2 font-semibold text-gray-900">Particulars</p>
-        <div className="card card-flush overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="rt-wrap card card-flush overflow-x-auto">
+          <table className="rt w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <tr><th className="px-4 py-2.5 w-10">#</th><th className="px-4 py-2.5">Particular</th><th className="px-4 py-2.5 w-24">Qty</th><th className="px-4 py-2.5 w-36">Amount (INR)</th><th className="px-4 py-2.5 w-40 text-right">Total (INR)</th><th className="w-10" /></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {form.items.map((it, i) => (
                 <tr key={i} className="align-top">
-                  <td className="px-4 py-3 text-gray-500">{i + 1}</td>
-                  <td className="px-4 py-3">
+                  <td data-card="title" className="px-4 py-3 text-gray-500">{i + 1}</td>
+                  <td data-th="Particular" className="px-4 py-3">
                     <textarea rows={3} className="input" value={it.particular} onChange={(e) => setItem(i, { particular: e.target.value })} />
                     <div className="mt-1.5 flex items-center justify-end gap-2">
                       <span className="text-xs font-medium text-gray-400">HSN/SAC</span>
                       <input className="input w-36" placeholder="e.g. 998555" value={it.hsn || ''} onChange={(e) => setItem(i, { hsn: e.target.value })} />
                     </div>
                   </td>
-                  <td className="px-4 py-3"><input type="number" min="1" className="input" value={it.qty} onChange={(e) => setItem(i, { qty: e.target.value })} /></td>
-                  <td className="px-4 py-3"><input type="number" className="input" value={it.amount} onChange={(e) => setItem(i, { amount: e.target.value })} /></td>
-                  <td className="px-4 py-3 text-right font-bold text-gray-900">{((Number(it.qty) || 0) * (Number(it.amount) || 0)).toLocaleString('en-IN')}</td>
+                  <td data-th="Qty" className="px-4 py-3"><input type="number" min="1" className="input" value={it.qty} onChange={(e) => setItem(i, { qty: e.target.value })} /></td>
+                  <td data-th="Amount (INR)" className="px-4 py-3"><input type="number" className="input" value={it.amount} onChange={(e) => setItem(i, { amount: e.target.value })} /></td>
+                  <td data-th="Total (INR)" className="px-4 py-3 text-right font-bold text-gray-900">{((Number(it.qty) || 0) * (Number(it.amount) || 0)).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-3"><button onClick={() => rmItem(i)} className="text-gray-300 hover:text-red-500">✕</button></td>
                 </tr>
               ))}
@@ -750,22 +750,22 @@ export function ProfitSection({ queryId, onGoToPayments }) {
       )}
 
       {showNumbers && active.length > 0 && (
-        <div className="card card-flush mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="rt-wrap card card-flush mt-3 overflow-x-auto">
+          <table className="rt w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
               <tr><th className="px-4 py-2.5">Service</th><th className="px-4 py-2.5">Kind</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5 text-right">Cost (INR)</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {active.map((s) => (
                 <tr key={s._id}>
-                  <td className="px-4 py-2.5 font-medium text-gray-800">{s.name || '—'}{s.detail ? <span className="block text-xs font-normal text-gray-400">{s.detail}</span> : null}</td>
-                  <td className="px-4 py-2.5 capitalize text-gray-600">{s.kind}</td>
-                  <td className="px-4 py-2.5"><span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', s.status === 'booked' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700')}>{s.status.replace('_', ' ')}</span></td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{(s.price || 0).toLocaleString('en-IN')}</td>
+                  <td data-card="title" className="px-4 py-2.5 font-medium text-gray-800">{s.name || '—'}{s.detail ? <span className="block text-xs font-normal text-gray-400">{s.detail}</span> : null}</td>
+                  <td data-th="Kind" className="px-4 py-2.5 capitalize text-gray-600">{s.kind}</td>
+                  <td data-th="Status" className="px-4 py-2.5"><span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', s.status === 'booked' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700')}>{s.status.replace('_', ' ')}</span></td>
+                  <td data-th="Cost (INR)" className="px-4 py-2.5 text-right font-semibold text-gray-900">{(s.price || 0).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
               <tr className="bg-slate-50">
-                <td colSpan={3} className="px-4 py-2.5 text-right font-bold text-gray-700">Booked Cost</td>
+                <td data-card="title" colSpan={3} className="px-4 py-2.5 text-right font-bold text-gray-700">Booked Cost</td>
                 <td className="px-4 py-2.5 text-right font-bold text-gray-900">{bookedCost.toLocaleString('en-IN')}</td>
               </tr>
             </tbody>
@@ -780,16 +780,16 @@ export function ProfitSection({ queryId, onGoToPayments }) {
           <p className="text-sm text-gray-500">There are no items in this list.</p>
         </div>
       ) : (
-        <div className="card card-flush overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="rt-wrap card card-flush overflow-x-auto">
+          <table className="rt w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
               <tr><th className="px-4 py-2.5">Date</th><th className="px-4 py-2.5">Type</th><th className="px-4 py-2.5">Reference</th><th className="px-4 py-2.5 text-right">Amount (INR)</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {transactions.map((r) => (
                 <tr key={r._id}>
-                  <td className="px-4 py-2.5 text-gray-600">{dt(r.paidOn || r.dueDate)}</td>
-                  <td className="px-4 py-2.5">
+                  <td data-card="title" className="px-4 py-2.5 text-gray-600">{dt(r.paidOn || r.dueDate)}</td>
+                  <td data-th="Type" className="px-4 py-2.5">
                     <span className={cn('rounded px-2 py-0.5 text-xs font-medium', r.direction === 'incoming' ? 'bg-green-50 text-green-700' : 'bg-rose-50 text-rose-700')}>
                       {r.direction === 'incoming' ? 'Received' : 'Paid out'}
                     </span>
@@ -800,8 +800,8 @@ export function ProfitSection({ queryId, onGoToPayments }) {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-500">{r.reference || '—'}</td>
-                  <td className={cn('px-4 py-2.5 text-right font-semibold', r.direction === 'incoming' ? 'text-green-700' : 'text-rose-700')}>
+                  <td data-th="Reference" className="px-4 py-2.5 text-gray-500">{r.reference || '—'}</td>
+                  <td data-th="Amount (INR)" className={cn('px-4 py-2.5 text-right font-semibold', r.direction === 'incoming' ? 'text-green-700' : 'text-rose-700')}>
                     {r.direction === 'incoming' ? '+' : '−'} {inr(r.paidAmount || r.amount)}
                   </td>
                 </tr>

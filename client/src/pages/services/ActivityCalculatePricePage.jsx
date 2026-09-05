@@ -58,18 +58,18 @@ function CalcBlock({ block, setBlock, onRemove, onTotal, date, canRemove }) {
           ) : !configs.length ? (
             <p className="text-sm text-amber-600">No rates found for this activity{date ? ' on the chosen date' : ''}.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="rt w-full text-sm">
               <thead className="text-left text-xs text-slate-400"><tr><th className="py-1">Ticket</th><th>Config</th><th>Qty</th><th>Rate</th><th>Given</th></tr></thead>
               <tbody>
                 {configs.map((r) => {
                   const l = lineFor(r);
                   return (
                     <tr key={r._id} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-2">{r.service || '—'}</td>
-                      <td className="pr-2 text-slate-500">{r.config || '—'}</td>
-                      <td className="pr-2"><input type="number" min="0" className="input w-16 px-2 py-1" value={l.qty} onChange={(e) => setLine(r._id, { qty: e.target.value })} /></td>
-                      <td className="pr-2 tabular-nums text-slate-500">{money(r.price, r.currency)}</td>
-                      <td><input type="number" className="input w-24 px-2 py-1" value={l.given} onChange={(e) => setLine(r._id, { given: e.target.value })} /></td>
+                      <td data-card="title" className="py-1.5 pr-2">{r.service || '—'}</td>
+                      <td data-th="Config" className="pr-2 text-slate-500">{r.config || '—'}</td>
+                      <td data-th="Qty" className="pr-2"><input type="number" min="0" className="input w-16 px-2 py-1" value={l.qty} onChange={(e) => setLine(r._id, { qty: e.target.value })} /></td>
+                      <td data-th="Rate" className="pr-2 tabular-nums text-slate-500">{money(r.price, r.currency)}</td>
+                      <td data-th="Given"><input type="number" className="input w-24 px-2 py-1" value={l.given} onChange={(e) => setLine(r._id, { given: e.target.value })} /></td>
                     </tr>
                   );
                 })}

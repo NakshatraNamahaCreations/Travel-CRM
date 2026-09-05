@@ -67,8 +67,8 @@ export default function TripCheckInOutReportPage() {
             <button onClick={() => refetch()} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
           </div>
 
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Id</th>
@@ -89,15 +89,15 @@ export default function TripCheckInOutReportPage() {
                   <tr><td colSpan={9} className="py-12 text-center text-slate-400">No trips in this period.</td></tr>
                 ) : items.map((r) => (
                   <tr key={r._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3"><Link to={`/bookings/${r._id}`} className="font-medium text-brand-700 hover:underline">{r.bookingNumber}</Link></td>
-                    <td className="px-4 py-3 text-slate-700">{r.guest?.name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{fmtD(r.startDate)}</td>
-                    <td className="px-4 py-3 text-slate-600">{fmtD(r.endDate)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{money(r.package, r.currency)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-500">{r.tax ? money(r.tax, r.currency) : 'exc'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{r.bookings ? money(r.bookings, r.currency) : 'N/A'}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{money(r.profit, r.currency)}</td>
-                    <td className={cn('px-4 py-3 text-right tabular-nums', r.profitPct < 0 ? 'text-rose-600' : 'text-slate-700')}>{r.profitPct}%</td>
+                    <td data-card="title" className="px-4 py-3"><Link to={`/bookings/${r._id}`} className="font-medium text-brand-700 hover:underline">{r.bookingNumber}</Link></td>
+                    <td data-th="Guest" className="px-4 py-3 text-slate-700">{r.guest?.name || '—'}</td>
+                    <td data-th="Start" className="px-4 py-3 text-slate-600">{fmtD(r.startDate)}</td>
+                    <td data-th="End" className="px-4 py-3 text-slate-600">{fmtD(r.endDate)}</td>
+                    <td data-th="Package" className="px-4 py-3 text-right tabular-nums">{money(r.package, r.currency)}</td>
+                    <td data-th="Tax (Estm.)" className="px-4 py-3 text-right tabular-nums text-slate-500">{r.tax ? money(r.tax, r.currency) : 'exc'}</td>
+                    <td data-th="Bookings" className="px-4 py-3 text-right tabular-nums">{r.bookings ? money(r.bookings, r.currency) : 'N/A'}</td>
+                    <td data-th="Profit (Estm.)" className="px-4 py-3 text-right font-semibold tabular-nums">{money(r.profit, r.currency)}</td>
+                    <td data-th="Profit %" className={cn('px-4 py-3 text-right tabular-nums', r.profitPct < 0 ? 'text-rose-600' : 'text-slate-700')}>{r.profitPct}%</td>
                   </tr>
                 ))}
               </tbody>

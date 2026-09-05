@@ -158,16 +158,16 @@ export default function ConversionPage() {
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50"><Bed size={14} className="text-brand-600" /></span>
                   <p className="text-sm font-semibold text-slate-800">Accommodation</p>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <table className="w-full text-sm">
+                <div className="rt-wrap overflow-hidden rounded-lg border border-slate-100">
+                  <table className="rt w-full text-sm">
                     <thead className="text-left text-xs text-slate-400"><tr><th className="px-3 py-2 font-medium">Night</th><th className="px-3 py-2 font-medium">Hotel</th><th className="px-3 py-2 font-medium">Meal</th><th className="px-3 py-2 text-right font-medium">Price</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {groupHotelOptions(pkg.hotels).map(({ base, opts }, i) => {
                         const billed = Math.max(...opts.map((o) => o.amount || 0));
                         return (
                           <tr key={i}>
-                            <td className="px-3 py-2 text-slate-600">{(base.nights || []).map(ord).join(', ') || '—'}</td>
-                            <td className="px-3 py-2">
+                            <td data-th="Night" className="px-3 py-2 text-slate-600">{(base.nights || []).map(ord).join(', ') || '—'}</td>
+                            <td data-card="title" className="px-3 py-2">
                               {opts.map((o, k) => (
                                 <span key={k}>
                                   {k > 0 && <span className="mx-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
@@ -176,8 +176,8 @@ export default function ConversionPage() {
                               ))}
                               <span className="text-xs text-slate-400"> · {[...new Set(opts.map((o) => o.city).filter(Boolean))].join(' / ')}</span>
                             </td>
-                            <td className="px-3 py-2 text-slate-600">{[...new Set(opts.map((o) => o.mealPlan).filter(Boolean))].join(' / ') || '—'}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{billed ? inr(billed) : '—'}</td>
+                            <td data-th="Meal" className="px-3 py-2 text-slate-600">{[...new Set(opts.map((o) => o.mealPlan).filter(Boolean))].join(' / ') || '—'}</td>
+                            <td data-th="Price" className="px-3 py-2 text-right font-semibold text-slate-800">{billed ? inr(billed) : '—'}</td>
                           </tr>
                         );
                       })}
@@ -194,16 +194,16 @@ export default function ConversionPage() {
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50"><Bed size={14} className="text-brand-600" /></span>
                   <p className="text-sm font-semibold text-slate-800">Hotel Special Inclusions</p>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <table className="w-full text-sm">
+                <div className="rt-wrap overflow-hidden rounded-lg border border-slate-100">
+                  <table className="rt w-full text-sm">
                     <thead className="text-left text-xs text-slate-400"><tr><th className="px-3 py-2 font-medium">Night</th><th className="px-3 py-2 font-medium">Hotel</th><th className="px-3 py-2 font-medium">Service</th><th className="px-3 py-2 text-right font-medium">Price</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {pkg.inclusions.map((inc, i) => (
                         <tr key={i}>
-                          <td className="px-3 py-2 text-slate-600">{inc.night ? ord(inc.night) : '—'}</td>
-                          <td className="px-3 py-2 font-medium text-slate-900">{inc.hotelName || '—'}</td>
-                          <td className="px-3 py-2 text-slate-700">{inc.service}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-800">{inr(inc.price)}</td>
+                          <td data-th="Night" className="px-3 py-2 text-slate-600">{inc.night ? ord(inc.night) : '—'}</td>
+                          <td data-th="Hotel" className="px-3 py-2 font-medium text-slate-900">{inc.hotelName || '—'}</td>
+                          <td data-card="title" className="px-3 py-2 text-slate-700">{inc.service}</td>
+                          <td data-th="Price" className="px-3 py-2 text-right font-semibold text-slate-800">{inr(inc.price)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -219,15 +219,15 @@ export default function ConversionPage() {
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50"><Star size={14} className="text-brand-600" /></span>
                   <p className="text-sm font-semibold text-slate-800">Other Special Inclusions</p>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <table className="w-full text-sm">
+                <div className="rt-wrap overflow-hidden rounded-lg border border-slate-100">
+                  <table className="rt w-full text-sm">
                     <thead className="text-left text-xs text-slate-400"><tr><th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Service</th><th className="px-3 py-2 text-right font-medium">Price</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {pkg.extras.map((e, i) => (
                         <tr key={i}>
-                          <td className="px-3 py-2 text-slate-600">{e.date ? format(new Date(e.date), 'd MMM') : '—'}</td>
-                          <td className="px-3 py-2 font-medium text-slate-900">{e.label}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-800">{inr(e.price)}</td>
+                          <td data-th="Date" className="px-3 py-2 text-slate-600">{e.date ? format(new Date(e.date), 'd MMM') : '—'}</td>
+                          <td data-card="title" className="px-3 py-2 font-medium text-slate-900">{e.label}</td>
+                          <td data-th="Price" className="px-3 py-2 text-right font-semibold text-slate-800">{inr(e.price)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -258,18 +258,18 @@ export default function ConversionPage() {
 
             {/* Instalment rows */}
             <p className="mt-4 text-sm font-semibold text-slate-800">Instalments</p>
-            <div className="mt-2 overflow-hidden rounded-lg border border-slate-200">
-              <table className="w-full text-sm">
+            <div className="rt-wrap mt-2 overflow-hidden rounded-lg border border-slate-200">
+              <table className="rt w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
                   <tr><th className="px-3 py-2 w-12">#</th><th className="px-3 py-2">Amount (INR)</th><th className="px-3 py-2 w-28">%</th><th className="px-3 py-2">Due Date</th><th className="w-8" /></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.map((r, i) => (
                     <tr key={i}>
-                      <td className="px-3 py-2.5 text-xs font-semibold text-slate-500">{ord(i + 1)}</td>
-                      <td className="px-3 py-2.5"><input type="number" className="input w-36" value={r.amount} onChange={(e) => setRow(i, { amount: e.target.value })} /></td>
-                      <td className="px-3 py-2.5"><div className="flex items-center gap-1"><input type="number" step="0.1" className="input w-20" value={r.percent} onChange={(e) => setRow(i, { percent: e.target.value })} /><span className="text-slate-400">%</span></div></td>
-                      <td className="px-3 py-2.5"><input type="date" className="input w-44" value={r.dueDate} onChange={(e) => setRow(i, { dueDate: e.target.value })} /></td>
+                      <td data-card="title" className="px-3 py-2.5 text-xs font-semibold text-slate-500">{ord(i + 1)}</td>
+                      <td data-th="Amount (INR)" className="px-3 py-2.5"><input type="number" className="input w-36" value={r.amount} onChange={(e) => setRow(i, { amount: e.target.value })} /></td>
+                      <td data-th="%" className="px-3 py-2.5"><div className="flex items-center gap-1"><input type="number" step="0.1" className="input w-20" value={r.percent} onChange={(e) => setRow(i, { percent: e.target.value })} /><span className="text-slate-400">%</span></div></td>
+                      <td data-th="Due Date" className="px-3 py-2.5"><input type="date" className="input w-44" value={r.dueDate} onChange={(e) => setRow(i, { dueDate: e.target.value })} /></td>
                       <td className="px-2 py-2.5 text-center">
                         {rows.length > 1 && <button onClick={() => rmRow(i)} className="text-slate-300 hover:text-red-500"><X size={14} /></button>}
                       </td>

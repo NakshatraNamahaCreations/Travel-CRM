@@ -134,18 +134,18 @@ export default function QuoteViewPage() {
         {/* Costing */}
         <div className="py-6">
           <h2 className="mb-3 font-semibold text-gray-900">Cost Breakup</h2>
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
+          <div className="rt-wrap overflow-x-auto">
+          <table className="rt w-full min-w-[560px] text-sm">
             <thead className="border-b border-gray-200 text-left text-xs uppercase text-gray-400">
               <tr><th className="py-2">Item</th><th className="text-center">Qty</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr>
             </thead>
             <tbody>
               {q.costItems.map((it) => (
                 <tr key={it._id} className="border-b border-gray-100">
-                  <td className="py-2"><span className="font-medium text-gray-900">{it.label}</span>{it.meta && <span className="ml-1 text-xs text-gray-400">({it.meta})</span>}</td>
-                  <td className="text-center text-gray-600">{it.qty}</td>
-                  <td className="text-right text-gray-600">{money(it.rate, cur)}</td>
-                  <td className="text-right font-medium">{money(it.amount, cur)}</td>
+                  <td data-card="title" className="py-2"><span className="font-medium text-gray-900">{it.label}</span>{it.meta && <span className="ml-1 text-xs text-gray-400">({it.meta})</span>}</td>
+                  <td data-th="Qty" className="text-center text-gray-600">{it.qty}</td>
+                  <td data-th="Rate" className="text-right text-gray-600">{money(it.rate, cur)}</td>
+                  <td data-th="Amount" className="text-right font-medium">{money(it.amount, cur)}</td>
                 </tr>
               ))}
             </tbody>

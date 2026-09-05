@@ -56,8 +56,8 @@ export default function TransactionsPage() {
             Showing {data?.meta?.total ?? items.length} Items
             <button onClick={refresh} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
           </div>
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Txn ID</th>
@@ -76,13 +76,13 @@ export default function TransactionsPage() {
                   <tr><td colSpan={7} className="py-12 text-center text-slate-400">No transactions yet.</td></tr>
                 ) : items.map((t) => (
                   <tr key={t._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{t.txnId}</td>
-                    <td className="px-4 py-3 text-slate-600">{dt(t.date)}</td>
-                    <td className="px-4 py-3 text-slate-700">{t.debitAccount?.name || '—'}</td>
-                    <td className="px-4 py-3 text-brand-700">{t.creditAccount?.name || '—'}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{money(t.amount, t.currency)}</td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{t.refId || '—'}</td>
-                    <td className="px-4 py-3 text-slate-500">{t.narration || '—'}</td>
+                    <td data-card="title" className="px-4 py-3 font-mono text-xs text-slate-500">{t.txnId}</td>
+                    <td data-th="Txn Date" className="px-4 py-3 text-slate-600">{dt(t.date)}</td>
+                    <td data-th="Debit Acc." className="px-4 py-3 text-slate-700">{t.debitAccount?.name || '—'}</td>
+                    <td data-th="Credit Acc." className="px-4 py-3 text-brand-700">{t.creditAccount?.name || '—'}</td>
+                    <td data-th="Amount" className="px-4 py-3 text-right font-semibold tabular-nums">{money(t.amount, t.currency)}</td>
+                    <td data-th="Ref ID" className="px-4 py-3 text-xs text-slate-400">{t.refId || '—'}</td>
+                    <td data-th="Narration" className="px-4 py-3 text-slate-500">{t.narration || '—'}</td>
                   </tr>
                 ))}
               </tbody>

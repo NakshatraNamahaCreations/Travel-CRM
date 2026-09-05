@@ -29,9 +29,13 @@ export default function DataTable({
   const allIds = rows.map((r, i) => keyOf(r, i));
   const allSelected = selectable && allIds.length > 0 && allIds.every((id) => selected.has(id));
 
+  // Which column acts as the mobile card heading: the first one with a
+  // non-empty header (headerless leading columns are usually icons/actions).
+  const titleKey = columns.find((c) => c.header)?.key;
+
   return (
-    <div className="card card-flush overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="rt-wrap card card-flush overflow-x-auto">
+      <table className="rt w-full text-sm">
         <thead className="bg-slate-100 text-left text-xs font-semibold tracking-normal text-slate-600">
           <tr>
             {selectable && (
@@ -68,7 +72,15 @@ export default function DataTable({
                   </td>
                 )}
                 {columns.map((c) => (
-                  <td key={c.key} className={cn('px-4 py-3.5 align-top', c.className)}>
+                  <td
+                    key={c.key}
+                    {...(c.key === titleKey
+                      ? { 'data-card': 'title' }
+                      : typeof c.header === 'string' && c.header
+                        ? { 'data-th': c.header }
+                        : {})}
+                    className={cn('px-4 py-3.5 align-top', c.className)}
+                  >
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}

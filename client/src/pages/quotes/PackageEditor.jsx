@@ -588,8 +588,8 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <p className="text-sm font-bold text-slate-800">Prices</p>
                     <button type="button" onClick={() => autoRate(i)} title="Refresh rates" className="text-slate-400 hover:text-brand-600"><RefreshCw size={13} /></button>
                   </div>
-                  <div className="card card-flush overflow-hidden">
-                    <table className="w-full text-sm">
+                  <div className="rt-wrap card card-flush overflow-hidden">
+                    <table className="rt w-full text-sm">
                       <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                         <tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Rate</th><th className="px-3 py-2.5">Given</th></tr>
                       </thead>
@@ -599,9 +599,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           const given = hotelPerNight(h);
                           return (
                             <tr key={n}>
-                              <td className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
-                              <td className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
-                              <td className="px-3 py-2.5">
+                              <td data-card="title" className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
+                              <td data-th="Rate" className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
+                              <td data-th="Given" className="px-3 py-2.5">
                                 <button type="button" onClick={() => setGivenIdx(i)} className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold tabular-nums ${given > 0 ? 'bg-brand-50 text-brand-700' : 'bg-amber-100 text-amber-700'}`}>
                                   {given > 0 ? null : <AlertTriangle size={12} />} {money(given, currency)}
                                 </button>
@@ -906,7 +906,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           {famRows.length > 1 && (
                             <p className="mb-1.5 truncate text-[11px] font-bold uppercase tracking-wide text-brand-600" title={ft.serviceType}>{ft.serviceType || 'Service'}</p>
                           )}
-                          <table className="w-full table-fixed text-xs">
+                          <table className="rt w-full table-fixed text-xs">
                             <thead>
                               <tr className="bg-brand-50 text-brand-700">
                                 <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
@@ -922,7 +922,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                 const priceIt = (ft.items || [])[ii] || {};
                                 return (
                                   <tr key={ii}>
-                                    <td className="py-1.5 pr-2">
+                                    <td data-card="title" className="py-1.5 pr-2">
                                       {pkg.sameCabType ? (
                                         <span className="text-slate-700">{cabIt.qty > 1 ? `${cabIt.qty} - ` : ''}{cabIt.type || '—'}</span>
                                       ) : (
@@ -935,12 +935,12 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                         />
                                       )}
                                     </td>
-                                    <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
+                                    <td data-th="Date" className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
                                       {tDays.map((d) => (
                                         <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
                                       ))}
                                     </td>
-                                    <td className="py-1.5 pr-1">
+                                    <td data-th="Rate" className="py-1.5 pr-1">
                                       <input
                                         type="number"
                                         className="input w-16 text-xs"
@@ -953,7 +953,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                         }}
                                       />
                                     </td>
-                                    <td className="py-1.5">
+                                    <td data-th="Given" className="py-1.5">
                                       <input
                                         type="number"
                                         className="input w-16 text-xs"
@@ -1078,7 +1078,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       </p>
                       <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
-                    <table className="w-full table-fixed text-xs">
+                    <table className="rt w-full table-fixed text-xs">
                       <thead>
                         <tr className="bg-violet-50 text-violet-700">
                           <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Type</th>
@@ -1092,7 +1092,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       <tbody className="divide-y divide-slate-100">
                         {(a.items || []).map((it, ii) => (
                           <tr key={ii}>
-                            <td className="py-1.5 pr-2">
+                            <td data-card="title" className="py-1.5 pr-2">
                               <AsyncSelect
                                 loadOptions={(q) => Promise.resolve(configOptions.map((c) => ({ _id: c, name: c })).filter((o) => o.name.toLowerCase().includes((q || '').toLowerCase())))}
                                 value={it.type ? { _id: it.type, name: it.type } : null}
@@ -1101,22 +1101,22 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                                 placeholder="Adult…"
                               />
                             </td>
-                            <td className="py-1.5 pr-1">
+                            <td data-th="Qty" className="py-1.5 pr-1">
                               <input type="number" className="input w-full px-1 text-center text-xs" value={it.qty ?? ''} onChange={(e) => setActItem(ai, ii, { qty: Number(e.target.value) })} />
                             </td>
-                            <td className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
+                            <td data-th="Date" className="py-1.5 pr-1 whitespace-nowrap text-[11px] leading-5 text-slate-500">
                               {aDays.map((d) => (
                                 <div key={d}>{startDate ? format(addDays(new Date(startDate), d - 1), 'd MMM') : `Day ${d}`}</div>
                               ))}
                             </td>
-                            <td className="py-1.5 pr-1">
+                            <td data-th="Rate" className="py-1.5 pr-1">
                               <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.rate ?? ''} onChange={(e) => {
                                 const v = Number(e.target.value);
                                 const keepGiven = it.given && it.given !== it.rate;
                                 setActItem(ai, ii, keepGiven ? { rate: v } : { rate: v, given: v });
                               }} />
                             </td>
-                            <td className="py-1.5">
+                            <td data-th="Given" className="py-1.5">
                               <input type="number" className="input w-full px-1 text-xs" placeholder="0" value={it.given ?? ''} onChange={(e) => setActItem(ai, ii, { given: Number(e.target.value) })} />
                               {Number(it.given) > 0 && ((Number(it.qty) || 1) > 1 || aDays.length > 1) && (
                                 <div className="mt-0.5 text-[10px] text-slate-400">× {it.qty || 1}{aDays.length > 1 ? ` × ${aDays.length}d` : ''} = {((Number(it.given) || 0) * (Number(it.qty) || 1) * aDays.length).toLocaleString('en-IN')}</div>
@@ -1355,26 +1355,26 @@ function GivenPriceModal({ hotel, currency, onClose, onSave }) {
   const total = rows.reduce((s, r) => s + (Number(v[r.key]) || 0) * r.qty, 0);
   return (
     <Modal open onClose={onClose} title="Given Price" width="max-w-lg">
-      <table className="w-full text-sm">
+      <table className="rt w-full text-sm">
         <thead className="text-left text-xs text-slate-500">
           <tr><th className="py-2" /><th className="py-2 text-center">Price ({currency})</th><th className="py-2 text-center">Quantity</th><th className="py-2 text-right">Total</th></tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {rows.map((r) => (
             <tr key={r.key}>
-              <td className="py-2.5 font-medium text-slate-800">{r.label}</td>
-              <td className="py-2.5 text-center">
+              <td data-card="title" className="py-2.5 font-medium text-slate-800">{r.label}</td>
+              <td data-th={`Price (${currency})`} className="py-2.5 text-center">
                 {r.qty ? (
                   <input type="number" className="input mx-auto w-28 text-center" value={v[r.key]} onChange={(e) => setV((s) => ({ ...s, [r.key]: e.target.value }))} />
                 ) : (
                   <span className="text-slate-400">&mdash;</span>
                 )}
               </td>
-              <td className="py-2.5 text-center text-slate-600 tabular-nums">{r.qty}</td>
-              <td className="py-2.5 text-right tabular-nums">{r.qty ? money((Number(v[r.key]) || 0) * r.qty, currency) : '—'}</td>
+              <td data-th="Quantity" className="py-2.5 text-center text-slate-600 tabular-nums">{r.qty}</td>
+              <td data-th="Total" className="py-2.5 text-right tabular-nums">{r.qty ? money((Number(v[r.key]) || 0) * r.qty, currency) : '—'}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-200 font-bold text-slate-900"><td className="py-2.5 text-right" colSpan={3}>Total</td><td className="py-2.5 text-right tabular-nums">{money(total, currency)}</td></tr>
+          <tr className="border-t border-slate-200 font-bold text-slate-900"><td data-card="title" className="py-2.5 text-right" colSpan={3}>Total</td><td className="py-2.5 text-right tabular-nums">{money(total, currency)}</td></tr>
         </tbody>
       </table>
       <div className="mt-4 flex justify-end gap-2">

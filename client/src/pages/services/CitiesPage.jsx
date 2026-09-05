@@ -93,8 +93,8 @@ export default function CitiesPage() {
 
       <p className="mb-2 text-sm text-slate-500">Showing {items.length} item{items.length !== 1 ? 's' : ''}</p>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="rt-wrap card card-flush overflow-x-auto">
+        <table className="rt w-full text-sm">
           <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
             <tr>
               <th className="px-4 py-3">City / Town / Island</th>
@@ -112,9 +112,9 @@ export default function CitiesPage() {
               <tr><td colSpan={4} className="py-12 text-center text-slate-400">No cities added yet.</td></tr>
             ) : items.map((c) => (
               <tr key={c._id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
-                <td className="px-4 py-3 text-slate-600">{c.state?.name || '—'}</td>
-                <td className="px-4 py-3 text-slate-500">{c.description || '—'}</td>
+                <td data-card="title" className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                <td data-th="State" className="px-4 py-3 text-slate-600">{c.state?.name || '—'}</td>
+                <td data-th="Description" className="px-4 py-3 text-slate-500">{c.description || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-3">
                     <button onClick={() => setEditItem(c)} className="text-slate-400 hover:text-slate-700"><Pencil size={14} /></button>

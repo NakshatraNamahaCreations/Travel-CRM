@@ -139,7 +139,7 @@ export default function CompanyDetailPage() {
         {subscriptionPayments.length > 0 && (
           <div className="border-t border-slate-100 px-5 py-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Payment History</p>
-            <table className="w-full text-sm">
+            <table className="rt w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-slate-400">
                   <th className="py-1.5 pr-4">Date</th>
@@ -152,11 +152,11 @@ export default function CompanyDetailPage() {
               <tbody>
                 {subscriptionPayments.map((p) => (
                   <tr key={p._id} className="border-t border-slate-100">
-                    <td className="py-2 pr-4">{fmtDate(p.paidOn)}</td>
-                    <td className="py-2 pr-4">{p.planName || p.plan?.name || '—'}</td>
-                    <td className="py-2 pr-4">{p.months}</td>
-                    <td className="py-2 pr-4 font-medium">{inr(p.amount)}</td>
-                    <td className="py-2 text-slate-500">{p.notes || ''}</td>
+                    <td data-card="title" className="py-2 pr-4">{fmtDate(p.paidOn)}</td>
+                    <td data-th="Plan" className="py-2 pr-4">{p.planName || p.plan?.name || '—'}</td>
+                    <td data-th="Months" className="py-2 pr-4">{p.months}</td>
+                    <td data-th="Amount" className="py-2 pr-4 font-medium">{inr(p.amount)}</td>
+                    <td data-th="Notes" className="py-2 text-slate-500">{p.notes || ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -166,11 +166,11 @@ export default function CompanyDetailPage() {
       </div>
 
       {/* Users */}
-      <div className="card card-flush">
+      <div className="card card-flush rt-wrap">
         <div className="border-b border-slate-200 px-5 py-3.5">
           <h2 className="font-semibold text-slate-900">Users ({users.length})</h2>
         </div>
-        <table className="w-full text-sm">
+        <table className="rt w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
               <th className="px-5 py-2.5">Name</th>
@@ -182,10 +182,10 @@ export default function CompanyDetailPage() {
           <tbody>
             {users.map((u) => (
               <tr key={u._id} className="border-b border-slate-50 last:border-0">
-                <td className="px-5 py-2.5 font-medium text-slate-900">{u.name}</td>
-                <td className="px-5 py-2.5 text-slate-600">{u.email}</td>
-                <td className="px-5 py-2.5 capitalize">{u.role}</td>
-                <td className="px-5 py-2.5 text-slate-500">{u.lastLoginAt ? fmtDate(u.lastLoginAt) : 'Never'}</td>
+                <td data-card="title" className="px-5 py-2.5 font-medium text-slate-900">{u.name}</td>
+                <td data-th="Email" className="px-5 py-2.5 text-slate-600">{u.email}</td>
+                <td data-th="Role" className="px-5 py-2.5 capitalize">{u.role}</td>
+                <td data-th="Last Login" className="px-5 py-2.5 text-slate-500">{u.lastLoginAt ? fmtDate(u.lastLoginAt) : 'Never'}</td>
               </tr>
             ))}
           </tbody>

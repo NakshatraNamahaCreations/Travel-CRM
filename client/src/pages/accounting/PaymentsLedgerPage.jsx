@@ -110,21 +110,21 @@ function LogPaymentModal({ inst, direction, onClose, onSaved }) {
           {/* Instalments table */}
           <div className="px-4 pb-3">
             <p className="mb-1 text-xs font-medium text-slate-500">All instalments for this payment</p>
-            <table className="w-full text-sm">
+            <table className="rt w-full text-sm">
               <thead className="text-left text-xs text-slate-400"><tr><th className="py-1">#ID</th><th>Due</th><th className="text-right">Amount ({inst.currency})</th><th className="text-right">Status</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r._id} className="border-t border-slate-100">
-                    <td className="py-1.5">{r.installmentNumber} {r._id === inst._id && <span className="ml-1 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">You are here</span>}</td>
-                    <td>{r.dueDate ? format(new Date(r.dueDate), 'd MMM, yyyy') : '—'}</td>
-                    <td className="text-right tabular-nums">{Number(r.amount).toLocaleString('en-IN')}</td>
-                    <td className="text-right"><StatusBadge inst={r} /></td>
+                    <td data-card="title" className="py-1.5">{r.installmentNumber} {r._id === inst._id && <span className="ml-1 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">You are here</span>}</td>
+                    <td data-th="Due">{r.dueDate ? format(new Date(r.dueDate), 'd MMM, yyyy') : '—'}</td>
+                    <td data-th="Amount" className="text-right tabular-nums">{Number(r.amount).toLocaleString('en-IN')}</td>
+                    <td data-th="Status" className="text-right"><StatusBadge inst={r} /></td>
                   </tr>
                 ))}
                 <tr className="border-t border-slate-200 font-semibold">
                   <td className="py-1.5" colSpan={2}>Total ({inst.currency})</td>
-                  <td className="text-right tabular-nums">{total.toLocaleString('en-IN')}</td>
-                  <td className="text-right text-xs"><span className="rounded bg-green-50 px-1.5 py-0.5 text-green-700">{paidTotal.toLocaleString('en-IN')}</span></td>
+                  <td data-th="Total" className="text-right tabular-nums">{total.toLocaleString('en-IN')}</td>
+                  <td data-th="Paid" className="text-right text-xs"><span className="rounded bg-green-50 px-1.5 py-0.5 text-green-700">{paidTotal.toLocaleString('en-IN')}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -280,14 +280,14 @@ function InstalmentDetailsModal({ inst, direction, onClose, onLogPayment, onSave
           {tab === 'transactions' && (
             <div className="pt-3">
               {inst.paid ? (
-                <table className="w-full text-sm">
+                <table className="rt w-full text-sm">
                   <thead className="text-left text-xs text-slate-400"><tr><th className="py-1.5">Paid On</th><th>Amount ({inst.currency})</th><th>Debit → Credit</th><th>Reference</th></tr></thead>
                   <tbody>
                     <tr className="border-t border-slate-100">
-                      <td className="py-2">{inst.paidOn ? format(new Date(inst.paidOn), 'd MMM, yyyy h:mm a') : '—'}</td>
-                      <td className="font-semibold tabular-nums">{Number(inst.paidAmount || inst.amount).toLocaleString('en-IN')}</td>
-                      <td className="text-xs text-slate-500">{[inst.debitAccount, inst.creditAccount].filter(Boolean).join(' → ') || '—'}</td>
-                      <td className="text-slate-500">{inst.reference || '—'}</td>
+                      <td data-card="title" className="py-2">{inst.paidOn ? format(new Date(inst.paidOn), 'd MMM, yyyy h:mm a') : '—'}</td>
+                      <td data-th="Amount" className="font-semibold tabular-nums">{Number(inst.paidAmount || inst.amount).toLocaleString('en-IN')}</td>
+                      <td data-th="Debit → Credit" className="text-xs text-slate-500">{[inst.debitAccount, inst.creditAccount].filter(Boolean).join(' → ') || '—'}</td>
+                      <td data-th="Reference" className="text-slate-500">{inst.reference || '—'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -411,8 +411,8 @@ export default function PaymentsLedgerPage({ direction }) {
             <button onClick={exportCsv} disabled={!items.length} className="btn-secondary text-sm"><Download size={15} /> Download</button>
           </div>
 
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Due Date</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Comments</th><th className="px-4 py-3">Actions</th></tr>
               </thead>
@@ -423,15 +423,15 @@ export default function PaymentsLedgerPage({ direction }) {
                   <tr><td colSpan={5} className="py-12 text-center text-slate-400">No payments in this view.</td></tr>
                 ) : items.map((i) => (
                   <tr key={i._id} className="align-top hover:bg-slate-50">
-                    <td className="px-4 py-3">
+                    <td data-card="title" className="px-4 py-3">
                       <button onClick={() => setDetailsFor(i)} title="View instalment details" className="text-left">
                         <div className="font-semibold text-slate-900 hover:text-brand-700 hover:underline"><span className="text-xs text-slate-400">{i.currency} </span>{Number(i.amount).toLocaleString('en-IN')}</div>
                       </button>
                       <div className="mt-1"><StatusBadge inst={i} /></div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{rel(i.dueDate)}</td>
-                    <td className="px-4 py-3"><Contact inst={i} /></td>
-                    <td className="px-4 py-3">
+                    <td data-th="Due Date" className="px-4 py-3 text-slate-600">{rel(i.dueDate)}</td>
+                    <td data-th="Contact" className="px-4 py-3"><Contact inst={i} /></td>
+                    <td data-th="Comments" className="px-4 py-3">
                       <button onClick={() => setCommentFor(i)} className="flex items-center gap-1 text-sm text-brand-700 hover:underline">
                         <MessageSquarePlus size={14} /> {i.comments?.length ? `${i.comments.length} comment${i.comments.length === 1 ? '' : 's'}` : 'Add Comment'}
                       </button>

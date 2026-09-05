@@ -95,8 +95,8 @@ export default function HotelOptionsPage({ config }) {
         <button onClick={refresh} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
       </div>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="rt-wrap card card-flush overflow-x-auto">
+        <table className="rt w-full text-sm">
           <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
             <tr>
               <th className="px-4 py-3">{valueHeader}</th>
@@ -113,15 +113,15 @@ export default function HotelOptionsPage({ config }) {
               <tr><td colSpan={5} className="py-12 text-center text-slate-400">No items yet.</td></tr>
             ) : items.map((o) => (
               <tr key={o._id} className={cn('hover:bg-slate-50', o.isActive === false && 'opacity-60')}>
-                <td className="px-4 py-3 font-medium text-brand-700">
+                <td data-card="title" className="px-4 py-3 font-medium text-brand-700">
                   {config.cabBuilder
                     ? <button onClick={() => setEditItem(o)} className="text-left hover:underline">{o.value}</button>
                     : o.value}
                   {o.isActive === false && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500">Disabled</span>}
                 </td>
-                {showDescription && <td className="px-4 py-3 text-slate-600">{o.description || '—'}</td>}
-                {!hideCount && <td className="px-4 py-3 text-slate-700">{o.hotels ?? 0}</td>}
-                {showCreatedBy && <td className="px-4 py-3 text-slate-500">{o.createdBy?.name || '—'}{o.createdAt ? ` · ${format(new Date(o.createdAt), 'd MMM yyyy')}` : ''}</td>}
+                {showDescription && <td data-th="Description" className="px-4 py-3 text-slate-600">{o.description || '—'}</td>}
+                {!hideCount && <td data-th={countLabel} className="px-4 py-3 text-slate-700">{o.hotels ?? 0}</td>}
+                {showCreatedBy && <td data-th="Created By" className="px-4 py-3 text-slate-500">{o.createdBy?.name || '—'}{o.createdAt ? ` · ${format(new Date(o.createdAt), 'd MMM yyyy')}` : ''}</td>}
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-3">
                     {config.cabBuilder && (

@@ -108,15 +108,15 @@ export default function UploadQueriesPage() {
             Follow this format for your CSV. <b>Destination, Start Date (DD-MM-YYYY)</b> and <b>Guest Name</b> are the key columns; the rest are optional.
             Multiple children ages go in one cell comma-separated (e.g. <code className="kbd">3,3,5,8</code>).
           </p>
-          <div className="card card-flush mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="rt-wrap card card-flush mt-3 overflow-x-auto">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>{COLUMNS.map((c) => <th key={c} className="whitespace-nowrap px-3 py-2.5">{c}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {SAMPLE_ROWS.map((row, i) => (
                   <tr key={i} className="even:bg-slate-50/40">
-                    {row.map((cell, j) => <td key={j} className="whitespace-nowrap px-3 py-2.5 text-slate-600">{cell || <span className="text-slate-300">—</span>}</td>)}
+                    {row.map((cell, j) => <td key={j} data-th={COLUMNS[j]} className="whitespace-nowrap px-3 py-2.5 text-slate-600">{cell || <span className="text-slate-300">—</span>}</td>)}
                   </tr>
                 ))}
               </tbody>

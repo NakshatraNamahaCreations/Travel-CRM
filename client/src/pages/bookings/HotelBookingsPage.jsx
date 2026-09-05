@@ -168,7 +168,7 @@ function BasicDetailsCell({ b, rowSpan }) {
       </div>
       <div className="mt-1 text-xs text-slate-500">
         #{b.bookingNumber}
-        {b.query?.source ? ` • ${b.query.source}` : ''}
+        {b.query?.source?.name ? ` • ${b.query.source.name}` : ''}
         {' • '}<span className="text-[10px] font-semibold uppercase text-slate-400">{b.currency || 'INR'}</span>{' '}
         <span className="text-slate-700">{new Intl.NumberFormat('en-IN').format(Math.round(b.totalAmount || 0))}</span>
       </div>
@@ -226,6 +226,89 @@ function HotelCells({ h, isRepeat, onEdit, onShare, onVoucher, onTag, onStatusCh
       </td>
       <td className="px-4 py-2.5 align-middle text-xs text-slate-500">{h.comment}</td>
     </>
+  );
+}
+
+// Mobile (<md) rendering: one card per booking so the guest/trip identity and
+// its hotel stays read together — the desktop table's rowSpan band layout
+// can't be linearized into coherent standalone row-cards.
+function MobileBookingCard({ b, onEditRow, onShareRow, onVoucherRow, onTagRow, onStatusChange, onGenerate, generating }) {
+  const queryId = b.query?._id || b.query;
+  const hotels = b.hotels || [];
+  const generated = b.hasServiceBookings;
+  const destinationLabel = (b.destinations || []).map((d) => d?.name).filter(Boolean).join(', ');
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap items-baseline gap-x-1.5">
+        <Link to={`/bookings/${b._id}`} className="font-semibold text-brand-700 hover:underline">
+          {b.guest?.name || b.title || 'Guest'}
+        </Link>
+        {destinationLabel && <span className="text-sm font-medium text-slate-600">• {destinationLabel}</span>}
+      </div>
+      <div className="mt-0.5 text-xs text-slate-500">
+        #{b.bookingNumber}
+        {b.query?.source?.name ? ` • ${b.query.source.name}` : ''}
+        {' • '}<span className="text-[10px] font-semibold uppercase text-slate-400">{b.currency || 'INR'}</span>{' '}
+        <span className="text-slate-700">{new Intl.NumberFormat('en-IN').format(Math.round(b.totalAmount || 0))}</span>
+      </div>
+      <div className="mt-0.5 text-xs text-slate-600">
+        {b.startDate ? format(new Date(b.startDate), 'd MMM, yyyy') : '—'}
+        {b.nights ? ` • ${b.nights + 1}D` : ''}
+        {b.pax ? ` • ${paxLabel(b.pax)}` : ''}
+        {b.owner?.name ? ` • ${b.owner.name}` : ''}
+      </div>
+
+      {generated ? (
+        <>
+          <div className="mt-2 text-xs font-medium text-slate-500">
+            <span className="font-bold text-slate-900">{b.bookedCount}</span> / {hotels.length} Booked
+            {' • '}
+            <span className="font-bold text-slate-900">{b.voucherCount}</span> / {hotels.length} Voucher Sent
+          </div>
+          <div className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
+            {markRepeatStays(hotels).map(({ row: h, isRepeat }) => (
+              <div key={h._id} className="py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-brand-700">{h.name}</div>
+                    <div className="text-[11px] text-slate-400">{h.city || ''}{h.stars ? `, ${h.stars} Star` : ''}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2.5 text-slate-300">
+                    <button onClick={() => onEditRow(h)} className="hover:text-brand-600" title="Edit"><Pencil size={14} /></button>
+                    <button onClick={() => onShareRow({ row: h, booking: b })} className="hover:text-emerald-600" title="Share booking request with the hotel"><Share2 size={14} /></button>
+                    {h.status === 'booked' && (
+                      <button onClick={() => onVoucherRow(h)} className="hover:text-amber-600" title={h.voucherGeneratedAt ? 'Regenerate Voucher' : 'Create Voucher'}>
+                        <FileText size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className={cn('mt-1 text-xs', isRepeat ? 'text-amber-700' : 'text-slate-600')}>{stayCheckInOut(h, isRepeat)}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <StatusSelect row={h} onChange={(patch) => onStatusChange(h._id, patch)} />
+                  <button onClick={() => onTagRow(h)} className="group flex items-center gap-1.5" title="Edit tag / comments">
+                    {h.tag && <span className="inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{h.tag}</span>}
+                    <Pencil size={12} className="text-slate-300 group-hover:text-brand-600" />
+                  </button>
+                </div>
+                {h.comment && <div className="mt-1 text-xs text-slate-500">{h.comment}</div>}
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+          <span className="text-xs italic text-slate-400">
+            {hotels.length ? 'Hotel bookings not generated yet' : 'No hotel bookings yet.'}
+          </span>
+          {b.quoteId && (
+            <button onClick={() => onGenerate(queryId, b.quoteId)} disabled={generating} className="btn-secondary text-xs">
+              <Sparkles size={12} /> Generate
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -469,7 +552,24 @@ export default function HotelBookingsPage() {
           ) : view === 'calendar' ? (
             <CalendarView items={items} month={month} onMonthChange={setMonth} onEditRow={setEditRow} />
           ) : (
-            <div className="card card-flush overflow-x-auto">
+            <>
+            {/* Mobile: one card per booking (desktop table below is hidden < md) */}
+            <div className="space-y-3 md:hidden">
+              {items.map((b) => (
+                <MobileBookingCard
+                  key={b._id}
+                  b={b}
+                  onEditRow={setEditRow}
+                  onShareRow={setShareRow}
+                  onVoucherRow={setVoucherRow}
+                  onTagRow={setTagRow}
+                  onStatusChange={(id, patch) => updMut.mutate({ id, patch })}
+                  onGenerate={(queryId, quoteId) => genMut.mutate({ queryId, quoteId })}
+                  generating={genMut.isPending}
+                />
+              ))}
+            </div>
+            <div className="card card-flush hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead className="bg-white text-left text-sm font-semibold text-slate-700">
                   <tr className="border-b border-slate-200">
@@ -498,6 +598,7 @@ export default function HotelBookingsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {!wantsAll && meta && <Pagination page={meta.page} totalPages={meta.totalPages} onChange={setPage} />}

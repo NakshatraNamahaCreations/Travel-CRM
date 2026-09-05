@@ -61,8 +61,8 @@ export default function AccountsPage() {
             Showing {data?.meta?.total ?? items.length} Items
             <button onClick={refresh} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
           </div>
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Name</th>
@@ -78,7 +78,7 @@ export default function AccountsPage() {
                   <tr><td colSpan={4} className="py-12 text-center text-slate-400">No accounts yet.</td></tr>
                 ) : items.map((a) => (
                   <tr key={a._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3">
+                    <td data-card="title" className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Briefcase size={14} className="text-slate-300" />
                         <div>
@@ -87,11 +87,11 @@ export default function AccountsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{KIND_LABEL[a.kind] || a.kind}</td>
-                    <td className="px-4 py-3">
+                    <td data-th="Type" className="px-4 py-3 text-slate-500">{KIND_LABEL[a.kind] || a.kind}</td>
+                    <td data-th="Tags" className="px-4 py-3">
                       {(a.tags || []).length ? a.tags.map((t) => <span key={t} className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{t}</span>) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', a.balance < 0 ? 'text-rose-600' : 'text-slate-800')}>
+                    <td data-th="Assets" className={cn('px-4 py-3 text-right font-semibold tabular-nums', a.balance < 0 ? 'text-rose-600' : 'text-slate-800')}>
                       {money(a.balance, a.currency)}
                     </td>
                   </tr>

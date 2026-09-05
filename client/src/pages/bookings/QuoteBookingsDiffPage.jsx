@@ -65,8 +65,8 @@ export default function QuoteBookingsDiffPage() {
             Showing {data?.meta?.total ?? items.length} Items
             <button onClick={refresh} className="text-slate-400 hover:text-slate-700"><RefreshCw size={14} /></button>
           </div>
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Trip ID</th>
@@ -84,18 +84,18 @@ export default function QuoteBookingsDiffPage() {
                   <tr><td colSpan={6} className="py-12 text-center text-slate-400">No bookings with quotes.</td></tr>
                 ) : items.map((b) => (
                   <tr key={b._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3"><Link to={`/bookings/${b._id}`} className="font-medium text-brand-700 hover:underline">{b.bookingNumber}</Link></td>
-                    <td className="px-4 py-3">
+                    <td data-th="Trip ID" className="px-4 py-3"><Link to={`/bookings/${b._id}`} className="font-medium text-brand-700 hover:underline">{b.bookingNumber}</Link></td>
+                    <td data-card="title" className="px-4 py-3">
                       <div className="text-slate-700">{b.title || b.guest?.name || '—'}</div>
                       <div className="text-xs text-slate-400">{dt(b.startDate)} · {b.nights ? `${b.nights}N` : ''} · {paxLabel(b.pax)}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{b.owner?.name || '—'}</td>
-                    <td className="px-4 py-3">
+                    <td data-th="Team" className="px-4 py-3 text-slate-500">{b.owner?.name || '—'}</td>
+                    <td data-th="Reservations" className="px-4 py-3">
                       {b.hasDiff
                         ? <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Diff</span>
                         : <span className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">In sync</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-th="Operations" className="px-4 py-3">
                       {b.operationsCount === 0 ? (
                         <Minus size={14} className="text-slate-300" />
                       ) : b.operationsReady ? (
@@ -104,7 +104,7 @@ export default function QuoteBookingsDiffPage() {
                         <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Pending</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{b.lastChange ? `on ${format(new Date(b.lastChange), 'd MMM, yyyy')}` : '—'}</td>
+                    <td data-th="Last Change" className="px-4 py-3 text-slate-500">{b.lastChange ? `on ${format(new Date(b.lastChange), 'd MMM, yyyy')}` : '—'}</td>
                   </tr>
                 ))}
               </tbody>

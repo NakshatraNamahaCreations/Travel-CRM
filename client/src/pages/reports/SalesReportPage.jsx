@@ -102,8 +102,8 @@ export default function SalesReportPage() {
         <button onClick={download} disabled={!items.length} className="btn-primary text-sm"><Download size={15} /> Download Report</button>
       </div>
 
-      <div className="card card-flush overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card card-flush overflow-x-auto rt-wrap">
+        <table className="rt w-full text-sm">
           <thead className="bg-slate-100 text-left text-xs font-semibold tracking-normal text-slate-600">
             <tr>
               <th className="px-4 py-3">Id</th><th className="px-4 py-3">Guest</th><th className="px-4 py-3">Basic Details</th>
@@ -119,21 +119,21 @@ export default function SalesReportPage() {
             ) : (
               items.map((i) => (
                 <tr key={i._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3"><Link to={`/trips/${i._id}`} className="font-semibold text-brand-600 hover:underline">{tripNo(i.queryNumber)}</Link></td>
-                  <td className="px-4 py-3">
+                  <td data-th="Id" className="px-4 py-3"><Link to={`/trips/${i._id}`} className="font-semibold text-brand-600 hover:underline">{tripNo(i.queryNumber)}</Link></td>
+                  <td data-card="title" className="px-4 py-3">
                     <div className="font-medium text-gray-900">{[i.guest?.salutation, i.guest?.name].filter(Boolean).join(' ') || '—'}</div>
                     {i.guest?.phones?.[0] && <div className="flex items-center gap-1 text-xs text-gray-400"><Phone size={10} /> +{i.guest.phones[0].countryCode} {i.guest.phones[0].number}</div>}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td data-th="Basic Details" className="px-4 py-3 text-gray-600">
                     {(i.destinations || []).map((d) => d.name).join(', ') || '—'}
                     <span className="text-gray-400"> • {i.nights}N{i.startDate ? ` • ${format(new Date(i.startDate), 'd MMM')}` : ''}</span>
                     <span className={cn('ml-2 rounded px-1.5 py-0.5 text-[11px] font-medium', STATUS_BADGE[i.status])}>{i.status.replace('_', ' ')}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{i.owner?.name || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{format(new Date(i.createdAt), 'd MMM')}</td>
-                  <td className="px-4 py-3 text-right font-medium">{money(i.amount, i.currency)}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{money(i.profit, i.currency)}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{i.profitPercent}%</td>
+                  <td data-th="Sales Person" className="px-4 py-3 text-gray-600">{i.owner?.name || '—'}</td>
+                  <td data-th="Date" className="px-4 py-3 text-gray-500">{format(new Date(i.createdAt), 'd MMM')}</td>
+                  <td data-th="Amount" className="px-4 py-3 text-right font-medium">{money(i.amount, i.currency)}</td>
+                  <td data-th="Profit" className="px-4 py-3 text-right text-gray-700">{money(i.profit, i.currency)}</td>
+                  <td data-th="Profit %" className="px-4 py-3 text-right text-gray-700">{i.profitPercent}%</td>
                 </tr>
               ))
             )}

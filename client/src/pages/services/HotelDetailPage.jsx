@@ -126,8 +126,8 @@ function BookingsTab({ id }) {
   if (!bookings.length) return <div className="py-12 text-center text-gray-400 text-sm">No bookings found for this hotel yet.</div>;
 
   return (
-    <div className="mt-6 overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="rt-wrap mt-6 overflow-x-auto">
+      <table className="rt w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400">
             <th className="pb-2 text-left font-medium">Booking #</th>
@@ -141,22 +141,22 @@ function BookingsTab({ id }) {
         <tbody>
           {bookings.map((b) => (
             <tr key={b._id} className="border-b border-gray-100 last:border-0">
-              <td className="py-3 pr-4">
+              <td data-card="title" className="py-3 pr-4">
                 <Link to={`/bookings/${b._id}`} className="font-medium text-brand-700 hover:underline">
                   #{b.bookingNumber}
                 </Link>
               </td>
-              <td className="py-3 pr-4">
+              <td data-th="Guest" className="py-3 pr-4">
                 <p className="font-medium text-gray-900">{b.guest?.name || '—'}</p>
                 {b.guest?.phones?.[0] && (
                   <p className="text-xs text-gray-400">{b.guest.phones[0].number}</p>
                 )}
               </td>
-              <td className="py-3 pr-4 whitespace-nowrap">
+              <td data-th="Dates" className="py-3 pr-4 whitespace-nowrap">
                 {b.startDate ? format(new Date(b.startDate), 'd MMM yyyy') : '—'}
                 {b.endDate ? ` → ${format(new Date(b.endDate), 'd MMM yyyy')}` : ''}
               </td>
-              <td className="py-3 pr-4">
+              <td data-th="Stay Details" className="py-3 pr-4">
                 {(b.stays || []).map((s, i) => (
                   <div key={i} className="text-xs text-gray-600">
                     {[s.roomType, s.mealPlan].filter(Boolean).join(' · ')}
@@ -165,12 +165,12 @@ function BookingsTab({ id }) {
                   </div>
                 ))}
               </td>
-              <td className="py-3 pr-4">
+              <td data-th="Status" className="py-3 pr-4">
                 <span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS_STYLES[b.status] || '')}>
                   {b.status?.replace('_', ' ')}
                 </span>
               </td>
-              <td className="py-3 text-right font-medium text-gray-900">
+              <td data-th="Amount" className="py-3 text-right font-medium text-gray-900">
                 {money(b.totalAmount, b.currency)}
               </td>
             </tr>

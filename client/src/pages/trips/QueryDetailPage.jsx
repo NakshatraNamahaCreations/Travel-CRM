@@ -438,19 +438,19 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                 {p?.hotels?.length > 0 ? (
                   <div className="card p-5">
                     <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900"><Bed size={16} className="text-brand-500" /> Accommodation</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                    <div className="rt-wrap overflow-x-auto">
+                      <table className="rt w-full text-sm">
                         <thead className="text-left text-xs text-gray-400"><tr><th className="py-1.5 font-medium">Night</th><th className="font-medium">Hotel</th><th className="font-medium">Meal</th><th className="font-medium">Rooms</th><th className="text-right font-medium">Price</th></tr></thead>
                         <tbody className="divide-y divide-gray-100">
                           {nightlyHotelRows(p.hotels).map(({ night, opts, base, perNight }, j) => {
                             const uniq = (vals) => [...new Set(vals.filter(Boolean))];
                             return (
                               <tr key={j}>
-                                <td className="py-2.5 pr-2 align-top">
+                                <td data-th="Night" className="py-2.5 pr-2 align-top">
                                   <p className="font-medium text-gray-800">{ord(night)}</p>
                                   {startDate ? <p className="text-xs text-gray-400">{format(addDays(startDate, night - 1), 'd MMM')}</p> : null}
                                 </td>
-                                <td className="py-2.5 pr-2 align-top">
+                                <td data-card="title" className="py-2.5 pr-2 align-top">
                                   {opts.map((o, k) => (
                                     <p key={k} className="font-medium text-gray-900">
                                       {k > 0 && <span className="mr-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
@@ -459,12 +459,12 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                                   ))}
                                   <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}{opts[0]?.stars ? `, ${opts[0].stars} Star` : ''}</p>
                                 </td>
-                                <td className="py-2.5 pr-2 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
-                                <td className="py-2.5 pr-2 align-top">
+                                <td data-th="Meal" className="py-2.5 pr-2 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
+                                <td data-th="Rooms" className="py-2.5 pr-2 align-top">
                                   <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
                                   <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                                 </td>
-                                <td className="py-2.5 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
+                                <td data-th="Price" className="py-2.5 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                               </tr>
                             );
                           })}
@@ -841,8 +841,8 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50"><Bed size={15} className="text-brand-600" /></span>
                   <h4 className="font-semibold text-gray-900">Accommodation</h4>
                 </div>
-                <div className="card card-flush overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="rt-wrap card card-flush overflow-x-auto">
+                  <table className="rt w-full text-sm">
                     <thead className="border-b border-gray-100 text-left text-xs text-gray-400">
                       <tr><th className="px-4 py-2 font-medium">Night</th><th className="px-4 py-2 font-medium">Hotel</th><th className="px-4 py-2 font-medium">Meal</th><th className="px-4 py-2 font-medium">Rooms</th><th className="px-4 py-2 text-right font-medium">Price</th></tr>
                     </thead>
@@ -851,11 +851,11 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                         const uniq = (vals) => [...new Set(vals.filter(Boolean))];
                         return (
                           <tr key={i}>
-                            <td className="px-4 py-3 align-top">
+                            <td data-th="Night" className="px-4 py-3 align-top">
                               <p className="font-medium text-gray-800">{ord(night)}</p>
                               {startDate ? <p className="text-xs text-gray-400">{format(addDays(startDate, night - 1), 'd MMM')}</p> : null}
                             </td>
-                            <td className="px-4 py-3 align-top">
+                            <td data-card="title" className="px-4 py-3 align-top">
                               {opts.map((o, k) => (
                                 <p key={k} className="font-medium text-gray-900">
                                   {k > 0 && <span className="mr-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OR</span>}
@@ -864,12 +864,12 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                               ))}
                               <p className="text-xs text-gray-400">{uniq(opts.map((o) => o.city)).join(' / ')}{opts[0]?.stars ? `, ${opts[0].stars} Star` : ''}</p>
                             </td>
-                            <td className="px-4 py-3 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
-                            <td className="px-4 py-3 align-top">
+                            <td data-th="Meal" className="px-4 py-3 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
+                            <td data-th="Rooms" className="px-4 py-3 align-top">
                               <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
                               <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                             </td>
-                            <td className="px-4 py-3 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
+                            <td data-th="Price" className="px-4 py-3 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                           </tr>
                         );
                       })}
@@ -1047,13 +1047,13 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                       <p className="mb-1.5 text-[12.5px] font-bold uppercase tracking-wide text-gray-800">{s.heading}</p>
                       {s.intro && <p className="mb-1.5 text-[13px] leading-relaxed text-gray-600">{s.intro}</p>}
                       {s.table?.rows?.length > 0 && (
-                        <table className="mb-2 w-full border-collapse text-[12px]">
+                        <table className="rt mb-2 w-full border-collapse text-[12px]">
                           <thead>
                             <tr>{s.table.headers?.map((h) => <th key={h} className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-semibold text-gray-700">{h}</th>)}</tr>
                           </thead>
                           <tbody>
                             {s.table.rows.map((r, ri) => (
-                              <tr key={ri}>{r.map((c, ci) => <td key={ci} className="border border-gray-200 px-2 py-1 align-top text-gray-600">{c}</td>)}</tr>
+                              <tr key={ri}>{r.map((c, ci) => <td key={ci} data-card={ci === 0 ? 'title' : undefined} data-th={ci === 0 ? undefined : s.table.headers?.[ci]} className="border border-gray-200 px-2 py-1 align-top text-gray-600">{c}</td>)}</tr>
                             ))}
                           </tbody>
                         </table>
@@ -1349,8 +1349,8 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
         {/* Instalment rows */}
         <div>
           <p className="text-sm font-semibold text-gray-800 mb-2">Instalments</p>
-          <div className="rounded-lg border border-gray-200">
-            <table className="w-full text-sm table-fixed">
+          <div className="rt-wrap rounded-lg border border-gray-200">
+            <table className="rt w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: '80px' }} />
                 <col style={{ width: '160px' }} />
@@ -1372,11 +1372,11 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
                   const lbl = ordLabel(i, rows.length);
                   return (
                     <tr key={i} className={r.paid ? 'bg-green-50/40' : ''}>
-                      <td className="px-3 py-2.5 text-xs font-medium text-gray-500 align-middle">
+                      <td data-card="title" className="px-3 py-2.5 text-xs font-medium text-gray-500 align-middle">
                         <div>{i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`}</div>
                         {lbl && <div className="mt-0.5 text-[10px] rounded bg-slate-200 text-slate-600 px-1 inline-block">{lbl}</div>}
                       </td>
-                      <td className="px-3 py-2.5 align-middle">
+                      <td data-th="Amount (INR)" className="px-3 py-2.5 align-middle">
                         <input
                           type="number"
                           className="input w-full text-sm disabled:bg-slate-100 disabled:text-slate-500"
@@ -1385,7 +1385,7 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
                           onChange={(e) => updateRow(i, 'amount', e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2.5 align-middle">
+                      <td data-th="%" className="px-3 py-2.5 align-middle">
                         <input
                           type="number"
                           step="0.1"
@@ -1395,7 +1395,7 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
                           onChange={(e) => updateRow(i, 'percent', e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2.5 align-middle">
+                      <td data-th="Due Date" className="px-3 py-2.5 align-middle">
                         {r.paid ? (
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-xs text-gray-600">{r.dueDate ? format(new Date(r.dueDate), 'd MMM, yyyy') : '—'}</span>
@@ -1618,8 +1618,8 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
         {isLoading ? <div className="py-10 text-center text-gray-400">Loading…</div> : !rows.length ? (
           <div className="card p-8 text-center text-sm text-gray-400">No instalment schedule yet. It is generated when the booking is created.</div>
         ) : (
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="rt-wrap card card-flush overflow-x-auto">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Amount (INR)</th>
@@ -1632,15 +1632,15 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
               <tbody className="divide-y divide-gray-100">
                 {rows.map((r) => (
                   <tr key={r._id}>
-                    <td className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-3">
+                    <td data-card="title" className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
+                    <td data-th="Status" className="px-4 py-3">
                       <span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS[r.status] || 'bg-slate-100')}>{r.status}</span>
                       {r.paid && r.paidAmount && (
                         <p className="mt-0.5 text-xs text-green-600">Paid: ₹{r.paidAmount.toLocaleString('en-IN')}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{dt(r.dueDate)}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
+                    <td data-th="Due Date" className="px-4 py-3 text-gray-600">{dt(r.dueDate)}</td>
+                    <td data-th="Comments" className="px-4 py-3 text-gray-400 text-xs">
                       {r.comments?.length ? r.comments[r.comments.length - 1].body : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">

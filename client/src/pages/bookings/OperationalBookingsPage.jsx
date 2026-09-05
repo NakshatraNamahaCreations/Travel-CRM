@@ -56,8 +56,8 @@ export default function OperationalBookingsPage() {
         {isLoading ? (
           <div className="py-16 text-center text-slate-400">Loading…</div>
         ) : view === 'list' ? (
-          <div className="card card-flush overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="card card-flush overflow-x-auto rt-wrap">
+            <table className="rt w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Day</th>
@@ -71,13 +71,13 @@ export default function OperationalBookingsPage() {
                   <tr><td colSpan={4} className="py-12 text-center text-slate-400">No operational services this week.</td></tr>
                 ) : [...schedules].sort((a, b) => new Date(a.date) - new Date(b.date)).map((s, i) => (
                   <tr key={i} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">{format(new Date(s.date), 'EEE, d MMM')}</td>
-                    <td className="px-4 py-3">
+                    <td data-th="Day" className="px-4 py-3 font-medium text-slate-800">{format(new Date(s.date), 'EEE, d MMM')}</td>
+                    <td data-card="title" className="px-4 py-3">
                       <div className="font-medium text-slate-700">{s.serviceLocation || 'Service'}</div>
                       {s.serviceType && <div className="text-xs text-brand-600">{s.serviceType}</div>}
                     </td>
-                    <td className="px-4 py-3"><Link to={`/bookings/${s.booking}`} className="text-brand-600 hover:underline">{s.guest?.name || 'Guest'}</Link></td>
-                    <td className="px-4 py-3 text-slate-500">{s.items.map((it) => `${it.qty} ${it.type}`).join(', ') || '—'}</td>
+                    <td data-th="Trip" className="px-4 py-3"><Link to={`/bookings/${s.booking}`} className="text-brand-600 hover:underline">{s.guest?.name || 'Guest'}</Link></td>
+                    <td data-th="Vehicle / Items" className="px-4 py-3 text-slate-500">{s.items.map((it) => `${it.qty} ${it.type}`).join(', ') || '—'}</td>
                   </tr>
                 ))}
               </tbody>
