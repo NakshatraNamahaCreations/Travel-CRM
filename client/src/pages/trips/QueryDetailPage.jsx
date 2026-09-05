@@ -503,7 +503,9 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                     groups.sort((a, b) => (a.dayNos[0] || 0) - (b.dayNos[0] || 0));
                     return groups.map((g, i) => (
                       <div key={i} className="rounded-lg border border-gray-100 p-3">
-                        <div className="flex items-start justify-between gap-4">
+                        {/* Long vehicle lists wrap below the day/location on
+                            phones instead of squeezing it to a sliver. */}
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="min-w-0">
                             <span className="text-xs font-semibold text-brand-600">Day {g.dayNos.join(', ')}</span>
                             <p className="font-medium text-gray-900">{g.loc || 'Service'}</p>
@@ -511,7 +513,7 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                               <p key={k} className="text-xs text-gray-500">• {ty}</p>
                             ))}
                           </div>
-                          <div className="shrink-0 text-right text-xs text-gray-500">{g.items.join(', ')}</div>
+                          <div className="text-xs text-gray-500 sm:max-w-[45%] sm:shrink-0 sm:text-right">{g.items.join(', ')}</div>
                         </div>
                       </div>
                     ));
@@ -900,14 +902,14 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                         {rows.map((t, i) => {
                           const amt = (t.items || []).reduce((s, it) => s + (it.amount || 0), 0);
                           return (
-                            <div key={i} className="flex items-start justify-between gap-4 px-4 py-3">
+                            <div key={i} className="flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                               <div className="min-w-0">
                                 <p className="font-medium text-gray-900">{(t._isActivity ? t.name : t.serviceLocation) || 'Service'}</p>
                                 {t._isActivity
                                   ? (t.ticketType || t.slot) && <p className="text-xs text-gray-500">{[t.ticketType, t.slot].filter(Boolean).join(' · ')}</p>
                                   : t.serviceType && <p className="text-xs text-gray-500">{t.serviceType}</p>}
                               </div>
-                              <div className="shrink-0 text-right">
+                              <div className="sm:shrink-0 sm:text-right">
                                 <p className="text-sm text-gray-700">{(t.items || []).map((it) => `${it.qty || 1} ${it.type || (t._isActivity ? 'Ticket' : 'Vehicle')}`).join(', ') || '—'}</p>
                                 <p className="text-xs font-semibold text-gray-900">{amt ? `₹${amt.toLocaleString('en-IN')}` : <span className="font-normal text-gray-400">N/A</span>}</p>
                               </div>
