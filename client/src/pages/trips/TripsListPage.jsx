@@ -338,8 +338,8 @@ export default function TripsListPage() {
                         <Link to={`/trips/${q._id}`} className="block text-[15px] font-semibold leading-snug text-brand-600">
                           {(q.destinations || []).map((d) => d.name).join(', ') || 'Trip'}
                         </Link>
-                        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-gray-800">
-                          <span className="flex items-center gap-1.5 font-medium">
+                        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-semibold text-gray-900">
+                          <span className="flex items-center gap-1.5">
                             <UserRound size={13} className="shrink-0 text-gray-400" />
                             {[q.guest?.salutation, q.guest?.name].filter(Boolean).join(' ') || '—'}
                           </span>
@@ -354,7 +354,7 @@ export default function TripsListPage() {
                             </a>
                           )}
                         </p>
-                        <p className="mt-1 flex items-center gap-1.5 text-[13px] text-gray-700">
+                        <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900">
                           <CalendarDays size={13} className="shrink-0 text-gray-400" />
                           {q.startDate ? format(new Date(q.startDate), 'd MMM, yyyy') : 'Flexible'} • {q.nights}N, {q.nights + 1}D
                         </p>
