@@ -231,7 +231,7 @@ export default function TripsListPage() {
                 className={cn(
                   'flex shrink-0 items-center justify-between gap-2 whitespace-nowrap px-4 py-2.5 text-sm lg:w-full',
                   active
-                    ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-700 lg:border-b-0 lg:border-l-2'
+                    ? 'border-b-2 border-brand-600 font-semibold text-gray-900 lg:border-b-0 lg:border-l-2 lg:bg-brand-50'
                     : 'text-gray-600 hover:bg-gray-50'
                 )}
               >
