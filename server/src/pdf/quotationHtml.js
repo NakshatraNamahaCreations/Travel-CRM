@@ -259,7 +259,7 @@ export function quotationHtml(q, org = null) {
         <div class="tbl flat"><table>
           <thead><tr><th>Hotel Name</th><th>Type of Room</th><th>Place</th><th>&#35; Rooms</th><th>&#35; Nights</th><th>Adult<br/>Extra Bed</th><th>Child<br/>Extra Bed</th><th>Child<br/>No Bed</th><th>Meal Plan</th></tr></thead>
           <tbody>${hotelRowsOf(p.hotels)}</tbody></table>
-          <div class="psrow"><span>Total Tour Cost with these Hotels (incl. ${gstPct}% ${esc(p.taxName || 'GST')})</span><span class="psval">${inr(totalWithGst)}</span></div>
+          <div class="psrow"><span>Total Tour Cost with these Hotels</span><span class="psval">${inr(totalWithGst)}</span></div>
           <div class="psrow pshl"><span>Total Payable Amount to Confirm Booking (50%)</span><span class="psval">${inr(payable)}</span></div>
         </div>
       </div>`;
