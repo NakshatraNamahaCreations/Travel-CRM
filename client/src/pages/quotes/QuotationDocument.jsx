@@ -40,7 +40,11 @@ export default function QuotationDocument() {
   const { data: html, isLoading, error } = useQuery({
     queryKey: ['quote-doc-html', id],
     queryFn: () => quotesApi.pdfHtml(id),
-    staleTime: 30_000,
+    // Always refetch on open: the itinerary may have just been edited (even
+    // from another tab), and a cached document here reads as "my changes
+    // didn't save". Cached HTML still paints instantly while it refreshes.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   useEffect(() => {

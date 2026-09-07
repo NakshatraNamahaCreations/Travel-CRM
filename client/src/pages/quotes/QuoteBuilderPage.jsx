@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, X, AlertTriangle, Check, Wallet, Pencil, ClipboardList, ClipboardCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -23,6 +23,7 @@ const newPackage = (name) => ({
 export default function QuoteBuilderPage({ mode }) {
   const { id, queryId } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const isEdit = mode === 'edit';
   const [saving, setSaving] = useState(false);
   const [active, setActive] = useState(0);
@@ -92,6 +93,12 @@ export default function QuoteBuilderPage({ mode }) {
         exclusions: form.exclusions.map((t) => t.trim()).filter(Boolean),
       };
       const saved = isEdit ? await quotesApi.update(id, payload) : await quotesApi.create(payload);
+      // Drop every cached view of this quote — detail, list, full package view
+      // and the rendered quotation HTML — so no page shows the pre-save state.
+      qc.invalidateQueries({ queryKey: ['quote', saved._id] });
+      qc.invalidateQueries({ queryKey: ['quote-full', saved._id] });
+      qc.invalidateQueries({ queryKey: ['quote-doc-html', saved._id] });
+      qc.invalidateQueries({ queryKey: ['quotes'] });
       toast.success(isEdit ? 'Quote updated' : 'Quote created');
       // A fresh quote continues to the Create Itinerary step; edits return to
       // the trip's quotes tab (Sembark flow — no standalone quote page between).

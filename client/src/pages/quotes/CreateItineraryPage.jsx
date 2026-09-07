@@ -72,6 +72,10 @@ export default function CreateItineraryPage() {
         daysCustomized: true,
       });
       qc.invalidateQueries({ queryKey: ['quote', id] });
+      qc.invalidateQueries({ queryKey: ['quote-full', id] });
+      // The quotation preview caches the rendered document — drop it so the
+      // edited itinerary shows immediately instead of the pre-save version.
+      qc.invalidateQueries({ queryKey: ['quote-doc-html', id] });
       qc.invalidateQueries({ queryKey: ['quotes'] });
       toast.success('Itinerary details saved');
       // Back to the trip's quotes tab — like Sembark's flow.
