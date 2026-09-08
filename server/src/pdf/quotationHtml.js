@@ -282,10 +282,20 @@ export function quotationHtml(q, org = null) {
   })();
   const heroImg = company.heroImage || gallery[2] || gallery[0] || '';
 
-  // City a given trip day belongs to (from hotel night assignments).
+  // City a given trip day belongs to: the hotel night's city, else (a day
+  // with no hotel night — the departure day) that day's own transport
+  // location; for a sector like "Havelock to Port Blair" the arrival end.
   const cityOfDay = (n) => {
     const h = primaryHotels.find((x) => (x.nights || []).includes(n));
-    return h?.city || primaryHotels[primaryHotels.length - 1]?.city || '';
+    if (h?.city) return h.city;
+    const svc = (pkg.transports || []).find(
+      (t) => (Array.isArray(t.days) && t.days.length ? t.days : [t.day]).includes(n) && t.serviceLocation
+    );
+    if (svc) {
+      const parts = splitSector(svc.serviceLocation);
+      return parts[parts.length - 1] || svc.serviceLocation;
+    }
+    return primaryHotels[primaryHotels.length - 1]?.city || '';
   };
 
   // ---- Itinerary introduction (day list) ----
