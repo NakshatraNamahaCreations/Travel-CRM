@@ -224,6 +224,32 @@ export const editPayment = asyncHandler(async (req, res) => {
   return ok(res, inst);
 });
 
+// DELETE /api/installments/:id/payment — undo a mistakenly logged payment:
+// clears the paid state (and any verification), removes the mirrored Payment
+// ledger row, and re-syncs the booking's paid total. The instalment itself
+// stays scheduled, back to its due state.
+export const undoPayment = asyncHandler(async (req, res) => {
+  const inst = await Installment.findById(req.params.id);
+  if (!inst) throw ApiError.notFound('Installment not found');
+  if (!inst.paid) throw ApiError.badRequest('No payment logged for this instalment');
+
+  if (inst.payment) await Payment.findByIdAndDelete(inst.payment);
+  inst.paid = false;
+  inst.verified = false;
+  inst.paidAmount = undefined;
+  inst.paidOn = undefined;
+  inst.reference = undefined;
+  inst.payment = undefined;
+  inst.verifiedBy = undefined;
+  inst.verifiedAt = undefined;
+  inst.taxableValue = undefined;
+  inst.gstPercent = undefined;
+  inst.taxAmount = undefined;
+  await inst.save();
+  if (inst.direction === 'incoming') await syncBookingPaid(inst.booking);
+  return ok(res, inst);
+});
+
 // Builds the payment receipt PDF for a paid instalment. Shared by the
 // authenticated route below and the public (tokenised) share link.
 export async function buildReceiptPdf(id, orgId) {

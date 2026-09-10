@@ -1456,15 +1456,15 @@ function UpdateScheduleModal({ open, onClose, bookingId, totalAmount, existingRo
   );
 }
 
-function LogPaymentModal({ inst, onClose, onSaved }) {
+function LogPaymentModal({ inst, onClose, onSaved, edit = false }) {
   const qc = useQueryClient();
-  const [taxBill, setTaxBill] = useState(false);
+  const [taxBill, setTaxBill] = useState(edit && (inst?.taxableValue || 0) > 0);
   const [f, setF] = useState({
-    paidAmount: inst?.amount || 0,
-    paidOn: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    reference: '',
-    taxableValue: inst?.amount ? Math.round((inst.amount / 1.05) * 100) / 100 : 0,
-    gstPercent: 5,
+    paidAmount: edit ? (inst?.paidAmount ?? inst?.amount ?? 0) : (inst?.amount || 0),
+    paidOn: edit && inst?.paidOn ? format(new Date(inst.paidOn), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    reference: (edit && inst?.reference) || '',
+    taxableValue: edit && inst?.taxableValue ? inst.taxableValue : inst?.amount ? Math.round((inst.amount / 1.05) * 100) / 100 : 0,
+    gstPercent: (edit && inst?.gstPercent) || 5,
   });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
 
@@ -1472,14 +1472,17 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
   const finalAmount = taxBill ? Math.round(((Number(f.taxableValue) || 0) + taxAmount) * 100) / 100 : Number(f.paidAmount) || 0;
 
   const mut = useMutation({
-    mutationFn: () => installmentsApi.logPayment(inst._id, {
-      paidOn: f.paidOn,
-      reference: f.reference,
-      paidAmount: finalAmount,
-      ...(taxBill ? { taxableValue: Number(f.taxableValue) || 0, gstPercent: Number(f.gstPercent) || 0, taxAmount } : {}),
-    }),
+    mutationFn: () => {
+      const payload = {
+        paidOn: f.paidOn,
+        reference: f.reference,
+        paidAmount: finalAmount,
+        ...(taxBill ? { taxableValue: Number(f.taxableValue) || 0, gstPercent: Number(f.gstPercent) || 0, taxAmount } : {}),
+      };
+      return edit ? installmentsApi.editPayment(inst._id, payload) : installmentsApi.logPayment(inst._id, payload);
+    },
     onSuccess: () => {
-      toast.success('Payment logged successfully');
+      toast.success(edit ? 'Payment updated' : 'Payment logged successfully');
       qc.invalidateQueries({ queryKey: ['inst'] });
       onSaved?.();
       onClose();
@@ -1489,7 +1492,7 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
 
   if (!inst) return null;
   return (
-    <Modal open onClose={onClose} title="Log Payment" width="max-w-md">
+    <Modal open onClose={onClose} title={edit ? 'Edit Payment' : 'Log Payment'} width="max-w-md">
       <div className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-xs text-slate-500">Due Amount (INR)</p>
@@ -1533,7 +1536,7 @@ function LogPaymentModal({ inst, onClose, onSaved }) {
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="btn-secondary">Cancel</button>
           <button onClick={() => mut.mutate()} disabled={mut.isPending || !finalAmount} className="btn-primary">
-            {mut.isPending ? 'Saving…' : 'Log Payment'}
+            {mut.isPending ? 'Saving…' : edit ? 'Save Changes' : 'Log Payment'}
           </button>
         </div>
       </div>
@@ -1576,8 +1579,18 @@ export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
 
 function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const qc = useQueryClient();
-  const { hasRole } = useAuth();
+  const { hasRole, can } = useAuth();
   const isAdmin = hasRole('admin');
+  const undoMut = useMutation({
+    mutationFn: (instId) => installmentsApi.undoPayment(instId),
+    onSuccess: () => { toast.success('Payment undone — instalment is back to due'); qc.invalidateQueries({ queryKey: ['inst', id] }); },
+    onError: (e) => toast.error(e.message || 'Could not undo the payment'),
+  });
+  const confirmUndo = (r) => {
+    if (window.confirm(`Undo the logged payment of ₹${(r.paidAmount || 0).toLocaleString('en-IN')}? Its ledger entry is removed and the instalment goes back to due.`)) {
+      undoMut.mutate(r._id);
+    }
+  };
   const { data, isLoading } = useQuery({ queryKey: ['inst', id], queryFn: () => installmentsApi.list({ query: id, direction: 'incoming' }) });
   const verifyMut = useMutation({
     mutationFn: (instId) => installmentsApi.verify(instId),
@@ -1592,6 +1605,7 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const STATUS = { paid: 'text-green-700 bg-green-50', overdue: 'text-rose-700 bg-rose-50', unverified: 'text-amber-700 bg-amber-50', upcoming: 'text-slate-600 bg-slate-100' };
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [payInst, setPayInst] = useState(null); // instalment being paid
+  const [editInst, setEditInst] = useState(null); // logged payment being corrected
   // One GST invoice per payment received — raised against the individual
   // instalment as soon as that instalment is paid, not once the whole trip is.
   const [gstInst, setGstInst] = useState(null);
@@ -1682,8 +1696,9 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                         </div>
                       ) : r.status === 'unverified' ? (
                         // Logged but not yet checked — Sembark-style amber pill,
-                        // admin-only; docs unlock after verification.
-                        <div className="flex justify-end">
+                        // admin-only; docs unlock after verification. A mistaken
+                        // entry can still be corrected or undone here.
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {isAdmin ? (
                             <button
                               onClick={() => verifyMut.mutate(r._id)}
@@ -1695,6 +1710,14 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                             </button>
                           ) : (
                             <span className="text-xs font-medium text-amber-600">Awaiting admin verification</span>
+                          )}
+                          <button onClick={() => setEditInst(r)} title="Correct the logged payment" className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700">
+                            <Pencil size={11} className="mr-1 inline" /> Edit
+                          </button>
+                          {can('payments.cancel') && (
+                            <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
+                              Undo
+                            </button>
                           )}
                         </div>
                       ) : (
@@ -1726,6 +1749,18 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                           >
                             <MessageSquare size={12} className="mr-1 inline" /> WhatsApp
                           </button>
+                          {isAdmin && (
+                            <>
+                              <button onClick={() => setEditInst(r)} title="Correct the logged payment" className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700">
+                                <Pencil size={11} className="mr-1 inline" /> Edit
+                              </button>
+                              {can('payments.cancel') && (
+                                <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
+                                  Undo
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                     </td>
@@ -1758,6 +1793,14 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
         <LogPaymentModal
           inst={payInst}
           onClose={() => setPayInst(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['inst', id] })}
+        />
+      )}
+      {editInst && (
+        <LogPaymentModal
+          edit
+          inst={editInst}
+          onClose={() => setEditInst(null)}
           onSaved={() => qc.invalidateQueries({ queryKey: ['inst', id] })}
         />
       )}
