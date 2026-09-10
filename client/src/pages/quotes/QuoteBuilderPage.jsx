@@ -94,14 +94,21 @@ export default function QuoteBuilderPage({ mode }) {
       };
       // Editing saves as a NEW quotation (Sembark behaviour) — the original
       // stays in All Quotes as history, the revision becomes the latest.
-      const saved = isEdit ? await quotesApi.revise(id, payload) : await quotesApi.create(payload);
+      // EXCEPT a converted (accepted) quote: it is tied to the live booking
+      // (service bookings, instalments), so edits update it in place.
+      const inPlace = isEdit && existing?.status === 'accepted';
+      const saved = inPlace
+        ? await quotesApi.update(id, payload)
+        : isEdit
+          ? await quotesApi.revise(id, payload)
+          : await quotesApi.create(payload);
       // Drop every cached view of this quote — detail, list, full package view
       // and the rendered quotation HTML — so no page shows the pre-save state.
       qc.invalidateQueries({ queryKey: ['quote', saved._id] });
       qc.invalidateQueries({ queryKey: ['quote-full', saved._id] });
       qc.invalidateQueries({ queryKey: ['quote-doc-html', saved._id] });
       qc.invalidateQueries({ queryKey: ['quotes'] });
-      toast.success(isEdit ? `Saved as new quote #${saved.quoteNumber}` : 'Quote created');
+      toast.success(inPlace ? 'Quote updated' : isEdit ? `Saved as new quote #${saved.quoteNumber}` : 'Quote created');
       // A fresh quote continues to the Create Itinerary step; edits return to
       // the trip's quotes tab (Sembark flow — no standalone quote page between).
       if (isEdit) {
