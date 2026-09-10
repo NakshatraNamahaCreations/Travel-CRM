@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, authorize, can } from '../middleware/auth.js';
+import { protect, authorize } from '../middleware/auth.js';
 import {
   listInstallments,
   installmentSummary,
@@ -23,8 +23,8 @@ router.get('/summary', installmentSummary);
 router.get('/accounts', accountOptions);
 router.post('/', createInstallment);
 router.post('/:id/log-payment', logPayment);
-router.patch('/:id/payment', editPayment);
-router.delete('/:id/payment', can('payments.cancel'), undoPayment);
+router.patch('/:id/payment', authorize('admin'), editPayment);
+router.delete('/:id/payment', authorize('admin'), undoPayment);
 router.get('/:id/receipt', receiptPdf);
 router.post('/:id/whatsapp-template', sendPaymentTemplate);
 router.patch('/:id/verify', authorize('admin'), verifyInstallment);

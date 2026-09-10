@@ -449,7 +449,7 @@ export default function PaymentsLedgerPage({ direction }) {
                       {i.status === 'paid' ? (
                         <span className="flex items-center gap-2">
                           <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Verified</span>
-                          {can('payments.create') && (
+                          {hasRole('admin') && (
                             <button onClick={() => setEditFor(i)} title="Edit payment" className="flex items-center gap-1 text-xs text-slate-400 hover:text-brand-700">
                               <Pencil size={12} /> Edit
                             </button>

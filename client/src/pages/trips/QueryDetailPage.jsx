@@ -1579,7 +1579,7 @@ export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
 
 function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const qc = useQueryClient();
-  const { hasRole, can } = useAuth();
+  const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
   const undoMut = useMutation({
     mutationFn: (instId) => installmentsApi.undoPayment(instId),
@@ -1711,13 +1711,15 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                           ) : (
                             <span className="text-xs font-medium text-amber-600">Awaiting admin verification</span>
                           )}
-                          <button onClick={() => setEditInst(r)} title="Correct the logged payment" className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700">
-                            <Pencil size={11} className="mr-1 inline" /> Edit
-                          </button>
-                          {can('payments.cancel') && (
-                            <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
-                              Undo
-                            </button>
+                          {isAdmin && (
+                            <>
+                              <button onClick={() => setEditInst(r)} title="Correct the logged payment" className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700">
+                                <Pencil size={11} className="mr-1 inline" /> Edit
+                              </button>
+                              <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
+                                Undo
+                              </button>
+                            </>
                           )}
                         </div>
                       ) : (
@@ -1754,11 +1756,9 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                               <button onClick={() => setEditInst(r)} title="Correct the logged payment" className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-brand-700">
                                 <Pencil size={11} className="mr-1 inline" /> Edit
                               </button>
-                              {can('payments.cancel') && (
-                                <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
-                                  Undo
-                                </button>
-                              )}
+                              <button onClick={() => confirmUndo(r)} disabled={undoMut.isPending} title="Undo this payment entirely" className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100">
+                                Undo
+                              </button>
                             </>
                           )}
                         </div>
