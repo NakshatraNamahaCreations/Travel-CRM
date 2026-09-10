@@ -329,13 +329,18 @@ export const updateQuery = asyncHandler(async (req, res) => {
     runValidators: true,
   }).populate(POPULATE);
   if (!item) throw ApiError.notFound('Query not found');
-  // Keep open quotes in step with the trip's traveller count — accepted
-  // (converted) quotes keep the pax they were sold with.
-  if (req.body.pax) {
-    await Quote.updateMany(
-      { query: item._id, status: { $in: ['draft', 'sent'] } },
-      { pax: item.pax },
-    );
+  // Keep open quotes in step with the trip's edited basics — start date,
+  // duration and traveller count flow into draft/sent quotes (via save() so
+  // pricing recomputes and the itinerary tops up new days). Accepted
+  // (converted) quotes keep the configuration they were sold with.
+  if (req.body.pax || req.body.nights !== undefined || req.body.startDate !== undefined) {
+    const openQuotes = await Quote.find({ query: item._id, status: { $in: ['draft', 'sent'] } });
+    for (const qt of openQuotes) {
+      if (req.body.pax) qt.pax = item.pax;
+      if (req.body.nights !== undefined) qt.nights = item.nights;
+      if (req.body.startDate !== undefined) qt.startDate = item.startDate;
+      await qt.save();
+    }
   }
   return ok(res, item);
 });
