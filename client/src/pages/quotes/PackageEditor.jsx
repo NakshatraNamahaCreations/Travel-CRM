@@ -508,12 +508,14 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
               <div className="grid gap-5 lg:grid-cols-[1fr_330px]">
                 {/* ---- Left: hotel details ---- */}
                 <div className="lg:border-r lg:border-slate-100 lg:pr-5">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
+                  {/* Sembark mobile layout: Stay Nights and Hotel full width,
+                      Meal Plan and Room Type side by side. */}
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="label">Stay Nights</label>
                       <NightSelect nights={nights} startDate={startDate} value={h.nights || []} onToggle={(n) => toggleNight(i, n)} disabledNights={nightsTakenByOthers(i)} />
                     </div>
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="label">Hotel</label>
                       <div className="flex gap-1.5">
                         <div className="min-w-0 flex-1">
@@ -572,7 +574,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:grid-cols-5">
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
                     <Num label="Pax/room (WoEB)" value={h.paxPerRoom} onChange={(v) => setHotel(i, { paxPerRoom: v })} />
                     {/* Extra beds only make sense inside rooms — zero & lock them until rooms ≥ 1. */}
                     <Num label="No. of rooms" value={h.rooms} onChange={(v) => setHotel(i, v > 0 ? { rooms: v } : { rooms: v, aweb: 0, cweb: 0, cnb: 0 })} />
