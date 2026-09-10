@@ -23,6 +23,28 @@ const sheetRows = (ws) => XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }
 const escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const nameEq = (s) => ({ $regex: `^\\s*${escRx(String(s).trim()).replace(/\s+/g, '\\s+')}\\s*$`, $options: 'i' });
 
+// Re-uploading a sheet must refresh prices without erasing hand-authored
+// content on the existing record (photos, descriptions). Merge the freshly
+// parsed sub-items with the current ones by name: sheet fields win where the
+// sheet provides them, everything else carries over.
+const itemKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+export function mergeSubItems(fresh, existing) {
+  const prevByName = new Map((existing || []).map((it) => {
+    const o = typeof it.toObject === 'function' ? it.toObject() : it;
+    return [itemKey(o.name), o];
+  }));
+  return (fresh || []).map((it) => {
+    const prev = prevByName.get(itemKey(it.name));
+    if (!prev) return it;
+    const merged = { ...prev, ...it };
+    for (const [k, v] of Object.entries(it)) {
+      if ((v === undefined || v === null || v === '') && prev[k] !== undefined) merged[k] = prev[k];
+    }
+    delete merged._id;
+    return merged;
+  });
+}
+
 /* ===================== HOTELS ===================== */
 export function parseHotelSheet(rows, displayName) {
   let H = -1;
@@ -172,7 +194,9 @@ export async function importActivities(wb, { destinations = [] } = {}) {
         duration: t.duration,
         durationUnit: t.duration ? 'mins' : undefined,
       }));
-      const doc = await TravelActivity.findOneAndUpdate({ name: nameEq(name) }, { $set: { ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes }, $setOnInsert: { name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const prevAct = await TravelActivity.findOne({ name: nameEq(name) }).select('ticketTypes');
+      const mergedTickets = mergeSubItems(ticketTypes, prevAct?.ticketTypes);
+      const doc = await TravelActivity.findOneAndUpdate({ name: nameEq(name) }, { $set: { ageConfig: info.ageConfig || 'Adult, Child', destinations: destIds, ticketTypes: mergedTickets }, $setOnInsert: { name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TravelActivityPrice.deleteMany({ activity: doc._id });
       const rows = prices.filter((p) => p.activity === name && p.start && p.end).map((p) => ({ activity: doc._id, service: p.service, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TravelActivityPrice.insertMany(rows);
@@ -246,7 +270,9 @@ export async function importTransport(wb, { destinations = [] } = {}) {
   const vehicleNames = new Set();
   for (const { sheet } of pickSheets(wb.SheetNames)) {
     for (const route of parseTransportSheet(sheetRows(wb.Sheets[sheet]))) {
-      const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: destIds, items: route.items.slice(0, 50), from: route.from || route.name, to: route.to || '' }, $setOnInsert: { name: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const prevSvc = await TransportService.findOne({ name: nameEq(route.name) }).select('items imageUrl');
+      const mergedItems = mergeSubItems(route.items.slice(0, 50), prevSvc?.items);
+      const doc = await TransportService.findOneAndUpdate({ name: nameEq(route.name) }, { $set: { destinations: destIds, items: mergedItems, from: route.from || route.name, to: route.to || '' }, $setOnInsert: { name: route.name } }, { upsert: true, new: true, setDefaultsOnInsert: true });
       await TransportPrice.deleteMany({ service: doc._id });
       const rows = route.prices.map((p) => ({ service: doc._id, itemName: p.itemName, config: p.config, startDate: p.start, endDate: p.end, price: p.price }));
       if (rows.length) await TransportPrice.insertMany(rows);
