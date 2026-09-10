@@ -916,7 +916,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           {famRows.length > 1 && (
                             <p className="mb-1.5 truncate text-[11px] font-bold uppercase tracking-wide text-brand-600" title={ft.serviceType}>{ft.serviceType || 'Service'}</p>
                           )}
-                          <table className="rt w-full table-fixed text-xs">
+                          <table className="w-full table-fixed text-xs">
                             <thead>
                               <tr className="bg-brand-50 text-brand-700">
                                 <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Transportation</th>
@@ -1088,7 +1088,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                       </p>
                       <button type="button" onClick={() => autoActRate(ai)} title="Fetch rates from the activity price list" className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"><Sparkles size={11} /> Auto rate</button>
                     </div>
-                    <table className="rt w-full table-fixed text-xs">
+                    <table className="w-full table-fixed text-xs">
                       <thead>
                         <tr className="bg-violet-50 text-violet-700">
                           <th className="rounded-l-md py-1.5 pl-2 text-left font-bold">Type</th>
@@ -1365,7 +1365,7 @@ function GivenPriceModal({ hotel, currency, onClose, onSave }) {
   const total = rows.reduce((s, r) => s + (Number(v[r.key]) || 0) * r.qty, 0);
   return (
     <Modal open onClose={onClose} title="Given Price" width="max-w-lg">
-      <table className="rt w-full text-sm">
+      <table className="w-full text-sm">
         <thead className="text-left text-xs text-slate-500">
           <tr><th className="py-2" /><th className="py-2 text-center">Price ({currency})</th><th className="py-2 text-center">Quantity</th><th className="py-2 text-right">Total</th></tr>
         </thead>
