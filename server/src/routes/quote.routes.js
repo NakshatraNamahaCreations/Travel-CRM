@@ -4,6 +4,7 @@ import {
   getQuote,
   createQuote,
   updateQuote,
+  reviseQuote,
   updateQuoteStatus,
   deleteQuote,
   quotePdf,
@@ -34,6 +35,7 @@ router.post('/:id/share-email', shareEmail);
 router.post('/:id/whatsapp-share', shareWhatsApp);
 router.post('/', can('quotes.create'), createQuote);
 router.put('/:id', can('quotes.edit'), updateQuote);
+router.post('/:id/revise', can('quotes.edit'), reviseQuote);
 router.patch('/:id/status', updateQuoteStatus);
 router.delete('/:id', can('quotes.delete'), deleteQuote);
 

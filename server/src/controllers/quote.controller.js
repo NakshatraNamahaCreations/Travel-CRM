@@ -157,6 +157,40 @@ export const updateQuote = asyncHandler(async (req, res) => {
   return ok(res, quote);
 });
 
+// POST /api/quotes/:id/revise — editing a quotation saves it as a NEW
+// quotation (Sembark behaviour): the original stays in All Quotes as
+// history and the revision becomes the trip's latest quote.
+export const reviseQuote = asyncHandler(async (req, res) => {
+  const source = await Quote.findById(req.params.id);
+  if (!source) throw ApiError.notFound('Quote not found');
+  const src = source.toObject();
+  // Drop subdocument _ids so Mongoose assigns fresh ones on the copy.
+  const stripIds = (v) => JSON.parse(JSON.stringify(v, (k, val) => (k === '_id' ? undefined : val)));
+
+  const quote = await Quote.create({
+    query: src.query,
+    title: req.body.title ?? src.title,
+    currency: req.body.currency || src.currency || 'INR',
+    startDate: req.body.startDate ?? src.startDate,
+    nights: req.body.nights ?? src.nights,
+    pax: req.body.pax || src.pax,
+    packages: stripIds(req.body.packages ?? src.packages ?? []),
+    pricingStrategy: req.body.pricingStrategy ?? src.pricingStrategy,
+    totalFoc: req.body.totalFoc ?? src.totalFoc,
+    selectedPackageIndex: req.body.selectedPackageIndex ?? src.selectedPackageIndex,
+    inclusions: req.body.inclusions ?? src.inclusions,
+    exclusions: req.body.exclusions ?? src.exclusions,
+    terms: req.body.terms ?? src.terms,
+    // A hand-customized itinerary survives the revision.
+    ...(src.daysCustomized ? { days: stripIds(src.days || []), daysCustomized: true } : {}),
+    createdBy: req.user._id,
+  });
+  await syncQuery(src.query);
+  await logActivity(src.query, req.user._id, `revised quote #${src.quoteNumber} into new quote #${quote.quoteNumber} with ${quote.currency} ${(quote.pricing?.total || 0).toLocaleString('en-IN')}`, 'quote');
+  warmQuotePdfCache(quote._id, req.organizationId);
+  return created(res, quote);
+});
+
 // PATCH /api/quotes/:id/status
 export const updateQuoteStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;

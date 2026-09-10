@@ -7,6 +7,7 @@ export const quotesApi = {
   get: (id) => api.get(`/quotes/${id}`).then((r) => r.data.data),
   create: (payload) => api.post('/quotes', payload).then((r) => r.data.data),
   update: (id, payload) => api.put(`/quotes/${id}`, payload).then((r) => r.data.data),
+  revise: (id, payload) => api.post(`/quotes/${id}/revise`, payload).then((r) => r.data.data),
   setStatus: (id, status) => api.patch(`/quotes/${id}/status`, { status }).then((r) => r.data.data),
   remove: (id) => api.delete(`/quotes/${id}`).then((r) => r.data.data),
   pdf: (id) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
