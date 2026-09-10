@@ -120,7 +120,10 @@ export function quotationHtml(q, org = null) {
   const paxAdults = q.pax?.adults || 0;
   const paxChildren = q.pax?.children?.length || 0;
   const pax = paxAdults + paxChildren;
-  const start = q.startDate ? new Date(q.startDate) : null;
+  // Quote's own date first, else the trip's — a quote made before dates were
+  // fixed still shows the trip date once it's known.
+  const startRaw = q.startDate || q.query?.startDate;
+  const start = startRaw ? new Date(startRaw) : null;
   const end = start ? addDays(start, q.nights || 0) : null;
   const tripTitle = `${q.nights}N${(q.nights || 0) + 1}D ${pkg.name || 'Package'} Tour to Andaman`;
 
@@ -1029,7 +1032,7 @@ export function quotationHtml(q, org = null) {
     </div>
     <div class="stat">
       <div class="statico">&#128197;</div>
-      <div class="sk">Tour Start Date</div><div class="sv">${fmtDate(start)}</div>
+      <div class="sk">Tour Start Date</div><div class="sv">${start ? fmtDate(start) : 'To Be Decided'}</div>
     </div>
     <div class="stat">
       <div class="statico">&#128336;</div>
