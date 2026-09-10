@@ -74,7 +74,7 @@ export const listInstallments = asyncHandler(async (req, res) => {
     : applyScope(filter, ownScope(req.user, ['createdBy']));
   const total = await Installment.countDocuments(scoped);
   const meta = paginate(req.query, total);
-  const items = await Installment.find(scoped).sort('dueDate').skip(meta.skip).limit(meta.limit);
+  const items = await Installment.find(scoped).sort('dueDate').skip(meta.skip).limit(meta.limit).populate('verifiedBy', 'name');
   return ok(res, items, meta);
 });
 

@@ -1644,27 +1644,18 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                   <tr key={r._id}>
                     <td data-card="title" className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
                     <td data-th="Status" className="px-4 py-3">
-                      <span className={cn('rounded px-2 py-0.5 text-xs font-medium', STATUS[r.status] || 'bg-slate-100', r.status !== 'unverified' && 'capitalize')}>
-                        {r.status === 'unverified' ? 'Pending Verification' : r.status}
-                      </span>
-                      {r.paid && r.paidAmount && (
-                        <p className="mt-0.5 text-xs text-green-600">Paid: ₹{r.paidAmount.toLocaleString('en-IN')}</p>
-                      )}
-                      {r.status === 'paid' && (
-                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-green-700">✓ Verified by admin</p>
-                      )}
-                      {r.status === 'unverified' && (
-                        isAdmin ? (
-                          <button
-                            onClick={() => verifyMut.mutate(r._id)}
-                            disabled={verifyMut.isPending}
-                            className="mt-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 hover:bg-green-100"
-                          >
-                            {verifyMut.isPending ? 'Verifying…' : 'Verify'}
-                          </button>
-                        ) : (
-                          <p className="mt-0.5 text-xs text-amber-600">Awaiting admin verification</p>
-                        )
+                      {r.paid ? (
+                        <>
+                          <span className="inline-block rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                            Paid: {r.paidOn ? format(new Date(r.paidOn), 'd MMM, yyyy') : dt(r.dueDate)}
+                          </span>
+                          {r.paidAmount ? <p className="mt-0.5 text-xs text-green-600">₹{r.paidAmount.toLocaleString('en-IN')}</p> : null}
+                          {(r.creditAccount || r.debitAccount) && (
+                            <p className="mt-0.5 max-w-[220px] text-xs text-slate-400">{[r.creditAccount, r.debitAccount].filter(Boolean).join(' → ')}</p>
+                          )}
+                        </>
+                      ) : (
+                        <span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS[r.status] || 'bg-slate-100')}>{r.status}</span>
                       )}
                     </td>
                     <td data-th="Due Date" className="px-4 py-3 text-gray-600">{dt(r.dueDate)}</td>
@@ -1689,8 +1680,31 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                             <MessageSquare size={12} className="mr-1 inline" /> Ask
                           </button>
                         </div>
+                      ) : r.status === 'unverified' ? (
+                        // Logged but not yet checked — Sembark-style amber pill,
+                        // admin-only; docs unlock after verification.
+                        <div className="flex justify-end">
+                          {isAdmin ? (
+                            <button
+                              onClick={() => verifyMut.mutate(r._id)}
+                              disabled={verifyMut.isPending}
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                            >
+                              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] text-white">✓</span>
+                              {verifyMut.isPending ? 'Verifying…' : 'Verify Payment'}
+                            </button>
+                          ) : (
+                            <span className="text-xs font-medium text-amber-600">Awaiting admin verification</span>
+                          )}
+                        </div>
                       ) : (
-                        <div className="flex justify-end gap-1.5">
+                        <div className="flex flex-wrap items-start justify-end gap-1.5">
+                          <span className="text-right">
+                            <span className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-green-600 text-[9px] text-white">✓</span> Verified
+                            </span>
+                            <span className="mt-0.5 block text-[10.5px] text-slate-400">by {r.verifiedBy?.name || 'admin'}</span>
+                          </span>
                           <button
                             onClick={() => openReceipt(r)}
                             title="Download the payment receipt PDF"
