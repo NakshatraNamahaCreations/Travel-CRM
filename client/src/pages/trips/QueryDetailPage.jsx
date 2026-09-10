@@ -14,6 +14,7 @@ import { quotesApi } from '../../api/quotes.js';
 import { commentsApi } from '../../api/comments.js';
 import { installmentsApi } from '../../api/installments.js';
 import { activityLogApi } from '../../api/activities.js';
+import { useAuth } from '../../store/AuthContext.jsx';
 import { usersApi, inclusionExclusionApi } from '../../api/masterData.js';
 import { cn } from '../../lib/cn.js';
 import { groupHotelOptions, hotelsBilledTotal } from '../../lib/pricing.js';
@@ -1575,7 +1576,14 @@ export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
 
 function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const qc = useQueryClient();
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('admin');
   const { data, isLoading } = useQuery({ queryKey: ['inst', id], queryFn: () => installmentsApi.list({ query: id, direction: 'incoming' }) });
+  const verifyMut = useMutation({
+    mutationFn: (instId) => installmentsApi.verify(instId),
+    onSuccess: () => { toast.success('Payment verified'); qc.invalidateQueries({ queryKey: ['inst', id] }); },
+    onError: (e) => toast.error(e.message || 'Could not verify'),
+  });
   const rows = data?.data || [];
   const paidTotal = rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
   const scheduleTotal = rows.reduce((s, r) => s + (r.amount || 0), 0);
@@ -1636,9 +1644,27 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
                   <tr key={r._id}>
                     <td data-card="title" className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
                     <td data-th="Status" className="px-4 py-3">
-                      <span className={cn('rounded px-2 py-0.5 text-xs font-medium capitalize', STATUS[r.status] || 'bg-slate-100')}>{r.status}</span>
+                      <span className={cn('rounded px-2 py-0.5 text-xs font-medium', STATUS[r.status] || 'bg-slate-100', r.status !== 'unverified' && 'capitalize')}>
+                        {r.status === 'unverified' ? 'Pending Verification' : r.status}
+                      </span>
                       {r.paid && r.paidAmount && (
                         <p className="mt-0.5 text-xs text-green-600">Paid: ₹{r.paidAmount.toLocaleString('en-IN')}</p>
+                      )}
+                      {r.status === 'paid' && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-green-700">✓ Verified by admin</p>
+                      )}
+                      {r.status === 'unverified' && (
+                        isAdmin ? (
+                          <button
+                            onClick={() => verifyMut.mutate(r._id)}
+                            disabled={verifyMut.isPending}
+                            className="mt-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 hover:bg-green-100"
+                          >
+                            {verifyMut.isPending ? 'Verifying…' : 'Verify'}
+                          </button>
+                        ) : (
+                          <p className="mt-0.5 text-xs text-amber-600">Awaiting admin verification</p>
+                        )
                       )}
                     </td>
                     <td data-th="Due Date" className="px-4 py-3 text-gray-600">{dt(r.dueDate)}</td>

@@ -40,6 +40,8 @@ const installmentSchema = new mongoose.Schema(
 
     paid: { type: Boolean, default: false },
     verified: { type: Boolean, default: false },
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    verifiedAt: { type: Date },
     paidAmount: { type: Number, default: 0 },
     paidOn: { type: Date },
     reference: { type: String, trim: true },

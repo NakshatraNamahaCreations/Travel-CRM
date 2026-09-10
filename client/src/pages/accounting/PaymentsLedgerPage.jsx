@@ -28,7 +28,7 @@ const guestLabel = (g) => [g?.salutation, g?.name].filter(Boolean).join(' ') || 
 function StatusBadge({ inst }) {
   const map = {
     paid: ['bg-green-50 text-green-700', `Paid ${inst.paidOn ? rel(inst.paidOn) : ''}`],
-    unverified: ['bg-blue-50 text-blue-700', 'Unverified'],
+    unverified: ['bg-amber-50 text-amber-700', 'Pending Verification'],
     overdue: ['bg-amber-50 text-amber-700', 'Overdue'],
     upcoming: ['bg-slate-100 text-slate-600', 'Upcoming'],
   };
@@ -333,7 +333,7 @@ function CommentModal({ inst, onClose, onSaved }) {
 }
 
 export default function PaymentsLedgerPage({ direction }) {
-  const { can } = useAuth();
+  const { can, hasRole } = useAuth();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [logFor, setLogFor] = useState(null);
@@ -448,7 +448,7 @@ export default function PaymentsLedgerPage({ direction }) {
                     <td className="px-4 py-3">
                       {i.status === 'paid' ? (
                         <span className="flex items-center gap-2">
-                          <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Paid</span>
+                          <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Verified</span>
                           {can('payments.create') && (
                             <button onClick={() => setEditFor(i)} title="Edit payment" className="flex items-center gap-1 text-xs text-slate-400 hover:text-brand-700">
                               <Pencil size={12} /> Edit
@@ -456,7 +456,9 @@ export default function PaymentsLedgerPage({ direction }) {
                           )}
                         </span>
                       ) : i.status === 'unverified' ? (
-                        <button onClick={() => verifyMut.mutate(i._id)} className="btn-secondary text-xs">Verify</button>
+                        hasRole('admin')
+                          ? <button onClick={() => verifyMut.mutate(i._id)} className="btn-secondary text-xs text-green-700">Verify</button>
+                          : <span className="text-xs text-amber-600">Awaiting admin verification</span>
                       ) : direction === 'outgoing' && can('payments.create') ? (
                         <button onClick={() => setLogFor(i)} className="btn-secondary text-xs text-brand-700"><FileText size={13} /> Log Payment</button>
                       ) : (

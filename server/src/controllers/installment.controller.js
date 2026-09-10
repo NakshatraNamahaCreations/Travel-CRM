@@ -139,7 +139,9 @@ export const logPayment = asyncHandler(async (req, res) => {
 
   const paidAmount = Number(req.body.paidAmount) || inst.amount;
   inst.paid = true;
-  inst.verified = req.body.verified !== false; // default verified
+  // Every logged payment awaits a second check: only an admin can verify it
+  // (PATCH /:id/verify), and until then it shows as Pending Verification.
+  inst.verified = false;
   inst.paidAmount = paidAmount;
   inst.paidOn = req.body.paidOn ? new Date(req.body.paidOn) : new Date();
   inst.reference = req.body.reference || inst.reference;
@@ -277,9 +279,13 @@ export const sendPaymentTemplate = asyncHandler(async (req, res) => {
   return ok(res, { sent: true, ...result });
 });
 
-// PATCH /api/installments/:id/verify
+// PATCH /api/installments/:id/verify — admin-only second check on a logged payment.
 export const verifyInstallment = asyncHandler(async (req, res) => {
-  const inst = await Installment.findByIdAndUpdate(req.params.id, { verified: true }, { new: true });
+  const inst = await Installment.findByIdAndUpdate(
+    req.params.id,
+    { verified: true, verifiedBy: req.user._id, verifiedAt: new Date() },
+    { new: true }
+  );
   if (!inst) throw ApiError.notFound('Installment not found');
   return ok(res, inst);
 });
