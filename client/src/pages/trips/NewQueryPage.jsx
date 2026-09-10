@@ -113,6 +113,7 @@ export default function NewQueryPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.startDate) return toast.error('Start Date is required');
     // A trip can't start in the past (existing trips keep their original date).
     const today = new Date().toISOString().slice(0, 10);
     const origStart = existing?.startDate ? existing.startDate.slice(0, 10) : '';
@@ -238,8 +239,9 @@ export default function NewQueryPage() {
                 />
               </div>
               <div>
-                <label className="label">Start Date</label>
-                <input type="date" className="input" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={setEvt('startDate')} />
+                <label className="label">Start Date <span className="text-red-500">*</span></label>
+                <input type="date" required className="input" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={setEvt('startDate')} />
+                {!form.startDate && <p className="mt-1 text-xs text-red-500">Start Date is required</p>}
               </div>
               <div>
                 <label className="label">No. of Nights</label>

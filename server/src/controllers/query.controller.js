@@ -196,6 +196,7 @@ export const getQuery = asyncHandler(async (req, res) => {
 
 // POST /api/queries
 export const createQuery = asyncHandler(async (req, res) => {
+  if (!req.body.startDate) throw ApiError.badRequest('Start Date is required');
   const payload = {
     ...req.body,
     createdBy: req.user._id,
