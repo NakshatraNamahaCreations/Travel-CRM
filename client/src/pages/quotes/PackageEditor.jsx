@@ -590,10 +590,18 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                     <p className="text-sm font-bold text-slate-800">Prices</p>
                     <button type="button" onClick={() => autoRate(i)} title="Refresh rates" className="text-slate-400 hover:text-brand-600"><RefreshCw size={13} /></button>
                   </div>
-                  <div className="rt-wrap card card-flush overflow-hidden">
-                    <table className="rt w-full text-sm">
+                  {/* Stays a compact table on phones too (Sembark keeps this
+                      grid tabular); the Given header carries the stay total. */}
+                  <div className="card card-flush overflow-hidden">
+                    <table className="w-full text-sm">
                       <thead className="bg-slate-100 text-left text-xs font-semibold text-slate-600">
-                        <tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Rate</th><th className="px-3 py-2.5">Given</th></tr>
+                        <tr>
+                          <th className="px-3 py-2.5">Date</th>
+                          <th className="px-3 py-2.5">Rate</th>
+                          <th className="px-3 py-2.5">
+                            Given{(h.nights || []).length > 0 && <span className="ml-1 font-bold text-slate-800 tabular-nums">{money(hotelPerNight(h) * (h.nights || []).length, currency)}</span>}
+                          </th>
+                        </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {(h.nights || []).map((n) => {
@@ -601,9 +609,9 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
                           const given = hotelPerNight(h);
                           return (
                             <tr key={n}>
-                              <td data-card="title" className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
-                              <td data-th="Rate" className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
-                              <td data-th="Given" className="px-3 py-2.5">
+                              <td className="px-3 py-2.5">{dt ? format(dt, 'd MMM') : `Night ${n}`}<div className="text-xs text-slate-400">{dt ? format(dt, 'EEEE') : `${ordinal(n)} night`}</div></td>
+                              <td className="px-3 py-2.5 text-slate-500 tabular-nums">{h.cardRate ? money(h.cardRate, currency) : 'N/A'}</td>
+                              <td className="px-3 py-2.5">
                                 <button type="button" onClick={() => setGivenIdx(i)} className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold tabular-nums ${given > 0 ? 'bg-brand-50 text-brand-700' : 'bg-amber-100 text-amber-700'}`}>
                                   {given > 0 ? null : <AlertTriangle size={12} />} {money(given, currency)}
                                 </button>
