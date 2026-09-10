@@ -163,6 +163,23 @@ export const updateQuote = asyncHandler(async (req, res) => {
 export const reviseQuote = asyncHandler(async (req, res) => {
   const source = await Quote.findById(req.params.id);
   if (!source) throw ApiError.notFound('Quote not found');
+
+  // A converted (accepted) quote is bound to the live booking — it updates
+  // in place no matter which endpoint the client called, so a stale bundle
+  // can never spawn a duplicate of a sold quote.
+  if (source.status === 'accepted') {
+    const fields = [
+      'title', 'currency', 'startDate', 'nights', 'pax', 'days', 'costItems',
+      'markupType', 'markupValue', 'taxPercent', 'inclusions', 'exclusions', 'terms',
+      'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex', 'daysCustomized',
+    ];
+    for (const f of fields) if (req.body[f] !== undefined) source[f] = req.body[f];
+    await source.save();
+    await syncQuery(source.query);
+    warmQuotePdfCache(source._id, req.organizationId);
+    return ok(res, source);
+  }
+
   const src = source.toObject();
   // Drop subdocument _ids so Mongoose assigns fresh ones on the copy.
   const stripIds = (v) => JSON.parse(JSON.stringify(v, (k, val) => (k === '_id' ? undefined : val)));
