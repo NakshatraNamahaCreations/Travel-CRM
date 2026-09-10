@@ -299,10 +299,12 @@ export default function NewQueryPage() {
             <div>
               <label className="label">Phone Number(s)</label>
               <div className="space-y-2">
+                {/* Wraps on phones: code + number keep the full row width so
+                    all 10 digits stay visible; the icon buttons drop below. */}
                 {form.phones.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex flex-wrap items-center gap-2">
                     <select
-                      className="input w-28"
+                      className="input w-24 shrink-0 sm:w-28"
                       value={p.countryCode}
                       onChange={(e) => setPhone(i, { countryCode: e.target.value })}
                     >
@@ -311,36 +313,38 @@ export default function NewQueryPage() {
                       ))}
                     </select>
                     <input
-                      className="input flex-1"
+                      className="input min-w-[180px] flex-1"
                       placeholder="e.g. 9779212232"
                       value={p.number}
                       onChange={(e) => setPhone(i, { number: e.target.value })}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setPrimary(i)}
-                      title={p.isPrimary ? 'Primary number' : 'Set as primary'}
-                      className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${p.isPrimary ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}
-                    >
-                      <Flag size={15} className={p.isPrimary ? 'fill-brand-500' : ''} />
-                    </button>
-                    {form.phones.length > 1 && (
-                      <button type="button" onClick={() => removePhone(i)} title="Remove" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-400 shadow-sm transition-colors hover:bg-red-50 hover:text-red-500">
-                        <X size={15} />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPrimary(i)}
+                        title={p.isPrimary ? 'Primary number' : 'Set as primary'}
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${p.isPrimary ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+                      >
+                        <Flag size={15} className={p.isPrimary ? 'fill-brand-500' : ''} />
                       </button>
-                    )}
-                    {p.isPrimary && (
-                      <>
-                        <button type="button" onClick={() => setShowEmail((s) => !s)} title="Add email"
-                          className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${showEmail ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
-                          <Mail size={15} />
+                      {form.phones.length > 1 && (
+                        <button type="button" onClick={() => removePhone(i)} title="Remove" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-400 shadow-sm transition-colors hover:bg-red-50 hover:text-red-500">
+                          <X size={15} />
                         </button>
-                        <button type="button" onClick={() => setShowLocation((s) => !s)} title="Add origin/nationality"
-                          className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${showLocation ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
-                          <MapPin size={15} />
-                        </button>
-                      </>
-                    )}
+                      )}
+                      {p.isPrimary && (
+                        <>
+                          <button type="button" onClick={() => setShowEmail((s) => !s)} title="Add email"
+                            className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${showEmail ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
+                            <Mail size={15} />
+                          </button>
+                          <button type="button" onClick={() => setShowLocation((s) => !s)} title="Add origin/nationality"
+                            className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors ${showLocation ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
+                            <MapPin size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
