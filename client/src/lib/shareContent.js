@@ -329,9 +329,9 @@ export function buildHotelBookingEmailHtml(row, { org, guest, pax, queryNumber, 
   out.push('<table style="width:100%;border-collapse:collapse;margin:10px 0">');
   out.push(`<tr>${th('Hotel')}${th('Guest Details')}</tr>`);
   const hotelCell = `<b>${esc(row.name)}</b><br/><span style="color:#6b7280">${esc(row.city || '')}${row.stars ? ` (${row.stars} Star)` : ''}</span>`;
-  const guestCell = contact
-    ? `<b>${esc(bb.guestName)}</b>${bb.guestPhone ? `<br/><span style="color:#6b7280">${esc(bb.guestPhone)}</span>` : ''}${bb.guestCount ? `<br/><span style="color:#6b7280">${esc(bb.guestCount)}</span>` : ''}`
-    : '—';
+  // The hotel always needs the guest name and headcount to hold the rooms;
+  // the "Contact Detail" toggle only governs the guest's phone number.
+  const guestCell = `<b>${esc(bb.guestName)}</b>${contact && bb.guestPhone ? `<br/><span style="color:#6b7280">${esc(bb.guestPhone)}</span>` : ''}${bb.guestCount ? `<br/><span style="color:#6b7280">${esc(bb.guestCount)}</span>` : ''}`;
   out.push(`<tr>${td(hotelCell)}${td(guestCell)}</tr>`);
   out.push('</table>');
 
@@ -369,10 +369,8 @@ export function buildHotelBookingWhatsAppText(row, { org, guest, pax, queryNumbe
   L.push('We are pleased to share the below booking, Would request you to please *BOOK & CONFIRM* the same.', '');
   L.push(`🆔 *Trip ID:* ${tripNo(queryNumber)}`, '');
   L.push(`🏨 *Hotel:* ${row.name}${row.city ? `, ${row.city}` : ''}`);
-  if (contact) {
-    L.push(`👤 *Guest:* ${bb.guestName}${bb.guestPhone ? ` (${bb.guestPhone})` : ''}`);
-    if (bb.guestCount) L.push(`👥 *No. of Guests:* ${bb.guestCount}`);
-  }
+  L.push(`👤 *Guest:* ${bb.guestName}${contact && bb.guestPhone ? ` (${bb.guestPhone})` : ''}`);
+  if (bb.guestCount) L.push(`👥 *No. of Guests:* ${bb.guestCount}`);
   L.push('');
   L.push(`📅 *Check-in:* ${fmtDate(row.checkIn)}`);
   L.push(`📅 *Check-out:* ${fmtDate(row.checkOut)} (${bb.nights} Night${bb.nights === 1 ? '' : 's'})`, '');

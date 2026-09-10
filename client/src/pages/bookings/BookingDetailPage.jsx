@@ -420,7 +420,7 @@ export default function BookingDetailPage() {
       {activeTab !== 'basic' && (
         <div className="px-4 py-4 sm:px-6 sm:py-5">
           {activeTab === 'quotes'     && <QuotesTab id={queryId} quotes={quotes} onShare={setShareQuoteId} />}
-          {activeTab === 'services'   && <ServiceBookingsTab queryId={queryId} quote={fullQuote} startDate={b.startDate} />}
+          {activeTab === 'services'   && <ServiceBookingsTab queryId={queryId} quote={fullQuote} startDate={b.startDate} guest={b.guest} pax={b.pax} queryNumber={b.query?.queryNumber} />}
           {activeTab === 'accounting' && <AccountingTab id={queryId} bookingId={id} totalAmount={b.totalAmount} />}
           {activeTab === 'docs'       && <DocsTab quotes={quotes} queryId={queryId} />}
           {activeTab === 'activities' && <ActivitiesTab id={queryId} />}
