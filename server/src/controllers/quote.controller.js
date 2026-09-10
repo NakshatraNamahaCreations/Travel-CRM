@@ -166,6 +166,16 @@ export const reviseQuote = asyncHandler(async (req, res) => {
   const src = source.toObject();
   // Drop subdocument _ids so Mongoose assigns fresh ones on the copy.
   const stripIds = (v) => JSON.parse(JSON.stringify(v, (k, val) => (k === '_id' ? undefined : val)));
+  // The builder sends freshly-picked refs as FULL master documents (a hotel/
+  // activity object, not an id). stripIds would delete their _id too, leaving
+  // an uncastable object — collapse every ref to its id first.
+  const refId = (v) => (v && typeof v === 'object' ? v._id || v.id || undefined : v);
+  const normalizePackages = (pkgs) => (pkgs || []).map((p) => ({
+    ...p,
+    hotels: (p.hotels || []).map((h) => ({ ...h, hotel: refId(h.hotel) })),
+    transports: (p.transports || []).map((t) => ({ ...t, service: refId(t.service) })),
+    activities: (p.activities || []).map((a) => ({ ...a, activity: refId(a.activity) })),
+  }));
 
   const quote = await Quote.create({
     query: src.query,
@@ -174,7 +184,7 @@ export const reviseQuote = asyncHandler(async (req, res) => {
     startDate: req.body.startDate ?? src.startDate,
     nights: req.body.nights ?? src.nights,
     pax: req.body.pax || src.pax,
-    packages: stripIds(req.body.packages ?? src.packages ?? []),
+    packages: stripIds(normalizePackages(req.body.packages ?? src.packages ?? [])),
     pricingStrategy: req.body.pricingStrategy ?? src.pricingStrategy,
     totalFoc: req.body.totalFoc ?? src.totalFoc,
     selectedPackageIndex: req.body.selectedPackageIndex ?? src.selectedPackageIndex,
