@@ -148,6 +148,42 @@ async function createPaymentWithRetry(data, retries = 4) {
   }
 }
 
+// A partial payment closes the instalment at the paid amount and pushes the
+// remainder into a NEW instalment with the same due date (Sembark behaviour)
+// — so paying 20,000 of a 70,000 due leaves a 50,000 instalment open.
+async function splitRemainder(inst, userId) {
+  const remainder = Math.round((inst.amount || 0) - (inst.paidAmount || 0));
+  if (remainder <= 0) return null;
+  inst.amount = inst.paidAmount;
+  const doc = {
+    booking: inst.booking,
+    query: inst.query,
+    tripId: inst.tripId,
+    guest: inst.guest,
+    destinations: inst.destinations,
+    startDate: inst.startDate,
+    endDate: inst.endDate,
+    currency: inst.currency,
+    direction: inst.direction,
+    supplierName: inst.supplierName,
+    amount: remainder,
+    dueDate: inst.dueDate,
+    createdBy: userId,
+  };
+  for (let i = 0; i < 4; i++) {
+    try {
+      return await Installment.create(doc);
+    } catch (e) {
+      if (e.code === 11000 && i < 3) {
+        // eslint-disable-next-line no-await-in-loop
+        await healCounterFromDup(e, Installment, 'installment', 'installmentNumber');
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 // POST /api/installments/:id/log-payment
 export const logPayment = asyncHandler(async (req, res) => {
   const inst = await Installment.findById(req.params.id);
@@ -186,6 +222,7 @@ export const logPayment = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
   });
   inst.payment = payment._id;
+  await splitRemainder(inst, req.user._id);
   await inst.save();
 
   if (inst.direction === 'incoming') await syncBookingPaid(inst.booking);
@@ -235,6 +272,9 @@ export const editPayment = asyncHandler(async (req, res) => {
       ...(req.body.mode ? { mode: req.body.mode } : {}),
     });
   }
+  // If the corrected paid amount is below the instalment's due amount, the
+  // balance becomes a new open instalment (same as a fresh partial payment).
+  await splitRemainder(inst, req.user._id);
   await inst.save();
   if (inst.direction === 'incoming') await syncBookingPaid(inst.booking);
   return ok(res, inst);
