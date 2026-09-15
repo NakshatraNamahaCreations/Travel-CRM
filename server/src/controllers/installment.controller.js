@@ -378,9 +378,18 @@ export async function generateForBooking(booking, quote, userId, opts = {}) {
     out.push({ ...base, direction: 'outgoing', amount: supplierCost, supplierName: `Suppliers (Trip ${base.tripId || ''})`.trim() });
   }
   for (const doc of out) {
-    // create() one-by-one so the pre-save counter runs
-    // eslint-disable-next-line no-await-in-loop
-    await Installment.create(doc);
+    // create() one-by-one so the pre-save counter runs; retry on E11000 —
+    // a counter race here once cost a booking its whole payment schedule.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await Installment.create(doc);
+        break;
+      } catch (err) {
+        if (err.code === 11000 && attempt < 3) continue;
+        throw err;
+      }
+    }
   }
   return out.length;
 }

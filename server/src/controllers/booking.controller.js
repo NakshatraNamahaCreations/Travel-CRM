@@ -112,8 +112,11 @@ export const createFromQuote = asyncHandler(async (req, res) => {
       instalments: req.body?.instalments,
       comment: req.body?.comment,
     });
-  } catch {
-    /* non-fatal — booking still succeeds even if schedule generation fails */
+  } catch (err) {
+    // Non-fatal — the booking still succeeds — but a missing schedule means
+    // payments can't be tracked, so never swallow this silently.
+    // eslint-disable-next-line no-console
+    console.error(`[booking] instalment schedule generation FAILED for booking ${booking._id}:`, err);
   }
 
   // Auto-generate service booking lines (hotel / operational / flight) so the
