@@ -26,4 +26,15 @@ counterSchema.statics.nextFor = function nextFor(orgId, key, start = 1) {
   return this.next(`${orgId}:${key}`, start);
 };
 
+// Raise a sequence to at least `floor` (never lowers it). Used to self-heal
+// when a unique-number collision reveals the counter fell behind the numbers
+// already present in the collection.
+counterSchema.statics.syncFloor = function syncFloor(orgId, key, floor) {
+  return this.findOneAndUpdate(
+    { _id: `${orgId}:${key}` },
+    [{ $set: { seq: { $max: [{ $ifNull: ['$seq', 0] }, floor] } } }],
+    { upsert: true, new: true }
+  );
+};
+
 export const Counter = mongoose.model('Counter', counterSchema);

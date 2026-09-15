@@ -1,5 +1,6 @@
 import { Installment } from '../models/Installment.js';
 import { Payment } from '../models/Payment.js';
+import { Counter } from '../models/Counter.js';
 import { Booking } from '../models/Booking.js';
 import { OrgProfile } from '../models/OrgProfile.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -120,13 +121,28 @@ export const createInstallment = asyncHandler(async (req, res) => {
   return created(res, item);
 });
 
+// A duplicate-number insert means the sequence counter fell behind the
+// numbers already in the collection (seen in prod: 11 behind, which no
+// bounded retry can cross). Bump the counter past the current max so the
+// next attempt gets a fresh number. Org comes from the E11000 key itself.
+export async function healCounterFromDup(err, Model, key, field) {
+  const org = err?.keyValue?.organization;
+  if (!org) return;
+  const top = await Model.findOne().sort(`-${field}`).select(field);
+  if (top?.[field]) await Counter.syncFloor(org, key, top[field]);
+}
+
 // Retry Payment.create on E11000 duplicate paymentNumber.
 async function createPaymentWithRetry(data, retries = 4) {
   for (let i = 0; i < retries; i++) {
     try {
       return await Payment.create({ ...data });
     } catch (err) {
-      if (err.code === 11000 && i < retries - 1) continue;
+      if (err.code === 11000 && i < retries - 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await healCounterFromDup(err, Payment, 'payment', 'paymentNumber');
+        continue;
+      }
       throw err;
     }
   }
@@ -379,14 +395,18 @@ export async function generateForBooking(booking, quote, userId, opts = {}) {
   }
   for (const doc of out) {
     // create() one-by-one so the pre-save counter runs; retry on E11000 —
-    // a counter race here once cost a booking its whole payment schedule.
+    // a desynced counter here once cost a booking its whole payment schedule.
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         // eslint-disable-next-line no-await-in-loop
         await Installment.create(doc);
         break;
       } catch (err) {
-        if (err.code === 11000 && attempt < 3) continue;
+        if (err.code === 11000 && attempt < 3) {
+          // eslint-disable-next-line no-await-in-loop
+          await healCounterFromDup(err, Installment, 'installment', 'installmentNumber');
+          continue;
+        }
         throw err;
       }
     }

@@ -5,7 +5,7 @@ import { Installment } from '../models/Installment.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok, created, paginate } from '../utils/apiResponse.js';
-import { generateForBooking } from './installment.controller.js';
+import { generateForBooking, healCounterFromDup } from './installment.controller.js';
 import { logActivity } from './activity.controller.js';
 import { autoGenerateServiceBookings } from './serviceBooking.controller.js';
 import { createNotification } from './notification.controller.js';
@@ -151,7 +151,11 @@ async function createInstalment(data) {
     try {
       return await Installment.create({ ...data });
     } catch (err) {
-      if (err.code === 11000 && attempt < 3) continue;
+      if (err.code === 11000 && attempt < 3) {
+        // eslint-disable-next-line no-await-in-loop
+        await healCounterFromDup(err, Installment, 'installment', 'installmentNumber');
+        continue;
+      }
       throw err;
     }
   }
