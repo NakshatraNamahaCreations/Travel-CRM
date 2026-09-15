@@ -115,25 +115,30 @@ export function voucherHtml(quote, { org = null, type = 'trip', options = {} } =
     }
     return runs;
   };
-  const hotelRows = (pkg.hotels || []).filter((h) => !h.isAlternative).flatMap((h) => {
+  const stays = (pkg.hotels || []).filter((h) => !h.isAlternative).flatMap((h) => {
     const ns = (h.nights || []).slice().sort((a, b) => a - b);
     const runs = ns.length ? contiguousRuns(ns) : [[]];
     const perNight = ns.length ? (h.amount || 0) / ns.length : 0;
     let allocated = 0;
     return runs.map((run, ri) => {
-      const checkIn = start && run.length ? addDays(start, run[0] - 1) : null;
-      const checkOut = checkIn ? addDays(checkIn, run.length) : null;
       const isLast = ri === runs.length - 1;
       const amount = isLast ? Math.round((h.amount || 0) - allocated) : Math.round(perNight * run.length);
       allocated += amount;
-      return `<tr>
-      <td><b>${run.map(ordinal).join(', ') || '—'}</b> Night${run.length > 1 ? 's' : ''}${ri > 0 ? '<br/><span class="dim">Re Check-in</span>' : ''}${checkIn ? `<br/><span class="dim">In: ${fmtShort(checkIn)}<br/>Out: ${fmtShort(checkOut)}</span>` : ''}</td>
+      return { h, run, reCheckIn: ri > 0, amount };
+    });
+  });
+  // Chronological down the page — night 1, 2-3, 4, 5 — not grouped by hotel.
+  stays.sort((a, b) => (a.run[0] || 0) - (b.run[0] || 0));
+  const hotelRows = stays.map(({ h, run, reCheckIn, amount }) => {
+    const checkIn = start && run.length ? addDays(start, run[0] - 1) : null;
+    const checkOut = checkIn ? addDays(checkIn, run.length) : null;
+    return `<tr>
+      <td><b>${run.map(ordinal).join(', ') || '—'}</b> Night${run.length > 1 ? 's' : ''}${reCheckIn ? '<br/><span class="dim">Re Check-in</span>' : ''}${checkIn ? `<br/><span class="dim">In: ${fmtShort(checkIn)}<br/>Out: ${fmtShort(checkOut)}</span>` : ''}</td>
       <td><b>${esc(h.hotelName || '')}</b><br/><span class="dim">${esc(h.city || '')}</span></td>
       <td>${h.rooms || 1} × ${esc(h.roomType || 'Room')}${h.aweb ? ` + ${h.aweb} AWEB` : ''}${h.cweb ? ` + ${h.cweb} CWEB` : ''}${h.cnb ? ` + ${h.cnb} CNB` : ''}</td>
       <td>${esc(h.mealPlan || '—')}</td>
       ${prices ? `<td class="amt">${amount ? inr(amount) : '—'}</td>` : ''}
     </tr>`;
-    });
   }).join('');
   const hotelsTable = hotelRows ? `
     ${bandRow('Hotels')}
