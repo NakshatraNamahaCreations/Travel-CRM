@@ -46,6 +46,9 @@ export default function NewQueryPage() {
     queryFn: () => queriesApi.get(id),
     enabled: isEdit,
   });
+  // Once converted, the trip's dates / nights / pax belong to the converted
+  // quote — the booking, instalments and hotel lines all follow it.
+  const locked = isEdit && ['converted', 'on_trip', 'past'].includes(existing?.status);
 
   const [form, setForm] = useState({
     source: null,
@@ -226,6 +229,12 @@ export default function NewQueryPage() {
             title="Destination and Duration"
             description="Provide destination, duration etc. along with number of adults and children with ages."
           >
+            {locked && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <span className="font-semibold">This trip is converted.</span> Its start date, nights and pax come from the converted quote, and the booking, instalments and hotel lines follow that quote.
+                To change them, open <Link to={`/trips/${id}`} className="font-semibold underline">the trip</Link> → All Quotes → Edit Quote.
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="sm:col-span-1">
                 <label className="label">Destinations</label>
@@ -240,12 +249,12 @@ export default function NewQueryPage() {
               </div>
               <div>
                 <label className="label">Start Date <span className="text-red-500">*</span></label>
-                <input type="date" required className="input" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={setEvt('startDate')} />
+                <input type="date" required disabled={locked} className="input disabled:bg-slate-50 disabled:text-slate-500" min={new Date().toISOString().slice(0, 10)} value={form.startDate} onChange={setEvt('startDate')} />
                 {!form.startDate && <p className="mt-1 text-xs text-red-500">Start Date is required</p>}
               </div>
               <div>
                 <label className="label">No. of Nights</label>
-                <input type="number" min="0" className="input" value={form.nights} onChange={setEvt('nights')} />
+                <input type="number" min="0" disabled={locked} className="input disabled:bg-slate-50 disabled:text-slate-500" value={form.nights} onChange={setEvt('nights')} />
                 <p className="mt-1 text-xs text-gray-500">{form.nights} Night{form.nights == 1 ? '' : 's'}, {Number(form.nights) + 1} Days</p>
               </div>
             </div>
@@ -253,7 +262,7 @@ export default function NewQueryPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="label">No. of Adults</label>
-                <input type="number" min="1" className="input" value={form.adults} onChange={setEvt('adults')} />
+                <input type="number" min="1" disabled={locked} className="input disabled:bg-slate-50 disabled:text-slate-500" value={form.adults} onChange={setEvt('adults')} />
               </div>
               <div>
                 <label className="label">Children &amp; Ages</label>
@@ -261,20 +270,21 @@ export default function NewQueryPage() {
                   {form.children.map((c, i) => (
                     <div key={i} className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white pl-1 pr-1.5 shadow-sm">
                       <select
-                        className="rounded-lg bg-transparent py-2 pl-2 pr-1 text-sm outline-none"
+                        className="rounded-lg bg-transparent py-2 pl-2 pr-1 text-sm outline-none disabled:text-slate-500"
                         value={c.age}
+                        disabled={locked}
                         onChange={(e) => setChildAge(i, e.target.value)}
                       >
                         {Array.from({ length: 12 }, (_, n) => n + 1).map((y) => (
                           <option key={y} value={y}>{y}y</option>
                         ))}
                       </select>
-                      <button type="button" onClick={() => removeChild(i)} className="text-slate-400 hover:text-red-500">
+                      <button type="button" onClick={() => removeChild(i)} disabled={locked} className="text-slate-400 hover:text-red-500 disabled:invisible">
                         <Trash2 size={13} />
                       </button>
                     </div>
                   ))}
-                  <button type="button" onClick={addChild} title="Add child" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-brand-600 shadow-sm transition-colors hover:bg-brand-50">
+                  <button type="button" onClick={addChild} disabled={locked} title="Add child" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-brand-600 shadow-sm transition-colors hover:bg-brand-50 disabled:hidden">
                     <Plus size={16} />
                   </button>
                 </div>

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { company } from '../config/company.js';
+import { quotationCoverIcon } from './quotationCoverIcons.js';
 
 // Local files under server/src/assets embedded as data URIs (badges, logos...).
 const ASSETS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets');
@@ -87,15 +88,15 @@ const letterhead = (brandHtml) => `
   <div class="lh">
     <div class="brand">${brandHtml}</div>
     <div class="lh-col">
-      <div class="lh-head"><span class="lh-ic">&#128205;</span><b>Address</b></div>
+      <div class="lh-head"><span class="lh-ic">${quotationCoverIcon('pin')}</span><b>Address</b></div>
       <div class="lh-val">${company.address.map(esc).join('<br/>')}</div>
     </div>
     <div class="lh-col wide">
-      <div class="lh-head"><span class="lh-ic">&#9993;</span><b>Email</b></div>
+      <div class="lh-head"><span class="lh-ic">${quotationCoverIcon('mail')}</span><b>Email</b></div>
       <div class="lh-val">${company.emails.map(esc).join('<br/>')}</div>
     </div>
     <div class="lh-col">
-      <div class="lh-head"><span class="lh-ic">&#128222;</span><b>Phone</b></div>
+      <div class="lh-head"><span class="lh-ic">${quotationCoverIcon('phone')}</span><b>Phone</b></div>
       <div class="lh-val">${company.phones.map(esc).join('<br/>')}</div>
     </div>
   </div>`;
@@ -107,10 +108,9 @@ export function quotationHtml(q, org = null) {
   const orgLogo = org?.images?.logo || null;
   const brandHtml = orgLogo
     ? `<img class="logoimg" src="${orgLogo}"/>`
-    : `<div class="logo">&#127796;</div>
-      <div>
-        <div class="bn">${esc(company.name)}</div>
-        <div class="bsub">${esc(company.tagline)}</div>
+    : `<div class="brand-fallback">
+        <div class="brandmark"><span></span></div>
+        <div><div class="brandword"><b>ANDAMAN</b><strong>TRAVEL CARE</strong></div><div class="brandtag">YOUR ANDAMAN SPECIALIST</div></div>
       </div>`;
   const LETTERHEAD = letterhead(brandHtml);
   const logoIcon = orgLogo ? `<img class="logoimg" src="${orgLogo}"/>` : '<div class="logo">&#127796;</div>';
@@ -167,6 +167,32 @@ export function quotationHtml(q, org = null) {
   // "Makruzz Ferry : Premium"), and occasionally as ferry-named transports.
   // Cab pickups and land transfers do NOT belong in this table.
   const FERRY_RX = /ferry|cruise|makruzz|nautika|green ocean|itt|sea ?link|catamaran/i;
+  // Vehicle(s) behind a transport row: the package-wide cab list when "Same
+  // Cab Type for All" is on, else the row's own items — "2 × Xylo / Ertiga".
+  // Customers read the quotation to learn what car they get, so the cab type
+  // is shown per service and summarised above the day-wise itinerary.
+  const cabsOf = (t) => ((pkg.sameCabType ? pkg.sharedCabItems : t.items) || [])
+    .filter((it) => it?.type)
+    .map((it) => `${it.qty || 1} × ${it.type}`);
+  const isFerryT = (t) => FERRY_RX.test(`${t.serviceType || ''} ${t.serviceLocation || ''}`);
+  // Road transports (ferries are ticketed separately) grouped by vehicle set.
+  // One set → "… for all transfers & sightseeing"; several → per-day list.
+  const vehicleSummary = (() => {
+    const groups = new Map(); // "2 × Innova" -> Set(day numbers)
+    for (const t of transports) {
+      if (isFerryT(t)) continue;
+      const key = cabsOf(t).join(', ');
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, new Set());
+      (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]).forEach((d) => groups.get(key).add(d));
+    }
+    if (!groups.size) return '';
+    if (groups.size === 1) return `${esc([...groups.keys()][0])} for all transfers &amp; sightseeing`;
+    return [...groups.entries()]
+      .sort((a, b) => Math.min(...a[1]) - Math.min(...b[1]))
+      .map(([veh, days]) => `Day ${[...days].sort((x, y) => x - y).join(', ')}: ${esc(veh)}`)
+      .join(' &nbsp;&middot;&nbsp; ');
+  })();
   const OPERATOR_RX = /makruzz|nautika|green ocean|itt|sea ?link|catamaran/i;
   const splitSector = (loc) => String(loc || '').split(/\s+to\s+|\s*(?:>|&gt;|→|—|–)\s*|\s+-\s+/i).map((s) => s.trim()).filter(Boolean);
   // A row belongs here only if it names a known operator, or its generic
@@ -283,7 +309,25 @@ export function quotationHtml(q, org = null) {
     primaryHotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
     return [...m.entries()].map(([c, n]) => `<b>${esc(c)} - ${n}</b>`).join(' &nbsp;<span class="pin">&#128205;</span>&nbsp; ');
   })();
-  const heroImg = company.heroImage || gallery[2] || gallery[0] || '';
+  // Cover artwork pieces (see company.coverArtwork): the wave footer and the
+  // association emblems are upscaled crops; Google / Tripadvisor marks are the
+  // bundled logo files. Any missing file falls back to the CSS-drawn version.
+  const coverArt = company.coverArtwork || {};
+  const waveImg = coverArt.wave ? assetUri(coverArt.wave) : '';
+  const aatoImg = coverArt.aato ? assetUri(coverArt.aato) : '';
+  const adtoiImg = coverArt.adtoi ? assetUri(coverArt.adtoi) : '';
+  const googleImg = assetUri('google-logo.png');
+  const taImg = assetUri('ta-logo.png');
+  const destItems = (() => {
+    const m = new Map();
+    primaryHotels.forEach((h) => { const c = h.city || ''; if (c) m.set(c, (m.get(c) || 0) + ((h.nights || []).length || 1)); });
+    return [...m.entries()];
+  })();
+  const configuredHero = company.heroImage || '';
+  const heroHasEmbeddedArtwork = Boolean(configuredHero && !/^https?:\/\//i.test(configuredHero));
+  const heroImg = configuredHero
+    ? (heroHasEmbeddedArtwork ? assetUri(configuredHero) : configuredHero)
+    : (gallery[2] || gallery[0] || '');
 
   // City a given trip day belongs to: the hotel night's city, else (a day
   // with no hotel night — the departure day) that day's own transport
@@ -401,6 +445,7 @@ export function quotationHtml(q, org = null) {
         tlChip('&#128205;', 'Route', esc(t.serviceLocation || '')),
         tlChip('&#128336;', 'Start Time', fmtTime(t.startTime)),
         tlChip('&#8986;', 'Duration', t.durationMins ? `${t.durationMins} mins` : ''),
+        tlChip('&#128663;', 'Vehicle', isFerryT(t) ? '' : esc(cabsOf(t).join(', '))),
         stdChips,
       ].join('');
       const isFerrySvc = FERRY_RX.test(`${t.serviceType} ${t.serviceLocation}`);
@@ -639,6 +684,7 @@ export function quotationHtml(q, org = null) {
   .lh-head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
   .lh-head b { font-size: 11.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--deep); }
   .lh-ic { width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .lh-ic svg { width: 56%; height: 56%; display: block; }
   .lh-val { font-size: 9.8px; color: #445468; line-height: 1.5; }
 
   /* ---- blue band heading ---- */
@@ -740,56 +786,111 @@ export function quotationHtml(q, org = null) {
   .confirm .amt { background: var(--green); color: #fff; font-weight: 800; font-size: 22px; padding: 8px 36px; display: flex; align-items: center; white-space: nowrap; }
   .notebox { margin-top: 6px; border: 1px solid var(--line); border-radius: 9px; padding: 5px 14px; font-size: 10.5px; color: #37475a; text-align: center; line-height: 1.5; }
 
-  /* ---- cover page ---- */
-  .hero2 { position: relative; border-radius: 14px; overflow: hidden; height: 136mm; border: 2.5px solid var(--deep); }
+  /* ---- quotation cover: compact brochure layout matching the supplied artwork ---- */
+  .cover-page { color: #092a78; margin-left: -12mm; margin-right: -12mm; width: calc(100% + 24mm); padding: 0 1px; }
+  .cover-page .lh { border: 1px solid #9bd3ef; border-radius: 9px; padding: 5px 8px; margin-bottom: 3px; min-height: 28mm; }
+  .cover-page .brand { width: 30%; padding-right: 8px; }
+  .brand-fallback { display: flex; align-items: center; gap: 7px; }
+  .brandmark { position: relative; width: 31px; height: 44px; flex-shrink: 0; background: #092a78; clip-path: polygon(0 22%, 50% 39%, 100% 22%, 100% 100%, 50% 80%, 0 100%); }
+  .brandmark::before { content: ''; position: absolute; left: 3px; top: 2px; width: 25px; height: 16px; background: #f05a18; clip-path: polygon(0 0, 50% 62%, 100% 0, 100% 24%, 50% 86%, 0 24%); }
+  .brandmark span { position: absolute; left: 8px; top: 18px; width: 15px; height: 18px; background: #fff; clip-path: polygon(0 0, 50% 13%, 100% 0, 100% 100%, 50% 82%, 0 100%); }
+  .brandword { color: #092a78; font-size: 14px; line-height: 1.05; letter-spacing: 0.01em; }
+  .brandword strong { display: block; color: #f05a18; font-size: 14px; }
+  .brandtag { color: #092a78; font-size: 5.5px; font-weight: 800; letter-spacing: 0.04em; margin-top: 3px; white-space: nowrap; }
+  .cover-page .logoimg { height: 21mm; }
+  .cover-page .logo { width: 42px; height: 42px; }
+  .cover-page .bn { font-size: 14px; color: #0b2a78; }
+  .cover-page .bsub { color: #0b2a78; }
+  .cover-page .lh-col { padding: 1px 9px; }
+  .cover-page .lh-head b { color: #0b2a78; }
+  .cover-page .lh-ic { background: var(--orange); }
+  .cover-page .lh-val { color: #0b2a78; font-size: 9.3px; line-height: 1.42; }
+  .hero2 { position: relative; border-radius: 8px; overflow: hidden; height: 97mm; border: 1px solid #9bd3ef; }
   .hero2-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .hero2-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,24,54,0.30) 0%, rgba(10,24,54,0.10) 32%, rgba(10,24,54,0.55) 62%, rgba(9,21,48,0.88) 100%); }
-  .hero2-body { position: absolute; inset: 0; display: flex; flex-direction: column; color: #fff; padding: 26px 30px 22px; }
-  .hx-script { font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 46px; font-weight: 700; line-height: 0.85; text-shadow: 0 2px 10px rgba(0,0,0,0.45); }
-  .hx-script::after { content: ''; display: block; width: 92px; height: 4px; margin: 6px 0 2px 4px; border-radius: 99px; background: var(--orange); }
-  .hx-title { font-size: 62px; font-weight: 800; letter-spacing: 3px; line-height: 1.05; text-shadow: 0 3px 12px rgba(0,0,0,0.5); }
-  .hx-why { margin-top: auto; font-size: 19px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.55); }
-  .hx-why span { color: var(--orange); }
-  .hx-point { margin-top: 6px; font-size: 12.5px; font-weight: 700; text-shadow: 0 1px 6px rgba(0,0,0,0.65); }
-  .hx-check { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 7px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 9px; vertical-align: 1px; }
-  .hx-pillwrap { margin-top: 13px; }
-  .hx-pill { display: inline-block; background: #fff; color: var(--deep); font-weight: 800; font-size: 13px; letter-spacing: 0.06em; padding: 6px 30px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
-  .hx-icons { display: flex; justify-content: space-between; gap: 6px; margin-top: 12px; }
-  .hx-item { flex: 1; text-align: center; min-width: 0; }
-  .hx-circle { width: 52px; height: 52px; margin: 0 auto; border-radius: 50%; background: #fff; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
-  .hx-lbl { margin-top: 6px; font-size: 8.4px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.3; text-shadow: 0 1px 5px rgba(0,0,0,0.7); }
-  .hx-sub { display: block; color: var(--orange); }
-  .coverband { display: flex; align-items: center; gap: 10px; background: var(--deep); color: #fff; font-weight: 800; font-size: 18px; letter-spacing: 0.02em; padding: 11px 18px; margin-top: 10px; border-radius: 8px; text-transform: uppercase; }
-  .coverband .cb-ic { font-size: 17px; }
-  .coverband .cb-route { color: var(--orange); font-size: 15px; margin-left: 2px; }
-  .covermeta { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: #37475a; margin: 10px 2px 4px; }
-  .stats { display: flex; align-items: stretch; margin-top: 12px; text-align: center; }
-  .stat { flex: 1; min-width: 0; padding: 2px 8px; }
-  .stat + .stat { border-left: 1px solid #dfe6ee; }
-  .statico { width: 38px; height: 38px; margin: 0 auto 7px; border-radius: 50%; background: #edf1f7; color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  .stat .sk { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #46566a; }
-  .stat .sv { font-size: 15px; font-weight: 800; color: var(--deep); margin-top: 3px; }
-  .destcov { position: relative; text-align: center; border-top: 1px solid #dfe6ee; margin-top: 14px; padding-top: 21px; }
-  .destcov .statico { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; font-size: 15px; margin: 0; border: 3px solid #fff; }
-  .destcov .sk { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #46566a; }
-  .destcov .sv { font-size: 14px; font-weight: 700; margin-top: 5px; color: var(--deep); }
-  .stat .ss { font-size: 10.5px; color: #64748b; margin-top: 2px; }
+  .hero2-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,35,100,0.04) 0%, rgba(6,35,100,0.02) 52%, rgba(6,35,100,0.18) 100%); }
+  .hero2-body { position: absolute; inset: 0; color: #071e75; padding: 11px 14px; }
+  .hx-script { font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 25px; font-weight: 700; line-height: 0.92; width: 34mm; text-align: center; }
+  .hx-script::after { content: ''; display: block; width: 25mm; height: 1.5px; margin: 4px auto 0; border-radius: 99px; background: var(--orange); transform: rotate(-8deg); }
+  .hx-script span { display: block; }
+  .hx-title { position: absolute; left: 0; right: 0; top: 36mm; text-align: center; font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 52px; font-weight: 700; letter-spacing: 1px; line-height: 1; color: #071e75; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
+  .hx-title::after { content: 'EXPLORE  •  EXPERIENCE  •  BELONG'; display: block; font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-size: 7px; letter-spacing: 0.33em; font-weight: 800; margin: 5px 0 0 0.3em; color: #0b2a78; }
+  .hx-why { position: absolute; right: 9mm; bottom: 22mm; width: 40mm; transform: rotate(-8deg); font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 15px; line-height: 1.05; text-align: center; color: #071e75; }
+  .hx-why span { display: block; color: #071e75; }
+  .hx-point, .hx-pillwrap, .hx-icons { display: none; }
+  .cover-includes { display: flex; flex-shrink: 0; align-items: stretch; border: 1px solid #9bd3ef; border-radius: 8px; margin-top: 3px; min-height: 27mm; background: linear-gradient(#fff, #f5fbfe); overflow: hidden; break-inside: avoid; }
+  .cover-includes .ci-item { position: relative; flex: 1; min-width: 0; text-align: center; padding: 11px 2px 8px; display: flex; flex-direction: column; align-items: center; }
+  .cover-includes .ci-item + .ci-item::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 12px; width: 1px; background: #b9c5d7; }
+  .ci-icon { color: #ff580f; width: 54px; height: 46px; margin-bottom: 5px; flex-shrink: 0; }
+  .ci-icon svg { display: block; width: 100%; height: 100%; }
+  .ci-label { color: #061b60; font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.05; font-weight: 800; text-transform: uppercase; transform: scaleX(0.8); transform-origin: top center; white-space: nowrap; }
+  .ci-sub { display: block; }
+  .coverband { display: flex; align-items: center; gap: 9px; background: linear-gradient(90deg, #092a78, #0b46ad); color: #fff; font-weight: 800; font-size: 16px; letter-spacing: 0.02em; padding: 8px 12px; margin-top: 3px; border-radius: 7px; text-transform: uppercase; white-space: nowrap; }
+  .coverband .cb-ic { font-size: 15px; }
+  .coverband .cb-date { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 25px; flex-shrink: 0; border-radius: 3px; background: #fff; color: #092a78; font-size: 14px; line-height: 1; }
+  .covermeta { display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: #092a78; margin: 3px 2px 0; text-transform: uppercase; }
+  .stats { display: flex; align-items: stretch; margin-top: 2px; padding: 7px 0 5px; text-align: center; border: 1px solid #9bd3ef; border-radius: 8px; min-height: 31mm; }
+  .stat { flex: 1; min-width: 0; padding: 0 5px; }
+  .stat + .stat { border-left: 1px solid #cdd9e8; }
+  .statico { width: 38px; height: 38px; margin: 0 auto 4px; border-radius: 50%; background: #e6f3fb; color: #092a78; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .stat .sk { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #092a78; }
+  .stat .sv { font-size: 13.5px; font-weight: 800; color: #092a78; margin-top: 3px; line-height: 1.18; }
+  .destcov { position: relative; text-align: center; border: 1px solid #9bd3ef; border-radius: 8px; margin-top: 3px; padding: 5px 8px 6px; background: #eef8fe; }
+  .destcov .statico { width: 27px; height: 27px; font-size: 15px; margin: 0 auto 1px; background: transparent; }
+  .destcov .sk { font-size: 9px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #092a78; }
+  .destcov .sv { font-size: 12px; font-weight: 800; margin-top: 3px; color: #092a78; white-space: nowrap; }
+  .stat .ss { font-size: 9px; color: #092a78; margin-top: 1px; }
 
-  /* ---- Ratings + award badge cards on the cover ---- */
-  .recogrow { margin-top: 22px; display: flex; align-items: stretch; gap: 22px; }
-  .ratecard { position: relative; flex: 1.15; border: 1px solid var(--line); border-radius: 13px; background: #f6f8fb; padding: 17px 24px 11px; }
-  .ratecard:last-child { flex: 1; }
-  .rcpill { position: absolute; top: -11px; left: 34px; background: var(--deep); color: #fff; font-weight: 800; font-size: 10.5px; letter-spacing: 0.09em; padding: 4px 20px; border-radius: 999px; white-space: nowrap; }
-  .rcitems { display: flex; justify-content: center; margin-top: 4px; }
-  .rcitem { flex: 1; text-align: center; }
-  .rcitem + .rcitem { border-left: 1px solid #dfe6ee; }
-  .rcitem .rclogo { height: 44px; object-fit: contain; }
-  .rccap { margin-top: 4px; font-size: 11.5px; color: #37475a; }
-  .rccap b { font-size: 12.5px; color: var(--ink); }
-  .bottombar.navy { background: var(--deep); }
-  .awardrow { display: flex; justify-content: center; align-items: stretch; gap: 14px; margin-top: 8px; }
-  .awardrow .rbadge { min-width: 0; min-height: 0; border: 0; box-shadow: none; padding: 0 6px; }
-  .awardrow .rbadge img { max-height: 78px; }
+  /* ---- trusted / recognised strip on the cover ---- */
+  .recogrow { margin-top: 3px; display: flex; align-items: stretch; gap: 0; border: 1px solid #9bd3ef; border-radius: 8px; overflow: hidden; min-height: 27mm; }
+  .trust-ribbon { width: 26%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 5px 10px; color: #fff; background: linear-gradient(135deg, #075081, #0b2a78); font-weight: 800; font-size: 13px; line-height: 1.05; text-transform: uppercase; }
+  .trust-ribbon::after { content: '›'; color: #f9a51a; font-size: 38px; line-height: 0; margin-left: 6px; }
+  .recognised { flex: 1; display: flex; align-items: center; justify-content: space-around; background: #fff; }
+  .recognised .recognised-cell { flex: 1; min-width: 0; text-align: center; padding: 3px 4px; border-left: 1px solid #cdd9e8; color: #092a78; }
+  .recognised .recognised-cell:first-child { border-left: 0; }
+  .recognised .aatologo { display: inline-block; border: 2px solid #0b8bd3; border-radius: 50%; padding: 5px 10px; font-size: 16px; font-weight: 800; letter-spacing: 0.16em; color: #0b5aa5; line-height: 1; }
+  .recognised .adtoi { font-size: 20px; color: #a87928; letter-spacing: 0.06em; }
+  .recognised .google { font-size: 17px; font-weight: 800; color: #1b57bc; }
+  .recognised .trip { font-size: 19px; color: #111; }
+  .recognised small { display: block; font-size: 7px; font-weight: 700; line-height: 1.1; margin-top: 2px; }
+  .cover-footer { position: relative; min-height: 20mm; margin-top: 3px; overflow: hidden; color: #092a78; text-align: center; }
+  .footer-slogan { position: relative; z-index: 2; font-family: 'Dancing Script', 'Segoe Script', cursive; font-size: 13px; padding: 1px 10px 4px; }
+  .footer-slogan span { color: #ed5b20; }
+  .footer-palm { position: absolute; left: 1mm; bottom: -6mm; font-size: 45px; transform: rotate(-8deg); }
+  .footer-wave { position: absolute; left: -4%; right: -4%; bottom: -13mm; height: 19mm; border-radius: 50% 50% 0 0; background: #0b2a78; box-shadow: 0 -4px 0 #0c8cdb, 0 -7px 0 #f05a18, 0 -10px 0 #fff, 0 -13px 0 #0c8cdb; }
+  /* ---- brochure cover: printable width, crisp HTML text over high-res artwork ---- */
+  .cover-page.cover-static { margin-left: 0; margin-right: 0; width: 100%; padding: 0; }
+  .cover-static .lh { min-height: 24mm; }
+  .cover-static .hero2 { height: 88mm; }
+  .cover-static .cover-includes { min-height: 24mm; }
+  .cover-static .coverband { margin-top: 3px; font-size: 15px; padding: 7px 12px; gap: 10px; background: linear-gradient(90deg, #08246d, #0b46ad); }
+  .cover-static .cb-date { width: 24px; height: 26px; font-size: 13px; font-weight: 800; }
+  .cover-static .destcov { margin-top: 4px; padding: 5px 8px 6px; background: #fff; }
+  .dc-head { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #092a78; }
+  .dc-head svg { width: 11px; height: 11px; color: #f05a18; }
+  .dc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; margin-top: 3px; font-size: 12.5px; font-weight: 800; color: #092a78; }
+  .dc-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .dc-pin { display: inline-flex; color: #f05a18; }
+  .dc-pin svg { width: 12px; height: 12px; }
+  .cover-static .covermeta { margin: 4px 2px 0; }
+  .cover-static .stats { margin-top: 3px; min-height: 0; padding: 7px 0 5px; }
+  .cover-static .statico { width: 34px; height: 34px; padding: 8px; background: #092a78; color: #fff; margin-bottom: 3px; }
+  .cover-static .statico svg { display: block; width: 100%; height: 100%; }
+  .cover-static .stat .sv { font-size: 12.5px; }
+  .cover-static .recogrow { min-height: 24mm; margin-top: 4px; }
+  .cover-static .recognised .recognised-cell { padding: 4px 4px 3px; }
+  .rlogo { display: block; height: 12.5mm; max-width: 92%; margin: 0 auto 2px; object-fit: contain; }
+  .rlogo.sq { height: 9.5mm; margin-bottom: 3px; }
+  .recognised small .rating { font-size: 11px; color: #0b2a78; }
+  .cover-footer.art { min-height: 0; margin-top: 4px; overflow: visible; }
+  .wave-img { display: block; width: 100%; height: auto; }
+  .cover-footer.art .footer-slogan { position: absolute; left: 11%; right: 16.4%; top: 0; height: 23%; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 0; background: #fff; font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-style: italic; font-weight: 700; font-size: 10.5px; color: #0b2a78; white-space: nowrap; }
+  .cover-footer.art .footer-slogan .or { color: #ed5b20; margin-left: 4px; }
+  .footer-slogan .rule { display: inline-block; width: 24px; height: 1.5px; background: #0b2a78; margin: 0 8px; }
+  .footer-discover { position: absolute; right: 0.4%; top: 0; width: 16%; height: 35%; z-index: 3; padding-top: 3px; background: #fff; text-align: center; font-size: 6.3px; font-weight: 800; letter-spacing: 0.1em; line-height: 1.3; text-transform: uppercase; color: #0b2a78; white-space: nowrap; }
+  .footer-discover::after { content: ''; display: block; width: 64%; height: 1.5px; margin: 2px auto 0; border-radius: 99px; background: #ed5b20; }
+  /* Hides the remnant of the artwork's own caption just below the block, stopping short of the sun on its left. */
+  .footer-discover::before { content: ''; position: absolute; left: 30%; right: 0; top: 100%; height: 22%; background: #fff; }
+  .bottombar.navy { background: #092a78; }
   .rbadge { min-width: 140px; max-width: 220px; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px 14px; box-shadow: 0 1px 3px rgba(15,45,80,0.08); }
   .rbadge img { max-width: 100%; max-height: 120px; object-fit: contain; }
   .aato { text-align: center; }
@@ -834,7 +935,7 @@ export function quotationHtml(q, org = null) {
   .tlbody { flex: 1; min-width: 0; display: flex; gap: 15px; align-items: flex-start; }
   .tlphoto { width: 168px; height: 118px; object-fit: cover; border-radius: 10px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(15,45,80,0.15); }
   .tlinfo { flex: 1; min-width: 0; }
-  .tltitle { color: #37475a; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
+  .tltitle { color: var(--deep); font-weight: 800; font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.5; }
   .tlname { color: var(--blue); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
   .tldesc { font-size: 12px; color: #2c3d51; line-height: 1.7; text-align: justify; margin-top: 6px; }
   .hdet { margin-top: 7px; }
@@ -859,6 +960,7 @@ export function quotationHtml(q, org = null) {
   .notestrip b { color: var(--deep); font-size: 10.5px; letter-spacing: 0.05em; white-space: nowrap; }
   .notestrip .ni { width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; background: var(--deep); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; font-style: normal; }
   .notestrip .nsdiv { width: 1px; align-self: stretch; background: #c9d9ea; }
+  .vehstrip { margin: 0 0 12px; font-size: 11.5px; font-weight: 600; color: var(--ink); }
 
   /* ---- optional activities (poster-style cards) ---- */
   .oa-title { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 27px; font-weight: 800; letter-spacing: 1.5px; margin-top: 2px; }
@@ -996,83 +1098,66 @@ export function quotationHtml(q, org = null) {
 <body>
 
 <!-- ===== COVER PAGE ===== -->
-<div class="page pb">
+<div class="page pb cover-page cover-static">
   ${LETTERHEAD}
   ${heroImg ? `
   <div class="hero2">
     <img class="hero2-img" src="${esc(heroImg)}" alt=""/>
     <div class="hero2-shade"></div>
-    <div class="hero2-body">
-      <div class="hx-script">Explore</div>
-      <div class="hx-title">ANDAMAN</div>
-      <div class="hx-why">Why Travel with <span>${esc(company.name)}?</span></div>
-      ${(company.coverPoints || []).map((p) => `<div class="hx-point"><span class="hx-check">&#10004;</span>${esc(p)}</div>`).join('')}
-      ${(company.coverIncludes || []).length ? `
-      <div class="hx-pillwrap"><span class="hx-pill">YOUR PACKAGE INCLUDES</span></div>
-      <div class="hx-icons">
-        ${company.coverIncludes.map((it) => `
-        <div class="hx-item">
-          <div class="hx-circle">${it.icon}</div>
-          <div class="hx-lbl">${esc(it.label)}${it.sub ? `<span class="hx-sub">${esc(it.sub)}</span>` : ''}</div>
-        </div>`).join('')}
-      </div>` : ''}
-    </div>
+    ${heroHasEmbeddedArtwork ? '' : `<div class="hero2-body">
+      <div class="hx-script">More Than Just<span>a Holiday</span></div>
+      <div class="hx-title">Andaman</div>
+      <div class="hx-why">Turquoise Seas<span>Memorable Journeys</span></div>
+    </div>`}
   </div>` : ''}
-  <div class="coverband"><span class="cb-ic">&#128197;</span> ${q.nights} Nights ${(q.nights || 0) + 1} Days ${esc(pkg.name || 'Package')} Tour to Andaman</div>
+  ${(company.coverIncludes || []).length ? `<div class="cover-includes">
+    ${company.coverIncludes.map((it) => `<div class="ci-item"><div class="ci-icon">${quotationCoverIcon(it.icon)}</div><div class="ci-label">${esc(it.label)}${it.sub ? `<span class="ci-sub">${esc(it.sub)}</span>` : ''}</div></div>`).join('')}
+  </div>` : ''}
+  <div class="coverband"><span class="cb-date">${start ? new Date(start).getDate() : '&mdash;'}</span><span>${q.nights} Nights ${(q.nights || 0) + 1} Days ${esc(pkg.name || 'Package')} Tour to Andaman</span></div>
+  ${destItems.length ? `<div class="destcov">
+    <div class="dc-head">${quotationCoverIcon('pin')} Destination Covered</div>
+    <div class="dc-row">${destItems.map(([c, n]) => `<span class="dc-item"><span class="dc-pin">${quotationCoverIcon('pin')}</span>${esc(c)} &ndash; ${n}</span>`).join('')}</div>
+  </div>` : ''}
   <div class="covermeta">
     <span>Quotation Proposal</span>
     <span>Query ID:- &nbsp;M${esc(pad4(q.query?.queryNumber))}</span>
   </div>
   <div class="stats">
     <div class="stat">
-      <div class="statico">&#128100;</div>
+      <div class="statico">${quotationCoverIcon('person')}</div>
       <div class="sk">GUEST</div>
       <div class="sv">${esc([guest.salutation, guest.name].filter(Boolean).join(' ') || 'Guest')}</div>
       ${guest.phones?.[0] ? `<div class="ss">+${esc(guest.phones[0].countryCode)} ${esc(guest.phones[0].number)}</div>` : ''}
     </div>
     <div class="stat">
-      <div class="statico">&#128197;</div>
+      <div class="statico">${quotationCoverIcon('calendar')}</div>
       <div class="sk">Tour Start Date</div><div class="sv">${start ? fmtDate(start) : 'To Be Decided'}</div>
     </div>
     <div class="stat">
-      <div class="statico">&#128336;</div>
+      <div class="statico">${quotationCoverIcon('clock')}</div>
       <div class="sk">DURATION</div><div class="sv">${q.nights} Nights / ${(q.nights || 0) + 1} Days</div>
     </div>
     <div class="stat">
-      <div class="statico">&#128101;</div>
+      <div class="statico">${quotationCoverIcon('group')}</div>
       <div class="sk">TRAVELLERS</div>
       <div class="sv">${paxAdults} Adult${paxAdults === 1 ? '' : 's'}${paxChildren ? `, ${paxChildren} Child${paxChildren === 1 ? '' : 'ren'}` : ''}</div>
       <div class="ss">${pax} Pax total</div>
     </div>
   </div>
-  ${destCovered ? `<div class="destcov">
-    <div class="statico" style="width:30px;height:30px;font-size:14px;margin-bottom:5px">&#128506;</div>
-    <div class="sk">DESTINATION COVERED</div><div class="sv">${destCovered}</div>
-  </div>` : ''}
-
   <div class="recogrow">
-    <div class="ratecard">
-      <div class="rcpill">HIGHEST RATED</div>
-      <div class="rcitems">
-        <div class="rcitem">
-          <img class="rclogo" src="${assetUri('ta-logo.png')}" alt=""/>
-          <div class="rccap"><b>4.5+</b> (200+ Reviews)</div>
-        </div>
-        <div class="rcitem">
-          <img class="rclogo" src="${assetUri('google-logo.png')}" alt=""/>
-          <div class="rccap"><b>5.0 &#9733;</b> (400+ Reviews)</div>
-        </div>
-      </div>
+    <div class="trust-ribbon">Trusted &amp;<br/>Recognised</div>
+    <div class="recognised">
+      <div class="recognised-cell">${aatoImg ? `<img class="rlogo" src="${aatoImg}" alt="AATO"/>` : '<div class="aatologo">AATO</div>'}<small>ANDAMAN ASSOCIATION<br/>OF TOUR OPERATORS<br/>Since 2005</small></div>
+      <div class="recognised-cell">${adtoiImg ? `<img class="rlogo" src="${adtoiImg}" alt="ADTOI"/>` : '<div class="adtoi">adtoi</div>'}<small>ASSOCIATION OF DOMESTIC<br/>TOUR OPERATORS OF INDIA</small></div>
+      <div class="recognised-cell">${googleImg ? `<img class="rlogo sq" src="${googleImg}" alt="Google"/>` : '<div class="google">G</div>'}<small><b class="rating">5.0 &#9733;</b><br/>Google Reviews</small></div>
+      <div class="recognised-cell">${taImg ? `<img class="rlogo sq" src="${taImg}" alt="Tripadvisor"/>` : '<div class="trip">&#9673;</div>'}<small><b class="rating">5.0 &#9733;</b><br/>Tripadvisor</small></div>
     </div>
-    ${(company.recognisedBy || []).length ? `
-    <div class="ratecard">
-      <div class="rcpill">AWARDED</div>
-      <div class="awardrow">
-        ${company.recognisedBy.map((r) => `<div class="rbadge"><img src="${esc(/^https?:/i.test(r) ? r : assetUri(r))}" alt=""/></div>`).join('')}
-      </div>
-    </div>` : ''}
   </div>
-  ${BOTTOMBAR.replace('bottombar', 'bottombar navy')}
+  ${waveImg ? `<div class="cover-footer art">
+    <img class="wave-img" src="${waveImg}" alt=""/>
+    <div class="footer-slogan"><span class="rule"></span>We Don’t Create Thousands of Itineraries. <span class="or">We Create Thousands of Memories.</span><span class="rule"></span></div>
+    <div class="footer-discover">Discover<br/>Andaman<br/>Differently</div>
+  </div>` : `<div class="cover-footer"><div class="footer-slogan">We Don’t Create Thousands of Itineraries. <span>We Create Thousands of Memories.</span></div><div class="footer-palm">&#127796;</div><div class="footer-wave"></div></div>`}
 </div>
 
 <!-- ===== PAGE 2 — Quote summary ===== -->
@@ -1119,7 +1204,7 @@ export function quotationHtml(q, org = null) {
   ${introRows ? `<div class="band" style="margin-top:14px">Itinerary Introduction</div>
   <div style="margin-bottom:16px">${introRows}</div>` : ''}
   <div class="band">${q.nights}N${(q.nights || 0) + 1}D Day Wise Itinerary:</div>
-  <div class="grow">${dayBlocks}
+  <div class="grow">${vehicleSummary ? `<div class="notestrip vehstrip"><span class="ni"><span class="tlemoji">&#128663;</span></span><b>TRANSPORT</b><span class="nsdiv"></span><span>${vehicleSummary}</span></div>` : ''}${dayBlocks}
   ${company.itineraryNote ? `<div class="notestrip"><span class="ni">&#8505;</span><b>PLEASE NOTE</b><span class="nsdiv"></span><span>${esc(company.itineraryNote)}</span></div>` : ''}</div>
   ${extras ? `<div class="extra">
     <div class="el">EXTRA INCLUSIONS:</div>

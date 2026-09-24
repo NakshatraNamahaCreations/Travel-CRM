@@ -16,6 +16,45 @@ import { sendMail, emailEnabled } from '../utils/mailer.js';
 import { sendWhatsAppText, whatsappEnabled } from '../utils/whatsapp.js';
 import { company } from '../config/company.js';
 import { logActivity } from './activity.controller.js';
+import { syncBookingFromQuote } from '../utils/bookingSync.js';
+import { resyncServiceBookings } from './serviceBooking.controller.js';
+
+// A converted quote is the contract behind its booking. After an in-place
+// edit, push the change onto the booking, its unpaid instalments and the
+// service booking lines, and note it in the trip's activity feed (in-place
+// edits are otherwise invisible there).
+async function afterConvertedEdit(quote, userId) {
+  const sync = await syncBookingFromQuote(quote, userId);
+  const inr = (n) => `${quote.currency || 'INR'} ${Math.round(n || 0).toLocaleString('en-IN')}`;
+  let msg = `updated converted quote #${quote.quoteNumber} in place`;
+  if (sync && sync.before.total !== sync.after.total) {
+    msg += `: package price ${inr(sync.before.total)} → ${inr(sync.after.total)}; booking total and unpaid instalments adjusted`;
+  } else if (sync) {
+    msg += ` (package price unchanged at ${inr(sync.after.total)})`;
+  }
+  if (sync?.tripChanged && sync.basics?.startDate) {
+    const when = new Date(sync.basics.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    msg += `; trip dates set to ${when}${sync.basics.nights != null ? `, ${sync.basics.nights}N` : ''}`;
+  }
+  if (sync) {
+    // Service lines are derived from the quote too; keep them in step. A
+    // failure here must not roll back the quote edit itself.
+    const s = await resyncServiceBookings(quote.query, quote._id, userId).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(`[quote] service booking re-sync failed for quote ${quote._id}:`, err);
+      return null;
+    });
+    if (s && (s.added || s.updated || s.removed || s.flagged)) {
+      const parts = [];
+      if (s.updated) parts.push(`${s.updated} updated`);
+      if (s.added) parts.push(`${s.added} added`);
+      if (s.removed) parts.push(`${s.removed} removed`);
+      if (s.flagged) parts.push(`${s.flagged} flagged for review`);
+      msg += `; service bookings: ${parts.join(', ')}`;
+    }
+  }
+  await logActivity(quote.query, userId, msg, 'quote');
+}
 
 const POPULATE = [
   { path: 'days.destination', select: 'name' },
@@ -153,6 +192,7 @@ export const updateQuote = asyncHandler(async (req, res) => {
   for (const f of fields) if (req.body[f] !== undefined) quote[f] = req.body[f];
   await quote.save();
   await syncQuery(quote.query);
+  if (quote.status === 'accepted') await afterConvertedEdit(quote, req.user._id);
   warmQuotePdfCache(quote._id, req.organizationId);
   return ok(res, quote);
 });
@@ -176,6 +216,7 @@ export const reviseQuote = asyncHandler(async (req, res) => {
     for (const f of fields) if (req.body[f] !== undefined) source[f] = req.body[f];
     await source.save();
     await syncQuery(source.query);
+    await afterConvertedEdit(source, req.user._id);
     warmQuotePdfCache(source._id, req.organizationId);
     return ok(res, source);
   }
@@ -302,7 +343,7 @@ const pdfCacheDir = process.env.PDF_CACHE_DIR || path.join(os.tmpdir(), 'tcrm-im
 function quotePdfCacheFile(quote, org) {
   // Bump RENDER_VERSION when the template or bundled assets change, so cached
   // PDFs from the older look are re-rendered.
-  const RENDER_VERSION = 'v12';
+  const RENDER_VERSION = 'v15';
   const stamp = crypto.createHash('sha1')
     .update(RENDER_VERSION)
     .update(String(quote._id))

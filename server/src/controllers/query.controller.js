@@ -322,8 +322,31 @@ export const uploadQueriesCsv = asyncHandler(async (req, res) => {
   return ok(res, { created: createdNumbers.length, queryNumbers: createdNumbers, errors, totalRows: rows.length });
 });
 
+const CONVERTED_STATUSES = ['converted', 'on_trip', 'past'];
+const sameDay = (a, b) => (a ? new Date(a).toISOString().slice(0, 10) : '') === (b ? new Date(b).toISOString().slice(0, 10) : '');
+const samePax = (a, b) => (a?.adults || 0) === (b?.adults || 0)
+  && JSON.stringify((a?.children || []).map((c) => Number(c.age) || 0)) === JSON.stringify((b?.children || []).map((c) => Number(c.age) || 0));
+
 // PUT /api/queries/:id
 export const updateQuery = asyncHandler(async (req, res) => {
+  // Once a trip is converted, its dates / nights / pax are owned by the
+  // converted quote (the booking, instalments and hotel lines all follow
+  // it). Editing them here would put the trip out of step again, so those
+  // changes are refused with a pointer to the right place.
+  const current = await Query.findById(req.params.id).select('status startDate nights pax');
+  if (!current) throw ApiError.notFound('Query not found');
+  if (CONVERTED_STATUSES.includes(current.status)) {
+    const wantsStart = req.body.startDate !== undefined && !sameDay(req.body.startDate, current.startDate);
+    const wantsNights = req.body.nights !== undefined && Number(req.body.nights) !== current.nights;
+    const wantsPax = req.body.pax !== undefined && !samePax(req.body.pax, current.pax);
+    if (wantsStart || wantsNights || wantsPax) {
+      throw ApiError.badRequest('This trip is converted: change its dates, nights or pax on the converted quote (All Quotes → Edit Quote). The trip, booking and hotel lines follow that quote.');
+    }
+    delete req.body.startDate;
+    delete req.body.nights;
+    delete req.body.pax;
+  }
+
   const item = await Query.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,

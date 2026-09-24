@@ -40,8 +40,23 @@ const bookingSchema = new mongoose.Schema(
     costItems: [{ category: String, label: String, meta: String, qty: Number, rate: Number, amount: Number }],
 
     currency: { type: String, default: 'INR' },
+    // Package price from the accepted quote PLUS any extras below.
     totalAmount: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 }, // maintained by the accounting module
+
+    // Admin-added charges on top of the package (a late add-on activity, a
+    // room upgrade, an extra transfer…). Each one is collected through its
+    // own incoming instalment and is never touched by quote re-syncs.
+    extras: [
+      {
+        label: { type: String, trim: true, required: true },
+        amount: { type: Number, required: true, min: 0 },
+        note: { type: String, trim: true },
+        installment: { type: mongoose.Schema.Types.ObjectId, ref: 'Installment' },
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

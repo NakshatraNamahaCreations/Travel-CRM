@@ -599,8 +599,9 @@ export default function ServiceBookingsTab({ queryId, quote, startDate, guest, q
                       )}
                     </td>
                     <td data-th="Tag / Comments" className="px-4 py-3">
+                      {r.flagged && <span className="mb-1 mr-1 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700" title="Needs review">Flagged</span>}
                       {r.tag && <span className="mb-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">{r.tag}</span>}
-                      {r.comment ? <div className="text-xs text-gray-500">{r.comment}</div> : (!r.tag && <span className="text-xs text-gray-300">—</span>)}
+                      {r.comment ? <div className="whitespace-pre-line text-xs text-gray-500">{r.comment}</div> : (!r.tag && !r.flagged && <span className="text-xs text-gray-300">—</span>)}
                     </td>
                     <td data-th="Price" className="px-4 py-3 text-right">
                       <div className="text-[11px] uppercase text-gray-400">Booking</div>

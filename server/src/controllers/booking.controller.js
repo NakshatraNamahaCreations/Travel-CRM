@@ -10,6 +10,7 @@ import { logActivity } from './activity.controller.js';
 import { autoGenerateServiceBookings } from './serviceBooking.controller.js';
 import { createNotification } from './notification.controller.js';
 import { ownScope, applyScope } from '../utils/ownScope.js';
+import { tripBasicsFrom } from '../utils/bookingSync.js';
 
 const POPULATE = [
   { path: 'destinations', select: 'name' },
@@ -53,7 +54,8 @@ export const listBookings = asyncHandler(async (req, res) => {
 export const getBooking = asyncHandler(async (req, res) => {
   const b = await Booking.findById(req.params.id)
     .populate(POPULATE)
-    .populate({ path: 'quote', select: 'quoteNumber pricing' });
+    .populate({ path: 'quote', select: 'quoteNumber pricing' })
+    .populate('extras.addedBy', 'name');
   if (!b) throw ApiError.notFound('Booking not found');
   return ok(res, b);
 });
@@ -90,7 +92,9 @@ export const createFromQuote = asyncHandler(async (req, res) => {
   // Only one quote per trip can be the converted one — demote any other accepted quote.
   await Quote.updateMany({ query: query._id, _id: { $ne: quote._id }, status: 'accepted' }, { status: 'sent' });
   await Quote.findByIdAndUpdate(quote._id, { status: 'accepted' });
-  await Query.findByIdAndUpdate(query._id, { status: 'converted', bookedAmount: booking.totalAmount });
+  // The trip now shows the converted quote's dates / nights / pax, so the
+  // header, hotel lines and vouchers agree with what was actually sold.
+  await Query.findByIdAndUpdate(query._id, { status: 'converted', bookedAmount: booking.totalAmount, ...tripBasicsFrom(quote) });
   await logActivity(query._id, req.user?._id, `converted to booking from quote #${quote.quoteNumber}`, 'booking');
 
   // Notify the trip owner that a booking was created.
@@ -174,8 +178,11 @@ export const updateInstalmentSchedule = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('At least one instalment is required');
   }
 
-  // Delete all existing unpaid incoming instalments for this booking.
-  await Installment.deleteMany({ booking: booking._id, direction: 'incoming', paid: false });
+  // Delete all existing unpaid incoming instalments for this booking —
+  // except the ones collecting admin-added extras, which are not part of
+  // the package schedule being replaced.
+  const extraIds = (booking.extras || []).map((e) => e.installment).filter(Boolean);
+  await Installment.deleteMany({ booking: booking._id, direction: 'incoming', paid: false, _id: { $nin: extraIds } });
 
   const base = {
     booking: booking._id,
@@ -203,6 +210,75 @@ export const updateInstalmentSchedule = asyncHandler(async (req, res) => {
 
   const updated = await Installment.find({ booking: booking._id, direction: 'incoming' }).sort('dueDate');
   return ok(res, updated);
+});
+
+/* ----------------------------- extra charges ----------------------------- */
+
+const extrasTotal = (b) => (b.extras || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+// POST /api/bookings/:id/extras  { label, amount, dueDate?, note? }   (admin)
+// Adds a charge on top of the package and schedules it as its own instalment.
+export const addBookingExtra = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id)
+    .populate('destinations', 'name')
+    .populate('query', 'queryNumber');
+  if (!booking) throw ApiError.notFound('Booking not found');
+  if (booking.status === 'cancelled') throw ApiError.badRequest('This booking is cancelled');
+
+  const label = String(req.body.label || '').trim();
+  const amount = Math.round(Number(req.body.amount) || 0);
+  const note = String(req.body.note || '').trim();
+  if (!label) throw ApiError.badRequest('Say what the extra charge is for');
+  if (amount <= 0) throw ApiError.badRequest('Amount must be greater than zero');
+
+  const inst = await createInstalment({
+    booking: booking._id,
+    query: booking.query?._id || booking.query,
+    tripId: booking.query?.queryNumber ? String(booking.query.queryNumber) : undefined,
+    guest: booking.guest,
+    destinations: (booking.destinations || []).map((d) => d.name).filter(Boolean),
+    startDate: booking.startDate,
+    endDate: booking.endDate,
+    currency: booking.currency || 'INR',
+    direction: 'incoming',
+    amount,
+    dueDate: req.body.dueDate ? new Date(req.body.dueDate) : booking.startDate || new Date(),
+    comments: [{ body: `Extra: ${label}${note ? ` — ${note}` : ''}`, createdBy: req.user._id }],
+    createdBy: req.user._id,
+  });
+
+  booking.extras.push({ label, amount, note, installment: inst._id, addedBy: req.user._id });
+  booking.totalAmount = Math.round((booking.totalAmount || 0) + amount);
+  await booking.save();
+  await logActivity(
+    booking.query?._id || booking.query,
+    req.user._id,
+    `added extra charge ${booking.currency || 'INR'} ${amount.toLocaleString('en-IN')} for "${label}" (trip total now ${(booking.totalAmount || 0).toLocaleString('en-IN')})`,
+    'booking'
+  );
+  const populated = await Booking.findById(booking._id).populate(POPULATE).populate('extras.addedBy', 'name');
+  return created(res, { booking: populated, installment: inst });
+});
+
+// DELETE /api/bookings/:id/extras/:extraId   (admin) — only while unpaid.
+export const removeBookingExtra = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) throw ApiError.notFound('Booking not found');
+  const extra = booking.extras.id(req.params.extraId);
+  if (!extra) throw ApiError.notFound('Extra charge not found');
+
+  const inst = extra.installment ? await Installment.findById(extra.installment) : null;
+  if (inst && (inst.paid || (inst.paidAmount || 0) > 0)) {
+    throw ApiError.badRequest('This extra has already been paid — undo the payment first');
+  }
+  if (inst) await inst.deleteOne();
+
+  booking.totalAmount = Math.max(0, Math.round((booking.totalAmount || 0) - (extra.amount || 0)));
+  extra.deleteOne();
+  await booking.save();
+  await logActivity(booking.query, req.user._id, `removed extra charge "${extra.label}" (${booking.currency || 'INR'} ${(extra.amount || 0).toLocaleString('en-IN')})`, 'booking');
+  const populated = await Booking.findById(booking._id).populate(POPULATE).populate('extras.addedBy', 'name');
+  return ok(res, populated);
 });
 
 // DELETE /api/bookings/:id

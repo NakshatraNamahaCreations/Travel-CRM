@@ -1577,6 +1577,50 @@ export function AccountingTab({ id, bookingId, totalAmount, query, quote }) {
   );
 }
 
+// Admin-only: charge something on top of the package (a late add-on activity,
+// a room upgrade, an extra transfer…). It joins the trip total and becomes its
+// own instalment, so it is collected and tracked like any other due.
+function AddExtraModal({ open, onClose, bookingId, startDate, onSaved }) {
+  const [f, setF] = useState({ label: '', amount: '', dueDate: '', note: '' });
+  useEffect(() => {
+    if (open) setF({ label: '', amount: '', dueDate: startDate ? String(startDate).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'), note: '' });
+  }, [open, startDate]);
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+  const mut = useMutation({
+    mutationFn: () => bookingsApi.addExtra(bookingId, {
+      label: f.label.trim(), amount: Number(f.amount), dueDate: f.dueDate || undefined, note: f.note.trim() || undefined,
+    }),
+    onSuccess: (res) => { toast.success(`Added ₹${Number(f.amount).toLocaleString('en-IN')} for ${f.label.trim()}`); onSaved?.(res); onClose(); },
+    onError: (e) => toast.error(e.message || 'Could not add the extra charge'),
+  });
+  const valid = f.label.trim() && Number(f.amount) > 0;
+  return (
+    <Modal open={open} onClose={onClose} title="Add Extra Charge">
+      <p className="mb-4 text-sm text-gray-500">
+        For anything sold on top of the package — an added activity, a room upgrade, an extra transfer. It is added to the trip total and scheduled as its own instalment.
+      </p>
+      <div className="space-y-4">
+        <div>
+          <label className="label">What is it for?</label>
+          <input className="input" value={f.label} onChange={set('label')} placeholder="e.g. Scuba diving at Havelock for 2" autoFocus />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><label className="label">Amount (INR)</label><input type="number" min="1" className="input" value={f.amount} onChange={set('amount')} placeholder="0" /></div>
+          <div><label className="label">Due date</label><input type="date" className="input" value={f.dueDate} onChange={set('dueDate')} /></div>
+        </div>
+        <div>
+          <label className="label">Note (optional)</label>
+          <textarea rows={2} className="input" value={f.note} onChange={set('note')} placeholder="Shown with the instalment" />
+        </div>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onClose} className="btn-secondary" disabled={mut.isPending}>Cancel</button>
+        <button onClick={() => mut.mutate()} className="btn-primary" disabled={!valid || mut.isPending}>{mut.isPending ? 'Adding…' : 'Add Charge'}</button>
+      </div>
+    </Modal>
+  );
+}
+
 function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
   const qc = useQueryClient();
   const { hasRole } = useAuth();
@@ -1598,9 +1642,28 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
     onError: (e) => toast.error(e.message || 'Could not verify'),
   });
   const rows = data?.data || [];
+  // The trip page does not pass the booking down; the instalments know it.
+  const firstBooking = rows[0]?.booking;
+  const bId = bookingId || (firstBooking && typeof firstBooking === 'object' ? firstBooking._id : firstBooking);
+  const { data: booking } = useQuery({ queryKey: ['booking', bId], queryFn: () => bookingsApi.get(bId), enabled: !!bId });
+  const extras = booking?.extras || [];
+  const extrasTotal = extras.reduce((s, e) => s + (e.amount || 0), 0);
+  const extraInstIds = new Set(extras.map((e) => String(e.installment)));
+  const [extraOpen, setExtraOpen] = useState(false);
+  const refreshMoney = () => {
+    qc.invalidateQueries({ queryKey: ['inst', id] });
+    qc.invalidateQueries({ queryKey: ['booking', bId] });
+    qc.invalidateQueries({ queryKey: ['query', id] });
+  };
+  const removeExtraMut = useMutation({
+    mutationFn: (extraId) => bookingsApi.removeExtra(bId, extraId),
+    onSuccess: () => { toast.success('Extra charge removed'); refreshMoney(); },
+    onError: (e) => toast.error(e.message || 'Could not remove the extra charge'),
+  });
   const paidTotal = rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
   const scheduleTotal = rows.reduce((s, r) => s + (r.amount || 0), 0);
-  const effectiveTotal = totalAmount || scheduleTotal;
+  const effectiveTotal = booking?.totalAmount || totalAmount || scheduleTotal;
+  const packageTotal = Math.max(0, effectiveTotal - extrasTotal);
   const dt = (d) => (d ? format(new Date(d), 'd MMM, yyyy') : '—');
   const STATUS = { paid: 'text-green-700 bg-green-50', overdue: 'text-rose-700 bg-rose-50', unverified: 'text-amber-700 bg-amber-50', upcoming: 'text-slate-600 bg-slate-100' };
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -1636,9 +1699,57 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
               {' '}<span className="text-gray-300">/</span>{' '}
               {effectiveTotal.toLocaleString('en-IN')}
             </p>
+            {extrasTotal > 0 && (
+              <p className="mt-0.5 text-xs text-gray-500">
+                Package {packageTotal.toLocaleString('en-IN')} <span className="text-gray-300">+</span> Extras {extrasTotal.toLocaleString('en-IN')}
+              </p>
+            )}
           </div>
-          <p className="text-xs text-gray-400">Raise a GST invoice against each payment once it is logged.</p>
+          <div className="flex flex-col items-end gap-2">
+            {isAdmin && bId && (
+              <button onClick={() => setExtraOpen(true)} className="btn-secondary text-sm" title="Charge something on top of the package (admin only)">
+                <Plus size={14} /> Add Extra Charge
+              </button>
+            )}
+            <p className="text-xs text-gray-400">Raise a GST invoice against each payment once it is logged.</p>
+          </div>
         </div>
+        {extras.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/50 px-5 py-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">Extra charges</p>
+            <ul className="divide-y divide-amber-100">
+              {extras.map((e) => {
+                const inst = rows.find((r) => String(r._id) === String(e.installment));
+                const paid = !!inst?.paid || (inst?.paidAmount || 0) > 0;
+                return (
+                  <li key={e._id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-gray-900">{e.label}</span>
+                      {e.note && <span className="text-gray-500"> — {e.note}</span>}
+                      <div className="text-[11px] text-gray-400">
+                        Added by {e.addedBy?.name || '—'}{e.createdAt ? ` • ${format(new Date(e.createdAt), 'd MMM, yyyy')}` : ''}{paid ? ' • paid' : ''}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-gray-900">₹{(e.amount || 0).toLocaleString('en-IN')}</span>
+                      {isAdmin && !paid && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Remove the extra charge "${e.label}" of ₹${(e.amount || 0).toLocaleString('en-IN')}? Its instalment is deleted and the trip total goes down.`)) removeExtraMut.mutate(e._id);
+                          }}
+                          disabled={removeExtraMut.isPending}
+                          className="text-xs font-medium text-rose-600 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {isLoading ? <div className="py-10 text-center text-gray-400">Loading…</div> : !rows.length ? (
           <div className="card p-8 text-center text-sm text-gray-400">No instalment schedule yet. It is generated when the booking is created.</div>
         ) : (
@@ -1656,7 +1767,12 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
               <tbody className="divide-y divide-gray-100">
                 {rows.map((r) => (
                   <tr key={r._id}>
-                    <td data-card="title" className="px-4 py-3 text-base font-semibold text-gray-900">{(r.amount || 0).toLocaleString('en-IN')}</td>
+                    <td data-card="title" className="px-4 py-3 text-base font-semibold text-gray-900">
+                      {(r.amount || 0).toLocaleString('en-IN')}
+                      {extraInstIds.has(String(r._id)) && (
+                        <span className="ml-2 align-middle rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">Extra</span>
+                      )}
+                    </td>
                     <td data-th="Status" className="px-4 py-3">
                       {r.paid ? (
                         <>
@@ -1787,6 +1903,15 @@ function PaymentsSection({ id, bookingId, totalAmount, query, quote }) {
           bookingId={bookingId}
           totalAmount={effectiveTotal}
           existingRows={rows}
+        />
+      )}
+      {bId && (
+        <AddExtraModal
+          open={extraOpen}
+          onClose={() => setExtraOpen(false)}
+          bookingId={bId}
+          startDate={booking?.startDate}
+          onSaved={refreshMoney}
         />
       )}
       {payInst && (

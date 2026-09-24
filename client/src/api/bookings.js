@@ -9,6 +9,10 @@ export const bookingsApi = {
 
   updateInstalmentSchedule: (id, payload) => api.put(`/bookings/${id}/instalment-schedule`, payload).then((r) => r.data.data),
 
+  // Extra charges on top of the package (admin only).
+  addExtra: (id, payload) => api.post(`/bookings/${id}/extras`, payload).then((r) => r.data.data),
+  removeExtra: (id, extraId) => api.delete(`/bookings/${id}/extras/${extraId}`).then((r) => r.data.data),
+
   // Derived views
   hotels: (params) => api.get('/bookings/views/hotels', { params }).then((r) => r.data),
   hotelCheckins: (params) => api.get('/bookings/views/hotel-checkins', { params }).then((r) => r.data),

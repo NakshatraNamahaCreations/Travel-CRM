@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, X, AlertTriangle, Check, Wallet, Pencil, ClipboardList, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, Plus, X, AlertTriangle, Check, Wallet, Pencil, ClipboardList, ClipboardCheck, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { queriesApi } from '../../api/queries.js';
@@ -9,6 +9,7 @@ import { quotesApi } from '../../api/quotes.js';
 import { computePackage, packageWarnings, money } from '../../lib/pricing.js';
 import { tripNo } from '../../lib/format.js';
 import PackageEditor from './PackageEditor.jsx';
+import PackagePricing from './PackagePricing.jsx';
 import InclusionExclusionEditor from './InclusionExclusionEditor.jsx';
 import CreatableSelect from '../../components/form/CreatableSelect.jsx';
 import { cn } from '../../lib/cn.js';
@@ -38,6 +39,11 @@ export default function QuoteBuilderPage({ mode }) {
 
   const { data: query } = useQuery({ queryKey: ['query', queryId], queryFn: () => queriesApi.get(queryId), enabled: !isEdit && !!queryId });
   const { data: existing } = useQuery({ queryKey: ['quote', id], queryFn: () => quotesApi.get(id), enabled: isEdit && !!id });
+  // Editing saves as a NEW quotation (Sembark behaviour) — the original stays
+  // in All Quotes as history. EXCEPT the converted (accepted) quote: it is
+  // tied to the live booking (instalments, service bookings), so it updates
+  // in place and the booking follows.
+  const inPlace = isEdit && existing?.status === 'accepted';
 
   useEffect(() => {
     if (query) setForm((f) => ({
@@ -92,11 +98,6 @@ export default function QuoteBuilderPage({ mode }) {
         inclusions: form.inclusions.map((t) => t.trim()).filter(Boolean),
         exclusions: form.exclusions.map((t) => t.trim()).filter(Boolean),
       };
-      // Editing saves as a NEW quotation (Sembark behaviour) — the original
-      // stays in All Quotes as history, the revision becomes the latest.
-      // EXCEPT a converted (accepted) quote: it is tied to the live booking
-      // (service bookings, instalments), so edits update it in place.
-      const inPlace = isEdit && existing?.status === 'accepted';
       const saved = inPlace
         ? await quotesApi.update(id, payload)
         : isEdit
@@ -146,6 +147,22 @@ export default function QuoteBuilderPage({ mode }) {
       </div>
 
       <div className="space-y-6 px-6 py-6">
+        {/* Which quote is being edited, and what Save will do to it. */}
+        {isEdit && existing && (
+          <div className={cn(
+            'flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm',
+            inPlace ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+          )}>
+            <Info size={16} className="mt-0.5 shrink-0" />
+            <p>
+              <span className="font-semibold">Editing quote #{existing.quoteNumber}{inPlace ? ' — used for conversion.' : ` (${existing.status}).`}</span>{' '}
+              {inPlace
+                ? 'Saving updates this quote in place; the booking total and any unpaid instalments are adjusted to match.'
+                : `Saving creates a new quotation. #${existing.quoteNumber} stays in All Quotes as history.`}
+            </p>
+          </div>
+        )}
+
         {/* Basic Details */}
         <div className="card p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -219,6 +236,37 @@ export default function QuoteBuilderPage({ mode }) {
         </div>
 
         <PackageEditor pkg={form.packages[active]} onChange={(p) => setPkg(active, p)} nights={form.nights} startDate={form.startDate} currency={form.currency} pax={form.pax} />
+
+        {/* Markup / discount / tax / rounding — one panel per package option,
+            all shown together so a two-option quote is priced in one place. */}
+        <div className="card p-5 sm:p-6">
+          <div className="mb-5 flex items-start gap-3 border-b border-slate-100 pb-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"><Wallet size={17} /></span>
+            <div>
+              <h3 className="text-[15px] font-bold text-slate-900">Set Markup, Discount, Tax and Rounding</h3>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-400">
+                {form.packages.length > 1
+                  ? `Each of the ${form.packages.length} package options is priced separately below.`
+                  : 'Set the selling price for this package.'}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {form.packages.map((p, i) => (
+              <PackagePricing
+                key={i}
+                pkg={p}
+                computed={computed[i]}
+                currency={form.currency}
+                onChange={(patch) => setPkg(i, { ...form.packages[i], ...patch })}
+                isDefault={form.selectedPackageIndex === i}
+                isActive={form.packages.length > 1 && active === i}
+                onSelect={() => setActive(i)}
+                single={form.packages.length === 1}
+              />
+            ))}
+          </div>
+        </div>
 
         {/* Inclusion / Exclusion */}
         <InclusionExclusionEditor
@@ -303,7 +351,9 @@ export default function QuoteBuilderPage({ mode }) {
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} disabled={saving} className="btn-secondary">Cancel</button>
-            <button onClick={save} disabled={saving} className="btn-primary px-6">{saving ? 'Saving…' : 'Save Quote'}</button>
+            <button onClick={save} disabled={saving} className="btn-primary px-6">
+              {saving ? 'Saving…' : inPlace ? 'Update Quote' : isEdit ? 'Save as New Quote' : 'Save Quote'}
+            </button>
           </div>
         </div>
       </div>

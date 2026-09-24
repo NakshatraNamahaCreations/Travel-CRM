@@ -338,9 +338,13 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
     n: i + 1,
     label: startDate ? `${ordinal(i + 1)} Day (${format(addDays(new Date(startDate), i), 'EEE d MMM')})` : `Day ${i + 1}`,
   }));
+  // On phones the Days panel shows only the chosen day(s); "Change" opens the
+  // full checklist. Keyed by group, and re-keyed when a tap changes the group.
+  const [daysOpen, setDaysOpen] = useState({});
   const setGroupDays = (g, n) => {
     let next = g.days.includes(n) ? g.days.filter((d) => d !== n) : [...g.days, n].sort((a, b) => a - b);
     if (!next.length) next = [n];
+    setDaysOpen((s) => (s[g.key] ? { ...s, [g.key]: false, [next.join(',')]: true } : s));
     update({
       transports: (pkg.transports || []).map((t, ti) => (g.tIdx.includes(ti) ? { ...t, days: next } : t)),
       activities: (pkg.activities || []).map((a, ai) => (g.aIdx.includes(ai) ? { ...a, days: next } : a)),
@@ -784,8 +788,25 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
               <div className="flex flex-col divide-y divide-brand-100 lg:flex-row lg:gap-0 lg:divide-x lg:divide-y-0">
                 {/* LEFT: Days — applies to every service in this group */}
                 <div className="w-full bg-slate-50/70 p-4 lg:w-44 lg:shrink-0">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-400">Days</p>
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-400">Days</p>
+                    <button
+                      type="button"
+                      onClick={() => setDaysOpen((s) => ({ ...s, [g.key]: !s[g.key] }))}
+                      className="text-[11px] font-semibold text-brand-600 hover:underline lg:hidden"
+                    >
+                      {daysOpen[g.key] ? 'Done' : 'Change'}
+                    </button>
+                  </div>
+                  {/* Phone: just the chosen day(s) until "Change" is tapped. */}
+                  {!daysOpen[g.key] && (
+                    <div className="flex flex-wrap gap-1.5 lg:hidden">
+                      {g.days.map((d) => (
+                        <span key={d} className="pill-brand">{dayOptionsAll[d - 1]?.label || `Day ${d}`}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className={cn('space-y-1.5 max-h-52 overflow-y-auto pr-1', daysOpen[g.key] ? '' : 'hidden lg:block')}>
                     {dayOptionsAll.map(({ n, label }) => (
                       <label key={n} className={cn('flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors', g.days.includes(n) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
                         <input
@@ -1227,90 +1248,7 @@ export default function PackageEditor({ pkg, onChange, nights, startDate, curren
         </div>
       </Section>
 
-      {/* Markup / Tax / Rounding */}
-      <Section title="Set Markup, Discount, Tax and Rounding">
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.6fr_1fr]">
-          {/* Markup */}
-          <div className="rounded-xl border border-slate-200 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Markup</p>
-            <div className="flex items-center gap-2">
-              <select className="input w-36" value={pkg.markupType} onChange={(e) => update({ markupType: e.target.value })}>
-                <option value="percent">Percentage</option><option value="flat">Flat</option>
-              </select>
-              <input type="number" className="input w-24 text-center" value={pkg.markupValue} onChange={(e) => update({ markupValue: Number(e.target.value) })} />
-              <span className="text-sm text-slate-400">{pkg.markupType === 'percent' ? '%' : currency}</span>
-            </div>
-            <p className="mt-2 text-xs text-slate-400">Markup amount: <span className="font-semibold text-slate-600">{money(c.markupAmount, currency)}</span></p>
-          </div>
-
-          {/* Discount */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-emerald-500">Discount</p>
-            <div className="flex items-center gap-2">
-              <select className="input w-36" value={pkg.discountType || 'flat'} onChange={(e) => update({ discountType: e.target.value })}>
-                <option value="flat">Flat</option><option value="percent">Percentage</option>
-              </select>
-              <input type="number" min="0" className="input w-24 text-center" value={pkg.discountValue ?? 0} onChange={(e) => update({ discountValue: Number(e.target.value) })} />
-              <span className="text-sm text-slate-400">{(pkg.discountType || 'flat') === 'percent' ? '%' : currency}</span>
-            </div>
-            <p className="mt-2 text-xs text-slate-400">Discount amount: <span className="font-semibold text-emerald-600">&minus; {money(c.discountAmount, currency)}</span></p>
-          </div>
-
-          {/* Tax */}
-          <div className="rounded-xl border border-slate-200 p-4">
-            <label className="mb-3 flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <input type="checkbox" className="accent-brand-600" checked={!!pkg.taxApplied} onChange={(e) => update({ taxApplied: e.target.checked })} />
-              Apply Tax
-            </label>
-            <div className={cn('flex items-center gap-2', !pkg.taxApplied && 'opacity-50')}>
-              <select className="input w-24" value={pkg.taxName || 'GST'} onChange={(e) => update({ taxName: e.target.value })} disabled={!pkg.taxApplied}>
-                {['GST', 'IGST', 'CGST', 'VAT'].map((t) => <option key={t}>{t}</option>)}
-              </select>
-              <input type="number" className="input w-20 text-center" value={pkg.taxPercent} onChange={(e) => update({ taxPercent: Number(e.target.value) })} disabled={!pkg.taxApplied} />
-              <span className="text-sm text-slate-400">%</span>
-              <select className="input flex-1" value={pkg.taxOn || 'cost_markup'} onChange={(e) => update({ taxOn: e.target.value })} disabled={!pkg.taxApplied}>
-                <option value="cost_markup">On Cost + Markup</option><option value="markup">On Markup Only</option>
-              </select>
-            </div>
-            <p className="mt-2 text-xs text-slate-400">Tax amount: <span className="font-semibold text-slate-600">{money(c.taxAmount, currency)}</span></p>
-          </div>
-
-          {/* Rounding */}
-          <div className="rounded-xl border border-slate-200 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Round Final Price</p>
-            <select className="input w-40" value={pkg.rounding || 1} onChange={(e) => update({ rounding: Number(e.target.value) || 1 })}>
-              {[1, 5, 10, 50, 100].map((r) => <option key={r} value={r}>Nearest {r}</option>)}
-            </select>
-            <p className="mt-2 text-xs text-slate-400">Final price is rounded to the nearest {pkg.rounding || 1}.</p>
-          </div>
-        </div>
-
-        {/* Calculation strip */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-sm">
-          <span><span className="text-xs text-slate-400">Cost Price&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.costPrice, currency)}</span></span>
-          <span className="text-slate-300">+</span>
-          <span><span className="text-xs text-slate-400">Markup&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.markupAmount, currency)}</span></span>
-          <span className="text-slate-300">&minus;</span>
-          <span><span className="text-xs text-slate-400">Discount&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-emerald-600">{money(c.discountAmount, currency)}</span></span>
-          <span className="text-slate-300">+</span>
-          <span><span className="text-xs text-slate-400">{pkg.taxApplied ? `${pkg.taxName || 'GST'} ${pkg.taxPercent || 0}%` : 'Tax'}&nbsp;&nbsp;</span><span className="font-semibold tabular-nums text-slate-800">{money(c.taxAmount, currency)}</span></span>
-          <span className="ml-auto flex items-baseline gap-2 rounded-lg bg-brand-600 px-4 py-1.5 text-white">
-            <span className="text-xs text-blue-100">Final Price</span>
-            <span className="text-base font-bold tabular-nums">{money(c.sellingPrice, currency)}</span>
-          </span>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="label">Any internal comments regarding selling price <span className="label-optional">(optional)</span></label>
-            <textarea rows={2} className="input" value={pkg.internalComments || ''} onChange={(e) => update({ internalComments: e.target.value })} />
-          </div>
-          <div>
-            <label className="label">Remarks for Agent/Customer <span className="label-optional">(optional)</span></label>
-            <textarea rows={2} className="input" placeholder="Any special remarks for the customer." value={pkg.customerRemarks || ''} onChange={(e) => update({ customerRemarks: e.target.value })} />
-            <p className="mt-1 text-xs text-slate-400">These remarks will be shared with the customer.</p>
-          </div>
-        </div>
-      </Section>
+      {/* Markup / discount / tax / rounding live in the builder (PackagePricing) — one panel per option, all visible together. */}
     </div>
   );
 }

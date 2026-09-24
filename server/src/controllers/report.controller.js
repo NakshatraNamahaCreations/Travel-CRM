@@ -1,10 +1,12 @@
+import mongoose from 'mongoose';
 import { Query } from '../models/Query.js';
 import { Quote } from '../models/Quote.js';
 import { Booking } from '../models/Booking.js';
 import { Comment } from '../models/Comment.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ok } from '../utils/apiResponse.js';
-import { ownScope } from '../utils/ownScope.js';
+import { ownScope, applyScope } from '../utils/ownScope.js';
+import { ApiError } from '../utils/ApiError.js';
 
 // Statuses that represent a "won" sale.
 const WON = ['converted', 'on_trip', 'past'];
@@ -49,25 +51,94 @@ const rangeObj = (r) => ({ $gte: r.after, $lte: r.before });
 
 /* ----------------------------- sales report ----------------------------- */
 
-// GET /api/reports/sales?after=&before=&type=&owner=&team=
-export const salesReport = asyncHandler(async (req, res) => {
+const escapeRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Comma-separated id list → ObjectId (single) or $in (multiple). Aggregation
+// $match stages do not cast strings, so ids are converted up front.
+function idIn(v) {
+  const ids = String(v).split(',').map((s) => s.trim()).filter((s) => mongoose.isValidObjectId(s));
+  if (!ids.length) throw ApiError.badRequest(`Invalid id filter: ${v}`);
+  const objs = ids.map((s) => new mongoose.Types.ObjectId(s));
+  return objs.length > 1 ? { $in: objs } : objs[0];
+}
+
+// Re-key a Query filter under a prefix (for matching joined `q` documents).
+function prefixKeys(obj, pre) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === '$or' || k === '$and') out[k] = v.map((x) => prefixKeys(x, pre));
+    else out[pre + k] = v;
+  }
+  return out;
+}
+
+// Filters shared by the summary, the trips table and the breakdown tabs.
+//   attr       — Query attribute filters (owner, team, source, destination, tag, status)
+//   searchOr   — free-text search (guest name/phone/email, reference id, trip #)
+//   queryMatch — the full Query filter (range + attr + search + visibility scope)
+function salesFilters(req) {
   const { after, before } = rangeFromQuery(req.query);
-  const inRange = { createdAt: { $gte: after, $lte: before } };
+  const q = req.query;
 
-  const scope = {};
-  if (req.query.owner) scope.owner = req.query.owner;
-  if (req.query.salesTeam) scope.salesTeam = req.query.salesTeam;
-  Object.assign(scope, ownScope(req.user));
+  const attr = {};
+  if (q.owner) attr.owner = idIn(q.owner);
+  if (q.salesTeam) attr.salesTeam = idIn(q.salesTeam);
+  if (q.source) attr.source = idIn(q.source);
+  if (q.destination) attr.destinations = idIn(q.destination);
+  if (q.tag) attr.tags = idIn(q.tag);
+  const status = q.status || q.type;
+  if (status && status !== 'all') attr.status = status === 'won' ? { $in: WON } : status;
 
-  const baseQ = { ...inRange, ...scope };
+  let searchOr = null;
+  const term = String(q.search || '').trim();
+  if (term) {
+    const rx = new RegExp(escapeRx(term), 'i');
+    searchOr = [{ 'guest.name': rx }, { 'guest.phones.number': rx }, { 'guest.email': rx }, { referenceId: rx }];
+    if (/^\d+$/.test(term)) searchOr.push({ queryNumber: Number(term) });
+  }
+
+  const queryMatch = applyScope(
+    { createdAt: { $gte: after, $lte: before }, ...attr, ...(searchOr ? { $or: searchOr } : {}) },
+    ownScope(req.user)
+  );
+  return { after, before, attr, searchOr, queryMatch, hasAttr: Object.keys(attr).length > 0 || !!searchOr };
+}
+
+// Quotes created in the range (visibility-scoped by author) …
+const quoteBase = (req, f) => [
+  { $match: { createdAt: { $gte: f.after, $lte: f.before }, ...ownScope(req.user, ['createdBy']) } },
+];
+// … joined to their query so query-level filters (and group-by fields) apply.
+function quoteJoin(f) {
+  const stages = [
+    { $lookup: { from: Query.collection.name, localField: 'query', foreignField: '_id', as: 'q' } },
+    { $unwind: '$q' },
+  ];
+  const m = prefixKeys({ ...f.attr, ...(f.searchOr ? { $or: f.searchOr } : {}) }, 'q.');
+  if (Object.keys(m).length) stages.push({ $match: m });
+  return stages;
+}
+
+async function countQuotes(req, f) {
+  if (!f.hasAttr) return Quote.countDocuments(quoteBase(req, f)[0].$match);
+  const r = await Quote.aggregate([...quoteBase(req, f), ...quoteJoin(f), { $count: 'n' }]);
+  return r[0]?.n || 0;
+}
+
+const and = (...parts) => ({ $and: parts });
+
+// GET /api/reports/sales?after=&before=&type=|status=&owner=&salesTeam=&source=&destination=&tag=&search=
+export const salesReport = asyncHandler(async (req, res) => {
+  const f = salesFilters(req);
+  const { after, before, queryMatch } = f;
 
   const [leads, quotes, conversion, dropped, wonAgg] = await Promise.all([
-    Query.countDocuments(baseQ),
-    Quote.countDocuments({ ...inRange, ...ownScope(req.user, ['createdBy']) }),
-    Query.countDocuments({ ...baseQ, status: { $in: WON } }),
-    Query.countDocuments({ ...baseQ, status: 'dropped' }),
+    Query.countDocuments(queryMatch),
+    countQuotes(req, f),
+    Query.countDocuments(and(queryMatch, { status: { $in: WON } })),
+    Query.countDocuments(and(queryMatch, { status: 'dropped' })),
     Query.aggregate([
-      { $match: { ...baseQ, status: { $in: WON } } },
+      { $match: and(queryMatch, { status: { $in: WON } }) },
       { $group: { _id: null, revenue: { $sum: '$bookedAmount' }, profit: { $sum: '$profit' } } },
     ]),
   ]);
@@ -76,18 +147,14 @@ export const salesReport = asyncHandler(async (req, res) => {
   const totalProfit = wonAgg[0]?.profit || 0;
   const conversionPct = leads ? Math.round((conversion / leads) * 100) : 0;
 
-  // Table rows — the "sales" (won trips) in range, with profit %.
-  const type = req.query.type || 'all';
-  const itemFilter = { ...baseQ };
-  if (type === 'won') itemFilter.status = { $in: WON };
-  else if (type !== 'all') itemFilter.status = type;
-
-  const rows = await Query.find(itemFilter)
+  const LIMIT = 500;
+  const rows = await Query.find(queryMatch)
     .populate('destinations', 'name')
     .populate('owner', 'name')
     .populate('salesTeam', 'name')
+    .populate('source', 'name')
     .sort('-createdAt')
-    .limit(200);
+    .limit(LIMIT);
 
   const items = rows.map((q) => {
     const amount = q.bookedAmount || 0;
@@ -102,6 +169,7 @@ export const salesReport = asyncHandler(async (req, res) => {
       status: q.status,
       owner: q.owner,
       salesTeam: q.salesTeam,
+      source: q.source,
       createdAt: q.createdAt,
       amount,
       currency: q.currency || 'INR',
@@ -114,7 +182,89 @@ export const salesReport = asyncHandler(async (req, res) => {
     range: { after, before },
     summary: { revenue, leads, quotes, conversion, conversionPct, dropped, profit: totalProfit },
     items,
+    total: leads,
+    truncated: leads > items.length,
   });
+});
+
+/* --------------------------- sales breakdown ---------------------------- */
+
+// Group-by dimensions for the Sales Report tabs.
+const BREAKDOWNS = {
+  owner: { field: 'owner', model: 'User', label: 'Sales Person', empty: 'Unassigned' },
+  salesTeam: { field: 'salesTeam', model: 'Team', label: 'Team', empty: 'No team' },
+  destinations: { field: 'destinations', model: 'Destination', label: 'Destination', empty: 'No destination', array: true },
+  source: { field: 'source', model: 'QuerySource', label: 'Trip Source', empty: 'No source' },
+  tags: { field: 'tags', model: 'Tag', label: 'Tag', empty: 'Untagged', array: true },
+};
+
+const emptyBucket = (id) => ({ _id: id, leads: 0, quotes: 0, conversion: 0, dropped: 0, revenue: 0, profit: 0 });
+
+// GET /api/reports/sales/breakdown?by=owner|salesTeam|destinations|source|tags&after=&before=&…filters
+export const salesBreakdown = asyncHandler(async (req, res) => {
+  const g = BREAKDOWNS[req.query.by];
+  if (!g) throw ApiError.badRequest(`Unknown breakdown: ${req.query.by}`);
+  const f = salesFilters(req);
+  const isWon = { $in: ['$status', WON] };
+
+  // Leads / conversions / revenue per group (from queries).
+  const qPipe = [{ $match: f.queryMatch }];
+  if (g.array) qPipe.push({ $unwind: { path: `$${g.field}`, preserveNullAndEmptyArrays: true } });
+  qPipe.push({
+    $group: {
+      _id: `$${g.field}`,
+      leads: { $sum: 1 },
+      conversion: { $sum: { $cond: [isWon, 1, 0] } },
+      dropped: { $sum: { $cond: [{ $eq: ['$status', 'dropped'] }, 1, 0] } },
+      revenue: { $sum: { $cond: [isWon, { $ifNull: ['$bookedAmount', 0] }, 0] } },
+      profit: { $sum: { $cond: [isWon, { $ifNull: ['$profit', 0] }, 0] } },
+    },
+  });
+
+  // Quotes per group (from quotes joined to their query).
+  const quotePipe = [...quoteBase(req, f), ...quoteJoin(f)];
+  if (g.array) quotePipe.push({ $unwind: { path: `$q.${g.field}`, preserveNullAndEmptyArrays: true } });
+  quotePipe.push({ $group: { _id: `$q.${g.field}`, quotes: { $sum: 1 } } });
+
+  const [qRows, quoteRows] = await Promise.all([Query.aggregate(qPipe), Quote.aggregate(quotePipe)]);
+
+  const buckets = new Map();
+  const key = (id) => (id ? String(id) : '');
+  for (const r of qRows) buckets.set(key(r._id), { ...emptyBucket(r._id), ...r });
+  for (const r of quoteRows) {
+    const k = key(r._id);
+    if (!buckets.has(k)) buckets.set(k, emptyBucket(r._id));
+    buckets.get(k).quotes = r.quotes;
+  }
+
+  const ids = [...buckets.keys()].filter(Boolean);
+  const refs = ids.length ? await mongoose.model(g.model).find({ _id: { $in: ids } }).select('name email color').lean() : [];
+  const refById = new Map(refs.map((d) => [String(d._id), d]));
+
+  const rows = [...buckets.values()]
+    .map((r) => {
+      const ref = r._id ? refById.get(String(r._id)) : null;
+      const revenue = Math.round(r.revenue || 0);
+      const profit = Math.round(r.profit || 0);
+      return {
+        _id: r._id || null,
+        name: ref?.name || (r._id ? 'Deleted' : g.empty),
+        email: ref?.email,
+        color: ref?.color,
+        leads: r.leads,
+        quotes: r.quotes,
+        conversion: r.conversion,
+        conversionPct: r.leads ? Math.round((r.conversion / r.leads) * 100) : 0,
+        dropped: r.dropped,
+        revenue,
+        profit,
+        profitPct: revenue ? Math.round((profit / revenue) * 1000) / 10 : 0,
+        avgDeal: r.conversion ? Math.round(revenue / r.conversion) : 0,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue || b.conversion - a.conversion || b.leads - a.leads || a.name.localeCompare(b.name));
+
+  return ok(res, { by: req.query.by, label: g.label, range: { after: f.after, before: f.before }, rows });
 });
 
 /* ------------------------------ dashboard ------------------------------- */

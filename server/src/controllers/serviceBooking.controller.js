@@ -1,4 +1,4 @@
-import { ServiceBooking, SERVICE_BOOKING_STATUSES } from '../models/ServiceBooking.js';
+import { ServiceBooking, SERVICE_BOOKING_STATUSES, SERVICE_BOOKING_KINDS } from '../models/ServiceBooking.js';
 import { Quote } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
 import { Hotel } from '../models/Hotel.js';
@@ -98,7 +98,7 @@ export async function autoGenerateServiceBookings(queryId, quoteId, userId, kind
   const pkg = pkgOf(quote);
   if (!pkg) return [];
 
-  const startDate = query?.startDate;
+  const startDate = quote.startDate || query?.startDate;
   const byKind = rowsFromQuote(pkg, startDate);
 
   const createdRows = [];
@@ -109,6 +109,101 @@ export async function autoGenerateServiceBookings(queryId, quoteId, userId, kind
     if (rows.length) createdRows.push(...(await ServiceBooking.insertMany(rows)));
   }
   return createdRows;
+}
+
+/* ------------- re-sync after the converted quote is edited in place ------------- */
+
+const dkey = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+
+// The "slot" a line occupies in the trip: a hotel stay is identified by its
+// first night, an operational service by day + name, a flight by its label.
+// Editing what is booked in a slot (another hotel for night 3) keeps the line;
+// the line is rewritten or flagged depending on how far operations got.
+function slotKey(kind, r) {
+  if (kind === 'hotel') return `hotel:${(r.nights || [])[0] ?? dkey(r.checkIn)}`;
+  if (kind === 'operational') return `op:${r.day ?? ''}:${r.name || ''}`;
+  return `flight:${r.name || ''}`;
+}
+function withOccurrence(kind, rows) {
+  const counts = {};
+  return rows.map((row) => {
+    const k = slotKey(kind, row);
+    counts[k] = (counts[k] || 0) + 1;
+    return { key: `${k}#${counts[k]}`, row };
+  });
+}
+// What the quote says about a line, normalised so defaults compare equal.
+const fingerprint = (r) => JSON.stringify({
+  name: r.name || '', city: r.city || '', roomType: r.roomType || '', mealPlan: r.mealPlan || '',
+  rooms: r.rooms ?? null, paxPerRoom: r.paxPerRoom ?? 2, aweb: r.aweb || 0, cweb: r.cweb || 0, cnb: r.cnb || 0,
+  nights: [...(r.nights || [])], checkIn: dkey(r.checkIn), checkOut: dkey(r.checkOut),
+  detail: r.detail || '', price: Math.round(r.price || 0), day: r.day ?? null,
+});
+const describe = (kind, r) => (kind === 'hotel'
+  ? `${r.name}${r.roomType ? `, ${r.rooms || 1} ${r.roomType}` : ''}${r.mealPlan ? ` (${r.mealPlan})` : ''}, ${dkey(r.checkIn)} to ${dkey(r.checkOut)}, INR ${Math.round(r.price || 0).toLocaleString('en-IN')}`
+  : `${r.name}${r.detail ? ` — ${r.detail}` : ''}, INR ${Math.round(r.price || 0).toLocaleString('en-IN')}`);
+// A line nobody has started on, paid for or vouchered can be rewritten silently.
+const untouched = (r) => r.status === 'initialized' && !(r.amountPaid > 0) && !r.confirmationNumber && !r.voucherGeneratedAt;
+
+// Bring the trip's service booking lines back in line with the (edited)
+// converted quote. Returns counts, or null when there is nothing to derive from.
+export async function resyncServiceBookings(queryId, quoteId, userId) {
+  const [quote, query] = await Promise.all([Quote.findById(quoteId), Query.findById(queryId)]);
+  const pkg = pkgOf(quote);
+  if (!quote || !pkg) return null;
+
+  const byKind = rowsFromQuote(pkg, quote.startDate || query?.startDate);
+  const summary = { updated: 0, added: 0, removed: 0, flagged: 0 };
+  const stamp = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const flag = (row, text) => {
+    row.flagged = true;
+    row.comment = [row.comment, `[Quote changed ${stamp}] ${text}`].filter(Boolean).join('\n');
+    if (row.status === 'in_progress') row.status = 'changed';
+  };
+
+  for (const kind of SERVICE_BOOKING_KINDS) {
+    const existing = await ServiceBooking.find({ query: queryId, kind }).sort({ checkIn: 1, order: 1, createdAt: 1 });
+    const want = withOccurrence(kind, byKind[kind] || []);
+    const have = withOccurrence(kind, existing);
+    const haveByKey = new Map(have.map((h) => [h.key, h.row]));
+    const kept = new Set();
+
+    for (const { key, row: desired } of want) {
+      const current = haveByKey.get(key);
+      if (!current) {
+        // eslint-disable-next-line no-await-in-loop
+        await ServiceBooking.create({ ...desired, query: queryId, quote: quoteId, bookedBy: userId || null });
+        summary.added += 1;
+        continue;
+      }
+      kept.add(key);
+      if (fingerprint(current) === fingerprint(desired)) continue;
+      if (untouched(current)) {
+        Object.assign(current, desired, { quote: quoteId });
+        summary.updated += 1;
+      } else {
+        flag(current, `quote now has ${describe(kind, desired)}`);
+        summary.flagged += 1;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await current.save();
+    }
+
+    for (const { key, row: current } of have) {
+      if (kept.has(key)) continue;
+      if (untouched(current)) {
+        // eslint-disable-next-line no-await-in-loop
+        await current.deleteOne();
+        summary.removed += 1;
+      } else {
+        flag(current, 'no longer part of the quote');
+        summary.flagged += 1;
+        // eslint-disable-next-line no-await-in-loop
+        await current.save();
+      }
+    }
+  }
+  return summary;
 }
 
 // POST /api/service-bookings/generate  { query, quote, kind? }

@@ -31,15 +31,15 @@ export const company = {
     '24x7 On-Ground Assistance',
     'Trusted by 700+ Happy Travellers',
   ],
-  // "YOUR PACKAGE INCLUDES" icon row on the cover. `icon` is an HTML entity
-  // (rendered raw); `sub` is an optional orange sub-label.
+  // Cover services strip. `icon` names a vector in quotationCoverIcons.js;
+  // `sub` is the optional second navy label line.
   coverIncludes: [
-    { icon: '&#128716;', label: 'Stays' },
-    { icon: '&#127796;', label: 'Beaches' },
-    { icon: '&#9972;', label: 'Ferry Transfers' },
-    { icon: '&#128663;', label: 'Private Cab' },
-    { icon: '&#128301;', label: 'Sightseeings' },
-    { icon: '&#127859;', label: 'Breakfast', sub: 'Included' },
+    { icon: 'bed', label: 'Stays' },
+    { icon: 'palm', label: 'Beaches' },
+    { icon: 'ferry', label: 'Ferry', sub: 'Transfers' },
+    { icon: 'car', label: 'Private', sub: 'Cab' },
+    { icon: 'binoculars', label: 'Sightseeings' },
+    { icon: 'breakfast', label: 'Breakfast', sub: 'Included' },
   ],
 
   defaultInclusions: [
@@ -222,7 +222,15 @@ export const company = {
   recognisedBy: ['1.jpeg', '2.jpeg'],
 
   // Full-width hero photo on the quotation cover page.
-  heroImage: 'https://images.unsplash.com/photo-1586500036706-41963de24d8b?w=1400&q=80',
+  // The cover artwork already contains the brochure typography and artwork.
+  // quotationHtml embeds local assets directly so the PDF is deterministic.
+  heroImage: 'quotation-hero.png',
+  // Cover artwork pieces (files in server/src/assets). The letterhead, services
+  // strip and all text are drawn in HTML so they print crisp; `heroImage`
+  // above supplies the high-res hero; these are the parts that only exist as
+  // artwork: the footer wave and the association emblems (upscaled crops of
+  // the brochure). Leave any empty to fall back to the CSS-drawn version.
+  coverArtwork: { wave: 'cover-wave.png', aato: 'aato-logo.png', adtoi: 'adtoi-logo.png' },
 
   // Day-wise itinerary photos: first entry whose keyword (|-separated) appears
   // in the service name wins. Set to [] to render the itinerary text-only.
