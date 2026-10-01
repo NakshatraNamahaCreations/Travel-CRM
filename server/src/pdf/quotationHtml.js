@@ -384,6 +384,25 @@ export function quotationHtml(q, org = null) {
   // 09:00") back to the service/activity it came from: drop the time and any
   // trailing separators before comparing.
   const lineKey = (l) => normName(String(l).replace(/\d{1,2}:\d{2}.*$/, '').replace(/[\s·•|–—-]+$/g, ''));
+  // Every name this package's services and tickets go by, on ANY day. A saved
+  // itinerary line matching one of these was auto-written from a service: on
+  // its own day the service already prints as a block, and on another day it is
+  // a leftover from before the service moved — so it never prints as a bullet.
+  const pkgServiceKeys = new Set([
+    ...transports.flatMap((t) => [t.serviceType, t.serviceLocation, [t.serviceType, t.startTime].filter(Boolean).join(' · ')]),
+    ...activities.flatMap((a) => [a.name, a.ticketType, [a.name, a.ticketType].filter(Boolean).join(' — ')]),
+  ].filter(Boolean).map(lineKey));
+  const isServiceLine = (l) => {
+    const k = lineKey(l);
+    // A bare time or time range is a split-off activity slot, never a note of its own.
+    if (/^\s*\d{1,2}[:.]\d{2}\s*(a\s*m|p\s*m)?\s*(-\s*\d{1,2}[:.]\d{2}\s*(a\s*m|p\s*m)?)?\s*$/i.test(String(l))) return true;
+    // Near-identical to a service name (an older spelling of the same catalogue entry, e.g. a trailing "s").
+    if ([...pkgServiceKeys].some((sk) => sk.length >= 12 && k.startsWith(sk) && k.length - sk.length <= 2)) return true;
+    // A built-in ticket is auto-written as "Name — Name" (e.g. "Lime Stone Ticket — Lime Stone Ticket"); nobody types that by hand.
+    const [lhs, rhs] = String(l).split(' · ')[0].split(' — ');
+    if (rhs && lineKey(lhs) === lineKey(rhs)) return true;
+    return pkgServiceKeys.has(k) || pkgServiceKeys.has(lineKey(String(l).split(' · ')[0])) || pkgServiceKeys.has(lineKey(String(l).split(' — ')[0]));
+  };
   // Timeline rail icon by service keyword (ferry / flight / cab / sightseeing).
   const tlIcon = (text) => {
     const s = String(text || '').toLowerCase();
@@ -538,6 +557,7 @@ export function quotationHtml(q, org = null) {
       // — Nautika: Luxury Class") is stale/duplicate notes even when there's
       // no matching activity left to compare it against, so drop it outright.
       .filter((l) => !FERRY_RX.test(l))
+      .filter((l) => !isServiceLine(l))
       .filter((l) => !(richBlocks && /^\s*\d{1,2}:\d{2}\s*$/.test(l)))
       .map((l) => `<div class="ditem">&bull;&nbsp; ${esc(l.trim())}</div>`).join('')
       || (richBlocks ? '' : '<div class="ditem">&bull;&nbsp; Leisure day &mdash; enjoy the island at your own pace.</div>');
@@ -871,25 +891,24 @@ export function quotationHtml(q, org = null) {
   .dc-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .dc-pin { display: inline-flex; color: #f05a18; }
   .dc-pin svg { width: 12px; height: 12px; }
-  .cover-static .covermeta { margin: 4px 2px 0; }
+  .cover-static .covermeta { margin: 6mm 2px 0; }
   .cover-static .stats { margin-top: 3px; min-height: 0; padding: 7px 0 5px; }
   .cover-static .statico { width: 34px; height: 34px; padding: 8px; background: #092a78; color: #fff; margin-bottom: 3px; }
   .cover-static .statico svg { display: block; width: 100%; height: 100%; }
   .cover-static .stat .sv { font-size: 12.5px; }
-  .cover-static .recogrow { min-height: 24mm; margin-top: 4px; }
+  .cover-static .recogrow { min-height: 24mm; margin-top: 6mm; }
   .cover-static .recognised .recognised-cell { padding: 4px 4px 3px; }
   .rlogo { display: block; height: 12.5mm; max-width: 92%; margin: 0 auto 2px; object-fit: contain; }
   .rlogo.sq { height: 9.5mm; margin-bottom: 3px; }
   .recognised small .rating { font-size: 11px; color: #0b2a78; }
-  .cover-footer.art { min-height: 0; margin-top: 4px; overflow: visible; }
-  .wave-img { display: block; width: 100%; height: auto; }
-  .cover-footer.art .footer-slogan { position: absolute; left: 11%; right: 16.4%; top: 0; height: 23%; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 0; background: #fff; font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-style: italic; font-weight: 700; font-size: 10.5px; color: #0b2a78; white-space: nowrap; }
+  .cover-footer.art { min-height: 0; height: 28mm; margin-top: 4px; overflow: hidden; }
+  /* Shorter band: the art is scaled to 28mm (natural ~33mm) instead of cropped, so palms, sun and islands stay whole. */
+  .wave-img { display: block; width: 100%; height: 100%; object-fit: fill; }
+  .cover-footer.art .footer-slogan { position: absolute; left: 11%; right: 16.4%; top: 0; height: 26%; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 0; background: #fff; font-family: 'Plus Jakarta Sans', Arial, sans-serif; font-style: italic; font-weight: 700; font-size: 10.5px; color: #0b2a78; white-space: nowrap; }
   .cover-footer.art .footer-slogan .or { color: #ed5b20; margin-left: 4px; }
   .footer-slogan .rule { display: inline-block; width: 24px; height: 1.5px; background: #0b2a78; margin: 0 8px; }
-  .footer-discover { position: absolute; right: 0.4%; top: 0; width: 16%; height: 35%; z-index: 3; padding-top: 3px; background: #fff; text-align: center; font-size: 6.3px; font-weight: 800; letter-spacing: 0.1em; line-height: 1.3; text-transform: uppercase; color: #0b2a78; white-space: nowrap; }
+  .footer-discover { position: absolute; right: 0.4%; top: 0; width: 16%; height: 35%; z-index: 3; padding-top: 3px; background: transparent; text-align: center; font-size: 6.3px; font-weight: 800; letter-spacing: 0.1em; line-height: 1.3; text-transform: uppercase; color: #0b2a78; white-space: nowrap; }
   .footer-discover::after { content: ''; display: block; width: 64%; height: 1.5px; margin: 2px auto 0; border-radius: 99px; background: #ed5b20; }
-  /* Hides the remnant of the artwork's own caption just below the block, stopping short of the sun on its left. */
-  .footer-discover::before { content: ''; position: absolute; left: 30%; right: 0; top: 100%; height: 22%; background: #fff; }
   .bottombar.navy { background: #092a78; }
   .rbadge { min-width: 140px; max-width: 220px; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px 14px; box-shadow: 0 1px 3px rgba(15,45,80,0.08); }
   .rbadge img { max-width: 100%; max-height: 120px; object-fit: contain; }

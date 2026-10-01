@@ -33,3 +33,4 @@ Thumbs.db
 coverage/
 .cache/
 uploads/
+server/backups/

@@ -54,14 +54,18 @@ function hotelStays(b) {
 function cabSchedules(b) {
   const pkg = selectedPackage(b);
   if (!pkg || !b.startDate) return [];
-  return (pkg.transports || []).map((t) => ({
-    day: t.day || 1,
-    date: addDays(b.startDate, (t.day || 1) - 1),
+  return (pkg.transports || []).map((t) => {
+    // days[] is the real schedule; t.day is a legacy single-day field.
+    const day = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
+    return {
+    day,
+    date: addDays(b.startDate, day - 1),
     serviceLocation: t.serviceLocation || '',
     serviceType: t.serviceType || '',
     startTime: t.startTime || '',
     items: (t.items || []).map((it) => ({ type: it.type, qty: it.qty || 1 })),
-  }));
+    };
+  });
 }
 
 const tabFilter = (tab) => {

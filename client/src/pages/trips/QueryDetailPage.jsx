@@ -463,7 +463,7 @@ function BasicDetailsTab({ q, quote, comments, canConvert, onShare, onAddComment
                                 <td data-th="Meal" className="py-2.5 pr-2 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                                 <td data-th="Rooms" className="py-2.5 pr-2 align-top">
                                   <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
-                                  <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
+                                  <p className="text-xs text-gray-400">{(base.paxPerRoom || 2) * (base.rooms || 1)} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cweb ? ` +${base.cweb} CWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                                 </td>
                                 <td data-th="Price" className="py-2.5 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                               </tr>
@@ -870,7 +870,7 @@ export function QuotesTab({ id, quotes, onShare, canConvert }) {
                             <td data-th="Meal" className="px-4 py-3 align-top text-gray-600">{uniq(opts.map((o) => o.mealPlan)).join(' / ') || '—'}</td>
                             <td data-th="Rooms" className="px-4 py-3 align-top">
                               <p className="text-gray-800">{uniq(opts.map((o) => `${o.rooms || 1} ${o.roomType || 'Room'}`)).join(' / ')}</p>
-                              <p className="text-xs text-gray-400">{base.paxPerRoom || 2} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
+                              <p className="text-xs text-gray-400">{(base.paxPerRoom || 2) * (base.rooms || 1)} Pax{base.aweb ? ` +${base.aweb} AWEB` : ''}{base.cweb ? ` +${base.cweb} CWEB` : ''}{base.cnb ? ` +${base.cnb} CNB` : ''}</p>
                             </td>
                             <td data-th="Price" className="px-4 py-3 text-right align-top font-semibold text-gray-900">{perNight ? `₹${Math.round(perNight).toLocaleString('en-IN')}` : '—'}</td>
                           </tr>

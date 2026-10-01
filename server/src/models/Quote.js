@@ -262,6 +262,56 @@ function computePackage(pkg) {
 }
 
 // Flatten the selected package into legacy costItems/days/pricing.
+// Day-wise text auto-written from a package's services:
+// dayNo -> { title, lines[] }. Used to build the itinerary, and to tell
+// auto-written lines apart from hand-typed ones in a customised itinerary.
+export function autoDayPlan(pkg) {
+  const byDay = new Map();
+  const push = (dayNo, title, line) => {
+    if (!byDay.has(dayNo)) byDay.set(dayNo, { title: '', lines: [] });
+    const d = byDay.get(dayNo);
+    if (!d.title && title) d.title = title;
+    if (line) d.lines.push(line);
+  };
+  for (const t of pkg?.transports || []) {
+    const days = (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]);
+    for (const dayNo of days) push(dayNo, t.serviceLocation, [t.serviceType, t.startTime].filter(Boolean).join(' · ') || t.serviceLocation);
+  }
+  for (const a of pkg?.activities || []) {
+    const days = (Array.isArray(a.days) && a.days.length ? a.days : [1]);
+    for (const dayNo of days) push(dayNo, a.name, [[a.name, a.ticketType].filter(Boolean).join(' — '), a.slot].filter(Boolean).join(' · '));
+  }
+  return byDay;
+}
+
+const lineKey = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * A hand-customised itinerary keeps its saved day text when services change,
+ * so lines that were auto-written from a service the package no longer has
+ * would linger (e.g. "Experience the World-Famous Radhanagar Beach" after
+ * Day 1 moved to Corbyn's Cove). Remove exactly those: lines that came from
+ * the previous services and are not produced by the new ones. Hand-typed
+ * lines and titles are left alone. Mutates and returns `days`.
+ */
+export function pruneStaleAutoLines(days, prevPkg, nextPkg) {
+  const prev = autoDayPlan(prevPkg);
+  const next = autoDayPlan(nextPkg);
+  for (const d of days || []) {
+    const was = prev.get(d.dayNumber);
+    if (!was) continue;
+    const stale = new Set(was.lines.map(lineKey));
+    for (const l of next.get(d.dayNumber)?.lines || []) stale.delete(lineKey(l));
+    if (!stale.size) continue;
+    const kept = String(d.description || '').split('\n').filter((l) => !stale.has(lineKey(l)));
+    d.description = kept.join('\n');
+    // A title that was just the old service's location/name goes too.
+    const nextTitle = next.get(d.dayNumber)?.title || '';
+    if (d.title && lineKey(d.title) === lineKey(was.title) && lineKey(d.title) !== lineKey(nextTitle)) d.title = nextTitle;
+  }
+  return days;
+}
+
 function flattenSelected(doc) {
   const pkg = (doc.packages || [])[doc.selectedPackageIndex || 0];
   if (!pkg) return;
@@ -292,21 +342,7 @@ function flattenSelected(doc) {
   // Build the day-wise itinerary from transports + activities, covering EVERY
   // day of the trip — unless the schedule was hand-edited (daysCustomized).
   if (!doc.daysCustomized) {
-    const byDay = new Map(); // dayNo -> { title, lines[] }
-    const push = (dayNo, title, line) => {
-      if (!byDay.has(dayNo)) byDay.set(dayNo, { title: '', lines: [] });
-      const d = byDay.get(dayNo);
-      if (!d.title && title) d.title = title;
-      if (line) d.lines.push(line);
-    };
-    for (const t of pkg.transports || []) {
-      const days = (Array.isArray(t.days) && t.days.length ? t.days : [t.day || 1]);
-      for (const dayNo of days) push(dayNo, t.serviceLocation, [t.serviceType, t.startTime].filter(Boolean).join(' · ') || t.serviceLocation);
-    }
-    for (const a of pkg.activities || []) {
-      const days = (Array.isArray(a.days) && a.days.length ? a.days : [1]);
-      for (const dayNo of days) push(dayNo, a.name, [[a.name, a.ticketType].filter(Boolean).join(' — '), a.slot].filter(Boolean).join(' · '));
-    }
+    const byDay = autoDayPlan(pkg);
     if (byDay.size) {
       const totalDays = Math.max((doc.nights || 0) + 1, ...byDay.keys());
       doc.days = Array.from({ length: totalDays }, (_, i) => {
@@ -329,6 +365,13 @@ function flattenSelected(doc) {
 
 quoteSchema.pre('validate', function compute(next) {
   if (this.packages?.length) {
+    // `days[]` is the real schedule; keep the legacy single `day` in step so
+    // nothing that still reads it shows a service on a day it was moved off.
+    for (const pkg of this.packages) {
+      for (const t of pkg.transports || []) {
+        if (Array.isArray(t.days) && t.days.length && t.day !== t.days[0]) t.day = t.days[0];
+      }
+    }
     for (const pkg of this.packages) computePackage(pkg);
     if ((this.selectedPackageIndex || 0) >= this.packages.length) this.selectedPackageIndex = 0;
     flattenSelected(this);

@@ -121,7 +121,7 @@ export function buildWhatsAppText(q, { hideTotalPrice = false, includeItinerary 
     L.push('Details below are applicable for all the options.', '');
     L.push('🚌 *Transportation*');
     transports.forEach((t) => {
-      const day = t.day || 1;
+      const day = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
       const dayDate = b.start ? addDays(b.start, day - 1) : null;
       L.push(`*${ordinal(day)} Day*${dayDate ? ` - ${format(dayDate, "EEE, do MMM ''yy")}` : ''}`);
       const veh = (t.items || []).map((it) => `${it.qty || 1}-${it.type || ''}`.trim()).filter((x) => x !== '1-').join(', ');
@@ -258,7 +258,7 @@ export function buildEmailHtml(q, { removeItinerary = false, removeTerms = false
     if (vehUsed) out.push(`<tr><td colspan="5" style="border:1px solid #e5e7eb;padding:6px 8px;font-size:12px"><b>Transportation Used:</b> ${esc(vehUsed)}</td></tr>`);
     out.push(`<tr>${th('Day')}<th colspan="4" style="background:#eff6ff;color:#1e40af;border:1px solid #dbeafe;padding:6px 8px;font-size:11px;text-align:left">Service</th></tr>`);
     (sel.transports || []).forEach((t) => {
-      const day = t.day || 1;
+      const day = (Array.isArray(t.days) && t.days[0]) || t.day || 1;
       const dayDate = b.start ? addDays(b.start, day - 1) : null;
       out.push('<tr>'
         + td(`${ordinal(day)} Day${dayDate ? `<br/><span style="color:#6b7280;font-size:11px">${format(dayDate, 'EEE, d MMM')}</span>` : ''}`)

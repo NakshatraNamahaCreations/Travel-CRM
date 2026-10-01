@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Quote } from '../models/Quote.js';
+import { Quote, pruneStaleAutoLines } from '../models/Quote.js';
 import { Query } from '../models/Query.js';
 import { InclusionExclusion } from '../models/InclusionExclusion.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -179,6 +179,21 @@ export const createQuote = asyncHandler(async (req, res) => {
 });
 
 // PUT /api/quotes/:id
+// Package the itinerary is built from (the selected option).
+const selPkg = (q) => (q?.packages || [])[q?.selectedPackageIndex || 0] || (q?.packages || [])[0] || null;
+const plain = (v) => (v && typeof v.toObject === 'function' ? v.toObject() : v);
+
+// Assign edited fields; when services change on a hand-customised itinerary,
+// drop the day lines auto-written from services that are no longer there.
+function applyQuoteEdits(quote, body, fields) {
+  const prevPkg = quote.daysCustomized ? plain(selPkg(quote)) : null;
+  for (const f of fields) if (body[f] !== undefined) quote[f] = body[f];
+  if (prevPkg && body.days === undefined && (body.packages !== undefined || body.selectedPackageIndex !== undefined)) {
+    const days = (quote.days || []).map((d) => ({ ...plain(d) }));
+    quote.days = pruneStaleAutoLines(days, prevPkg, plain(selPkg(quote)));
+  }
+}
+
 export const updateQuote = asyncHandler(async (req, res) => {
   const quote = await Quote.findById(req.params.id);
   if (!quote) throw ApiError.notFound('Quote not found');
@@ -189,7 +204,7 @@ export const updateQuote = asyncHandler(async (req, res) => {
     'markupType', 'markupValue', 'taxPercent', 'inclusions', 'exclusions', 'terms', 'status',
     'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex', 'daysCustomized',
   ];
-  for (const f of fields) if (req.body[f] !== undefined) quote[f] = req.body[f];
+  applyQuoteEdits(quote, req.body, fields);
   await quote.save();
   await syncQuery(quote.query);
   if (quote.status === 'accepted') await afterConvertedEdit(quote, req.user._id);
@@ -213,7 +228,7 @@ export const reviseQuote = asyncHandler(async (req, res) => {
       'markupType', 'markupValue', 'taxPercent', 'inclusions', 'exclusions', 'terms',
       'packages', 'pricingStrategy', 'totalFoc', 'selectedPackageIndex', 'daysCustomized',
     ];
-    for (const f of fields) if (req.body[f] !== undefined) source[f] = req.body[f];
+    applyQuoteEdits(source, req.body, fields);
     await source.save();
     await syncQuery(source.query);
     await afterConvertedEdit(source, req.user._id);
@@ -250,7 +265,7 @@ export const reviseQuote = asyncHandler(async (req, res) => {
     exclusions: req.body.exclusions ?? src.exclusions,
     terms: req.body.terms ?? src.terms,
     // A hand-customized itinerary survives the revision.
-    ...(src.daysCustomized ? { days: stripIds(src.days || []), daysCustomized: true } : {}),
+    ...(src.daysCustomized ? { days: pruneStaleAutoLines(stripIds(src.days || []), selPkg(src), selPkg({ packages: req.body.packages ?? src.packages, selectedPackageIndex: req.body.selectedPackageIndex ?? src.selectedPackageIndex })), daysCustomized: true } : {}),
     createdBy: req.user._id,
   });
   await syncQuery(src.query);
@@ -343,7 +358,7 @@ const pdfCacheDir = process.env.PDF_CACHE_DIR || path.join(os.tmpdir(), 'tcrm-im
 function quotePdfCacheFile(quote, org) {
   // Bump RENDER_VERSION when the template or bundled assets change, so cached
   // PDFs from the older look are re-rendered.
-  const RENDER_VERSION = 'v15';
+  const RENDER_VERSION = 'v19';
   const stamp = crypto.createHash('sha1')
     .update(RENDER_VERSION)
     .update(String(quote._id))
